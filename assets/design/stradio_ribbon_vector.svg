@@ -1,0 +1,52 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1080 360" width="100%" height="100%" fill="none">
+  <defs>
+    <!-- Coral Gradient -->
+    <linearGradient id="coralGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FFA085" />
+      <stop offset="50%" stop-color="#FF765F" />
+      <stop offset="100%" stop-color="#E6533A" />
+    </linearGradient>
+
+    <!-- Violet Gradient -->
+    <linearGradient id="violetGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#C4B5E8" />
+      <stop offset="50%" stop-color="#A995DB" />
+      <stop offset="100%" stop-color="#7E5EA8" />
+    </linearGradient>
+
+    <!-- Twilight Plum Gradient -->
+    <linearGradient id="plumGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#5E67B8" />
+      <stop offset="60%" stop-color="#46509E" />
+      <stop offset="100%" stop-color="#2D3369" />
+    </linearGradient>
+
+    <!-- Deep Midnight Shadow Layer -->
+    <linearGradient id="midnightLayer" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#191923" stop-opacity="0.9" />
+      <stop offset="50%" stop-color="#25253A" stop-opacity="0.95" />
+      <stop offset="100%" stop-color="#191923" stop-opacity="0.9" />
+    </linearGradient>
+
+    <!-- Glow Filter for Kinetic Footstep Pulse -->
+    <filter id="kineticGlow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="8" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    </filter>
+  </defs>
+
+  <!-- Layer 1: Midnight Deep Foundation Curve -->
+  <path d="M 0,220 C 180,180 340,310 540,260 C 740,210 900,290 1080,240 L 1080,360 L 0,360 Z" fill="url(#midnightLayer)" />
+
+  <!-- Layer 2: Twilight Plum Layer -->
+  <path d="M 0,240 C 200,200 360,330 560,270 C 760,210 920,290 1080,250 L 1080,360 L 0,360 Z" fill="url(#plumGrad)" opacity="0.9" />
+
+  <!-- Layer 3: Rhythm Violet Melodic Ribbon -->
+  <path d="M 0,260 C 220,220 380,340 580,285 C 780,230 940,300 1080,270 L 1080,360 L 0,360 Z" fill="url(#violetGrad)" />
+
+  <!-- Layer 4: Deep Coral Transition -->
+  <path d="M 0,285 C 240,250 400,355 600,305 C 800,255 960,315 1080,290 L 1080,360 L 0,360 Z" fill="#E6533A" />
+
+  <!-- Layer 5: Sonic Coral Peak Crest (Kinetic Pulse) -->
+  <path d="M 0,305 C 250,270 420,365 620,320 C 820,275 970,325 1080,305 L 1080,360 L 0,360 Z" fill="url(#coralGrad)" filter="url(#kineticGlow)" />
+</svg>
