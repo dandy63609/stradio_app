@@ -186,13 +186,16 @@ void main() {
         expect(find.text('Squid Stride'), findsOneWidget);
         expect(foreground.isServiceActive, isFalse);
 
-        // Open P1 Share Rhythm Modal from Cadence Summary
+        // Open Phase 3B full-screen ShareStudioScreen from Cadence Summary
         await tester.tap(find.byKey(const Key('export_ig_story_button')));
         await tester.pumpAndSettle();
-        expect(find.byKey(const Key('share_rhythm_modal')), findsOneWidget);
-        expect(find.text('Export Transparent Sticker'), findsOneWidget);
+        expect(find.byKey(const Key('share_studio_screen')), findsOneWidget);
+        expect(
+          find.byKey(const Key('share_save_gallery_button')),
+          findsOneWidget,
+        );
 
-        await tester.tap(find.byKey(const Key('share_rhythm_close_button')));
+        await tester.tap(find.byKey(const Key('share_studio_back_button')));
         await tester.pumpAndSettle();
 
         // Tap Start new run -> persists recording, dispatches telemetry, returns to Surface 1

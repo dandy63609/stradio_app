@@ -77,9 +77,9 @@ Dokumen ini merangkum rencana tindak lanjut (**follow-up refactor**) setelah mig
 | **P0 (Core)** | [x] | **Active Run Instrument** | **Surface 2:** Dual-tone header (`Stride / Rhythm`), Circular Acoustic Dial + `LiquidGlassLens` yang bereaksi <30 ms per langkah, 2 borderless metrics (`Steps`, `Cadence`), bottom dock `LiquidGlassLens` + `Hold 1.5s to end`. |
 | **P0 (Core)** | [x] | **Cadence Summary** | **Surface 3:** Hero Glass Circle (SPM ring), 3 frosted metric pills (Distance, Duration, Pace), 3.5px cadence stems + filter Active/Walking, audio footer pill, `Export IG Story` & `Start new run`. |
 | **P1 (Support)** | [x] | **Sensor Calibration** | Sheet kalibrasi & fallback jujur jika izin/stream akselerometer belum tersedia (`SensorCalibrationSheet`). |
-| **P1 (Share)** | [x] | **Share Rhythm Modal** | Bottom sheet preview & export **Transparent Sticker PNG** (`RepaintBoundary` 3x DPR → `share_plus`). |
-| **P2 (Phase 3B)** | [ ] | **Photo Glass (3x):** *Classic Wave*, *Orbital Nexus*, *Topo Shard* | Template overlay foto (`image_picker`) + dynamic tint frosted glass metrics. |
-| **P2 (Phase 3B)** | [ ] | **9:16 Story (3x):** *Aura Wave*, *Sonic Dial*, *Minimal Stride* | Template kartu story 9:16 siap export tanpa foto latar. |
+| **P1 (Share)** | [x] | **Share Rhythm Modal / Studio** | Halaman penuh `ShareStudioScreen` dengan 2 mode (*Transparent Sticker* & *Photo Glass*), 1-tap `Save to Gallery` (`gal`), & `Share` (`share_plus`). |
+| **P2 (Phase 3B)** | [x] | **Photo Glass (3x):** *Classic Wave*, *Orbital Nexus*, *Topo Shard* | Template overlay foto 9:16 (`image_picker` Galeri + Kamera + 3 preset ambient) + auto-tint RGB dinamis + *drag-to-reposition*. |
+| **P2 (Phase 3B)** | [x] | **9:16 Story (3x):** *Aura Wave*, *Sonic Dial*, *Minimal Stride* | Template stiker transparan siap export PNG resolusi tinggi tanpa foto latar. |
 
 ---
 
