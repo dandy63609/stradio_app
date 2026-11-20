@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:smartphone_step_detection_experiment/evaluation/run_metrics_calculator.dart';
-import 'package:smartphone_step_detection_experiment/models/experiment_models.dart';
+import 'package:stradio_app/evaluation/run_metrics_calculator.dart';
+import 'package:stradio_app/models/experiment_models.dart';
 
 void main() {
   group('RunMetricsCalculator', () {

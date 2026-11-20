@@ -29,18 +29,14 @@ class SettingsScreen extends StatefulWidget {
     required this.profile,
     required this.onUpdateProfile,
     required this.onClearHistory,
-    required this.onOpenSensorLabs,
     required this.onExportCsvDataset,
-    required this.onOpenLegacyExperiment,
     this.onToggleThemeMode,
   });
 
   final StradioUserProfile profile;
   final ValueChanged<StradioUserProfile> onUpdateProfile;
   final Future<void> Function() onClearHistory;
-  final VoidCallback onOpenSensorLabs;
   final Future<String> Function() onExportCsvDataset;
-  final VoidCallback onOpenLegacyExperiment;
   final VoidCallback? onToggleThemeMode;
 
   @override
@@ -885,25 +881,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           ),
                           const SizedBox(height: 14),
 
-                          // Action 1: Open Sensor Labs & Diagnostics
-                          SizedBox(
-                            height: 48,
-                            child: OutlinedButton.icon(
-                              key: const Key(
-                                'settings_open_sensor_labs_button',
-                              ),
-                              onPressed: widget.onOpenSensorLabs,
-                              icon: Icon(
-                                Icons.tune_rounded,
-                                size: 18,
-                                color: palette.accentViolet,
-                              ),
-                              label: Text(strings.settingsOpenSensorLabsAction),
-                            ),
-                          ),
-                          const SizedBox(height: 10),
-
-                          // Action 2: Export 3-CSV Research Dataset
+                          // Action: Export 3-CSV Research Dataset
                           SizedBox(
                             height: 48,
                             child: OutlinedButton.icon(
@@ -930,25 +908,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               ),
                             ),
                           ],
-                          const SizedBox(height: 10),
-
-                          // Action 3: Open E1-E8 Legacy Experiment Shell
-                          SizedBox(
-                            height: 48,
-                            child: OutlinedButton.icon(
-                              key: const Key(
-                                'settings_open_legacy_experiment_button',
-                              ),
-                              onPressed: widget.onOpenLegacyExperiment,
-                              icon: const Icon(
-                                Icons.grid_view_rounded,
-                                size: 18,
-                              ),
-                              label: Text(
-                                strings.settingsOpenLegacyShellAction,
-                              ),
-                            ),
-                          ),
                         ],
                       ),
                     ),

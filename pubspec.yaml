@@ -1,5 +1,5 @@
-name: smartphone_step_detection_experiment
-description: "A Flutter experiment for comparing adaptive-threshold smartphone step detectors."
+name: stradio_app
+description: "STRADIO — Movement-Powered Music Experience for Runners."
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
 publish_to: 'none' # Remove this line if you wish to publish to pub.dev

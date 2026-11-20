@@ -32,8 +32,9 @@ class PostHogEventRecord {
     'timestamp': timestampIso,
     'properties': {
       'distinct_id': distinctId,
-      '\$lib': 'stradio-flutter-telemetry',
-      '\$lib_version': '1.0.0',
+      r'$ip': null,
+      r'$lib': 'stradio-flutter-telemetry',
+      r'$lib_version': '1.0.0',
       ...properties,
     },
   };
@@ -42,14 +43,14 @@ class PostHogEventRecord {
 /// Lightweight, testable PostHog Cloud Telemetry service for the STRADIO app
 /// and its PostHog Admin Dashboard.
 ///
-/// Supports `--dart-define=POSTHOG_API_KEY=phc_...` and runtime configuration
-/// inside the Sensor Labs Drawer.
+/// Supports `--dart-define=POSTHOG_API_KEY=phc_...` and opt-in telemetry
+/// control per UU PDP (UU No. 27/2022).
 class PostHogTelemetryService {
   PostHogTelemetryService({
     String? apiKey,
     String? host,
     PostHogTransport? transport,
-    this.enabled = true,
+    this.enabled = false,
   }) : _apiKey =
            apiKey ??
            const String.fromEnvironment('POSTHOG_API_KEY', defaultValue: ''),

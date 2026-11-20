@@ -21,19 +21,19 @@ Dokumen ini merangkum rencana tindak lanjut (**follow-up refactor**) setelah mig
 **Target Branch:** `chore/cleanup-and-privacy`
 
 1. **Identitas Package & Android App ID**
-   - Rename package di `pubspec.yaml` dari `smartphone_step_detection_experiment` menjadi `stradio_app` dan perbarui seluruh `import 'package:...'` di `lib/` dan `test/`.
-   - Ubah `namespace` dan `applicationId` di `android/app/build.gradle.kts` dari `com.example.flutter_application_1` ke ID resmi STRADIO (misal `com.stradio.app`).
+   - [x] Rename package di `pubspec.yaml` dari `smartphone_step_detection_experiment` menjadi `stradio_app` dan perbarui seluruh `import 'package:...'` di `lib/` dan `test/`.
+   - [x] Ubah `namespace` dan `applicationId` di `android/app/build.gradle.kts` dari `com.example.flutter_application_1` ke `com.stradio.app`, serta pindahkan `MainActivity.kt` ke `com/stradio/app/`.
 2. **Penyatuan Sumber Algoritma (Single Source of Truth)**
-   - Pastikan `lib/algorithms/step_detector.dart` menjadi satu-satunya *source of truth* untuk algoritma **Adaptive Midpoint + Gravity (A1)**.
-   - Hapus folder duplikat `algorithm_reference/` serta hapus pengecualian `- algorithm_reference/**` di `analysis_options.yaml`.
+   - [x] Pastikan `lib/algorithms/step_detector.dart` menjadi satu-satunya *source of truth* untuk algoritma **Adaptive Midpoint + Gravity (A1)**.
+   - [x] Hapus folder duplikat `algorithm_reference/` serta hapus pengecualian `- algorithm_reference/**` di `analysis_options.yaml`.
 3. **Kepatuhan UU PDP (UU No. 27/2022) untuk PostHog Analytics**
-   - Ubah default `analyticsEnabled` dari `true` (opt-out) menjadi **`false` (opt-in)** di `lib/models/experiment_models.dart` dan `lib/services/posthog_service.dart`.
-   - Matikan perekaman IP pada `PostHogEventRecord.toPostHogJson` dengan menambahkan `r'$ip': null` **dan** aktifkan *"Discard client IP data"* di PostHog Project Settings.
-   - Rapikan wiring toggle analytics agar konsisten memanggil `PostHogTelemetryService.setEnabled()` dan tetap dapat diakses user setelah `OnboardingScreen` lama dipangkas.
+   - [x] Ubah default `analyticsEnabled` dari `true` (opt-out) menjadi **`false` (opt-in)** di `lib/models/experiment_models.dart` dan `lib/services/posthog_service.dart`.
+   - [x] Matikan perekaman IP pada `PostHogEventRecord.toPostHogJson` dengan menambahkan `r'$ip': null` **dan** aktifkan *"Discard client IP data"* di PostHog Project Settings.
+   - [x] Rapikan wiring toggle analytics agar konsisten memanggil `PostHogTelemetryService.setEnabled()` dan tetap dapat diakses user di Settings (serta tetap terjaga setelah `OnboardingScreen` lama dipangkas di Phase 3).
 4. **Pemangkasan Kode Riset Lama**
-   - Hapus atau arsipkan screen eksperimen lama yang tidak dipakai di MVP (`dashboard_screen.dart`, `setup_screen.dart`, `live_recording_screen.dart`, `results_screen.dart`, `export_screen.dart`, `sensor_labs_sheet.dart`) beserta test terkait yang sudah tidak relevan.
-5. **Kebersihan Aset Repo (Opsional)**
-   - Pertimbangkan memindahkan `assets/audio/_raw_sources/` ke cloud storage tim agar ukuran clone repo tetap ringan *(tidak perlu Git LFS untuk menghindari limit kuota bandwidth & rewrite history)*.
+   - [x] Hapus screen eksperimen lama yang tidak dipakai di MVP (`dashboard_screen.dart`, `setup_screen.dart`, `live_recording_screen.dart`, `results_screen.dart`, `export_screen.dart`, `sensor_labs_sheet.dart`, serta `StepDetectionApp`) beserta test terkait (`test/widget_test.dart`), sambil mengekstrak `StradioLabSettings` ke `lib/models/experiment_models.dart`.
+5. **Kebersihan Aset Repo (Opsional — Ditunda ke Pasca Phase 2.3)**
+   - [ ] Pindahkan `assets/audio/_raw_sources/` (~65 MB master `.wav`, tidak ter-bundle di APK) ke cloud storage tim setelah verifikasi *gapless loop* `.mp3`/`.ogg` di Phase 2.3 selesai.
 
 ---
 
