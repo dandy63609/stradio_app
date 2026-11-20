@@ -178,7 +178,7 @@ class StradioStringsId extends StradioStrings {
   String syncPercentLabel(int percent) => '$percent% sinkron';
 
   @override
-  String get exportIgStoryAction => 'Ekspor IG Story';
+  String get exportIgStoryAction => 'Ekspor Story';
 
   @override
   String get startNewRunAction => 'Mulai lari baru';

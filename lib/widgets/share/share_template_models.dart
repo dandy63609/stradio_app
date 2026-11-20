@@ -115,6 +115,34 @@ class ShareMetricFormat {
   static String avgSpm(RunSummaryMetrics m) =>
       m.averageCadenceSpm > 0 ? '${m.averageCadenceSpm.round()}' : '--';
 
+  static String formattedSteps(RunSummaryMetrics m) {
+    final raw = m.totalSteps.toString();
+    final buf = StringBuffer();
+    for (var i = 0; i < raw.length; i++) {
+      if (i > 0 && (raw.length - i) % 3 == 0) buf.write(',');
+      buf.write(raw[i]);
+    }
+    return buf.toString();
+  }
+
+  static String stepsPillLabel(RunSummaryMetrics m) =>
+      '${formattedSteps(m)} steps';
+
+  static String strideLengthMeters(RunSummaryMetrics m) {
+    if (m.totalSteps <= 0 || m.distanceKm <= 0.0001) return '-- m';
+    final meters = (m.distanceKm * 1000.0) / m.totalSteps;
+    return '${meters.toStringAsFixed(2)} m';
+  }
+
+  static String cadenceDeltaSpm(RunSummaryMetrics m) {
+    final (minSpm, maxSpm) = cadenceRange(m);
+    if (minSpm == null || maxSpm == null) return '-- spm';
+    return 'Δ ${(maxSpm - minSpm).abs()} spm';
+  }
+
+  static String syncPercentText(RunSummaryMetrics m) =>
+      m.totalSteps > 0 ? '${m.rhythmScorePercent.round()}%' : '--%';
+
   static String distanceKm(RunSummaryMetrics m) =>
       '${m.distanceKm.toStringAsFixed(2)} km';
 

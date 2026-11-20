@@ -55,8 +55,12 @@ void main() {
         );
         await tester.pumpAndSettle();
 
-        // Mode 1: Transparent Sticker (3 templates with promotional STRADIO watermark)
+        // Mode 1: Transparent Sticker (3 templates with promotional STRADIO watermark & corner ribbon on Aura Wave)
         expect(find.byKey(const Key('sticker_card_aura_wave')), findsOneWidget);
+        expect(
+          find.byKey(const Key('aura_wave_corner_ribbon_image')),
+          findsOneWidget,
+        );
         expect(find.text('STRADIO'), findsOneWidget);
         expect(PhotoBackdropPreset.presets.length, 8);
 
@@ -66,6 +70,7 @@ void main() {
           find.byKey(const Key('sticker_card_sonic_dial')),
           findsOneWidget,
         );
+        expect(find.text('Cadence Resonance Dial'), findsOneWidget);
 
         await tester.tap(
           find.byKey(const Key('share_template_minimalStride')),
@@ -76,6 +81,7 @@ void main() {
           findsOneWidget,
         );
         expect(find.text('118-162 spm Lock Zone'), findsOneWidget);
+        expect(find.text('CADENCE RANGE CONSISTENCY'), findsOneWidget);
 
         // Switch to Mode 2: Photo Glass (3 templates)
         await tester.tap(find.byKey(const Key('share_mode_photo_glass_tab')));

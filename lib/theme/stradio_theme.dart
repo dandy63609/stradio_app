@@ -85,12 +85,15 @@ class StradioTypography {
         color: color,
       );
 
-  static TextStyle titleMuted({Color color = StradioColors.textSecondary}) =>
+  static TextStyle titleMuted({
+    Color color = StradioColors.textSecondary,
+    double fontSize = 28,
+  }) =>
       TextStyle(
         fontFamily: 'Sora',
         fontFamilyFallback: _fallback,
         fontWeight: FontWeight.w500,
-        fontSize: 28,
+        fontSize: fontSize,
         height: 32 / 28,
         letterSpacing: -0.56,
         color: color,
