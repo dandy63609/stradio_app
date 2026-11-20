@@ -559,18 +559,41 @@ class _AudioStickerFooter extends StatelessWidget {
         borderRadius: BorderRadius.circular(StradioRadii.full),
       ),
       child: Row(
-        mainAxisSize: MainAxisSize.min,
-        mainAxisAlignment: MainAxisAlignment.center,
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Icon(Icons.headphones_rounded, size: 14, color: iconColor),
-          const SizedBox(width: 6),
           Flexible(
-            child: Text(
-              soundPack.title,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: StradioTypography.pillBadge(color: fg),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.headphones_rounded, size: 14, color: iconColor),
+                const SizedBox(width: 6),
+                Flexible(
+                  child: Text(
+                    soundPack.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: StradioTypography.pillBadge(color: fg),
+                  ),
+                ),
+              ],
             ),
+          ),
+          const SizedBox(width: 8),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Image.asset(
+                'assets/images/stradio-logo.png',
+                height: 12,
+                fit: BoxFit.contain,
+                errorBuilder: (_, _, _) => const SizedBox.shrink(),
+              ),
+              const SizedBox(width: 4),
+              Text(
+                'STRADIO',
+                style: StradioTypography.microCap(color: fg),
+              ),
+            ],
           ),
         ],
       ),

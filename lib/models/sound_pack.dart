@@ -49,9 +49,11 @@ class StradioSoundPack {
     required this.code,
     required this.title,
     required this.artist,
+    required this.categoryLabel,
     required this.tagline,
     required this.backgroundMode,
     required this.stepSfxMode,
+    this.producerCredit,
     this.primaryLoopAsset,
     this.secondaryLoopAsset,
     this.stepSfxAssets = const [],
@@ -65,6 +67,13 @@ class StradioSoundPack {
   final String code;
   final String title;
   final String artist;
+
+  /// Unified functional category badge shown across the UI (`Runner Groove`, `16-Bit Nostalgia`, `Meme Pack`).
+  final String categoryLabel;
+
+  /// Optional producer attribution shown as a subtitle credit (`by DDHANNi`).
+  final String? producerCredit;
+
   final String tagline;
   final BackgroundLayerMode backgroundMode;
   final StepSfxMode stepSfxMode;
@@ -111,6 +120,8 @@ class StradioSoundPack {
       code: 'BREAKBEAT_FVNKY',
       title: 'Breakbeat Fvnky',
       artist: 'DDHANNi',
+      categoryLabel: 'Runner Groove',
+      producerCredit: 'by DDHANNi',
       tagline: 'Step kick drum + jog-activated Indonesian breakbeat loop',
       backgroundMode: BackgroundLayerMode.joggingZoneOnly,
       stepSfxMode: StepSfxMode.single,
@@ -122,6 +133,8 @@ class StradioSoundPack {
       code: 'LARI_NGACIR',
       title: 'Lari Ngacir',
       artist: 'DDHANNi',
+      categoryLabel: 'Runner Groove',
+      producerCredit: 'by DDHANNi',
       tagline: 'Dual-stem 140 BPM progression, bar-aligned jog drums',
       backgroundMode: BackgroundLayerMode.dualStemBarAligned,
       stepSfxMode: StepSfxMode.off,
@@ -134,6 +147,7 @@ class StradioSoundPack {
       code: 'GBA_SAND_HOP',
       title: 'GBA Sand Hop',
       artist: '16-Bit Nostalgia',
+      categoryLabel: '16-Bit Nostalgia',
       tagline: 'Tempo-scaled coastal loop + crunchy sand footsteps',
       backgroundMode: BackgroundLayerMode.continuousTempoScaled,
       stepSfxMode: StepSfxMode.roundRobin,
@@ -152,6 +166,7 @@ class StradioSoundPack {
       code: 'SQUID',
       title: 'Squid Stride',
       artist: 'Meme Pack',
+      categoryLabel: 'Meme Pack',
       tagline: 'Alternating hollow suction clunks per footstep',
       backgroundMode: BackgroundLayerMode.silent,
       stepSfxMode: StepSfxMode.alternating,
@@ -165,6 +180,7 @@ class StradioSoundPack {
       code: 'SPONGE',
       title: 'Sponge Stride',
       artist: 'Meme Pack',
+      categoryLabel: 'Meme Pack',
       tagline: 'Alternating wet cartoon squelches per footstep',
       backgroundMode: BackgroundLayerMode.silent,
       stepSfxMode: StepSfxMode.alternating,
@@ -178,6 +194,7 @@ class StradioSoundPack {
       code: 'RUBBER_BOUNCY',
       title: 'Rubber Bouncy',
       artist: 'Meme Pack',
+      categoryLabel: 'Meme Pack',
       tagline: 'Elastic bounce with 1.00 / 1.03 bipedal micro-pitch',
       backgroundMode: BackgroundLayerMode.silent,
       stepSfxMode: StepSfxMode.microPitchAlternating,

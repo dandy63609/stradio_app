@@ -42,6 +42,12 @@ class StradioStringsEn extends StradioStrings {
   String get swipeToStart => 'Swipe to start';
 
   @override
+  String get previewAudioAction => 'Preview';
+
+  @override
+  String get stopPreviewAction => 'Stop';
+
+  @override
   String motionSensorReadyWithPack(String packTitle) =>
       'Motion sensor ready · $packTitle';
 
@@ -246,6 +252,46 @@ class StradioStringsEn extends StradioStrings {
   String get backdropAdd => '+ Add';
 
   @override
+  String buildShareCaption({
+    required int steps,
+    required String distanceKm,
+    required String duration,
+    required String avgSpm,
+    required String soundPackTitle,
+  }) =>
+      'Stradio Run: $steps steps ($distanceKm) in $duration · Avg $avgSpm SPM · Vibe: $soundPackTitle #Stradio #RunTheVibe';
+
+  @override
+  String get sensorCalibrationTitle => 'Sensor Calibration';
+
+  @override
+  String get sensorCalibrationSubtitle => 'Stride & Audio Engine Parameters';
+
+  @override
+  String get sensorSyncedBadge => '100 HZ SYNCED';
+
+  @override
+  String get strideSensitivityLabel => 'Stride Sensitivity (IMU)';
+
+  @override
+  String get audioSyncLatencyLabel => 'Audio Sync Latency';
+
+  @override
+  String get cadenceLockWindowLabel => 'Cadence Lock Window';
+
+  @override
+  String get adaptiveSpatialEqTitle => 'Adaptive Spatial EQ';
+
+  @override
+  String get adaptiveSpatialEqSubtitle => 'Dynamic binaural pulse depth';
+
+  @override
+  String get applyAndCalibrateAction => 'Apply & Calibrate';
+
+  @override
+  String get resetAction => 'Reset';
+
+  @override
   String get sensorActiveTitle => 'Motion sensor active';
 
   @override
@@ -293,11 +339,11 @@ class StradioStringsEn extends StradioStrings {
   String get settingsTitle => 'Settings';
 
   @override
-  String get analyticsOptInTitle => 'Anonymous Telemetry (Opt-in)';
+  String get analyticsOptInTitle => 'Anonymous Telemetry';
 
   @override
   String get analyticsOptInSubtitle =>
-      'Off by default (UU PDP). Client IP is never stored.';
+      'Enabled by default to improve step detection. Client IP is never stored.';
 
   @override
   String get languageLabel => 'Language';

@@ -75,6 +75,36 @@ class PhotoBackdropPreset {
       gradientColors: [Color(0xFF2D2B4E), Color(0xFF5D538C), Color(0xFFD98773)],
       tintSeed: Color(0xFF9A7EC0),
     ),
+    PhotoBackdropPreset(
+      id: 'midnight_neon',
+      label: 'Midnight',
+      gradientColors: [Color(0xFF151520), Color(0xFF2D274B), Color(0xFF46509E)],
+      tintSeed: Color(0xFF6D74B8),
+    ),
+    PhotoBackdropPreset(
+      id: 'ocean_breeze',
+      label: 'Ocean',
+      gradientColors: [Color(0xFF1E3C4C), Color(0xFF3A7385), Color(0xFFA4CED4)],
+      tintSeed: Color(0xFF6BA6B5),
+    ),
+    PhotoBackdropPreset(
+      id: 'solar_flare',
+      label: 'Solar',
+      gradientColors: [Color(0xFF4A2024), Color(0xFFB53D28), Color(0xFFFF7A59)],
+      tintSeed: Color(0xFFFF7A59),
+    ),
+    PhotoBackdropPreset(
+      id: 'alpine_frost',
+      label: 'Alpine',
+      gradientColors: [Color(0xFFDCE6EE), Color(0xFFB8CADB), Color(0xFF8AA2BE)],
+      tintSeed: Color(0xFFB8CADB),
+    ),
+    PhotoBackdropPreset(
+      id: 'cyber_violet',
+      label: 'Violet',
+      gradientColors: [Color(0xFF2A1F4A), Color(0xFF6A56A8), Color(0xFFD0BCFF)],
+      tintSeed: Color(0xFFA995DB),
+    ),
   ];
 }
 

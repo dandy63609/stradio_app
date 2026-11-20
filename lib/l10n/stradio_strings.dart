@@ -52,6 +52,8 @@ abstract class StradioStrings {
   // --- Surface 1: Pre-Run Ignition ---
   String get soundPacksHeading;
   String get swipeToStart;
+  String get previewAudioAction;
+  String get stopPreviewAction;
   String motionSensorReadyWithPack(String packTitle);
   String get modeKickJogLoop;
   String get modeDualStem;
@@ -124,8 +126,25 @@ abstract class StradioStrings {
   String lockZoneRange(int minSpm, int maxSpm);
   String get backdropNone;
   String get backdropAdd;
+  String buildShareCaption({
+    required int steps,
+    required String distanceKm,
+    required String duration,
+    required String avgSpm,
+    required String soundPackTitle,
+  });
 
-  // --- Sensor Calibration Sheet ---
+  // --- Sensor Calibration Sheet (Mockup 09) ---
+  String get sensorCalibrationTitle;
+  String get sensorCalibrationSubtitle;
+  String get sensorSyncedBadge;
+  String get strideSensitivityLabel;
+  String get audioSyncLatencyLabel;
+  String get cadenceLockWindowLabel;
+  String get adaptiveSpatialEqTitle;
+  String get adaptiveSpatialEqSubtitle;
+  String get applyAndCalibrateAction;
+  String get resetAction;
   String get sensorActiveTitle;
   String get sensorActiveBody;
   String get sensorReadyTitle;

@@ -357,12 +357,24 @@ class StradioAudioEngine {
   Timer? _primaryFadeTimer;
   Timer? _secondaryFadeTimer;
   Timer? _barAlignTimer;
+  Timer? _previewProgressTimer;
+  Timer? _previewStepTimer;
+  bool _isPreviewing = false;
+  double _previewProgress = 0.0;
+  int _previewStepCounter = 0;
+
+  final ValueNotifier<bool> isPreviewingNotifier = ValueNotifier<bool>(false);
+  final ValueNotifier<double> previewProgressNotifier = ValueNotifier<double>(
+    0.0,
+  );
 
   StradioSoundPack get activePack => _activePack;
   SoundPackId get activePackId => _activePack.id;
   bool get isSessionActive => _isSessionActive;
   bool get isPaused => _isPaused;
   bool get inJoggingZone => _inJoggingZone;
+  bool get isPreviewing => _isPreviewing;
+  double get previewProgress => _previewProgress;
   double get currentPlaybackRate => _currentPlaybackRate;
   double get primaryVolume => _primaryVolume;
   double get secondaryVolume => _secondaryVolume;
@@ -372,8 +384,145 @@ class StradioAudioEngine {
     await _sfx.preload(_activePack.stepSfxAssets);
   }
 
+  /// Starts a 10-second audition preview on the Pre-Run Ignition screen with
+  /// live progress (`0.0..1.0`) and simulated ~160 SPM footsteps (`375ms`).
+  Future<void> startPreview({
+    SoundPackId? packId,
+    Duration duration = const Duration(seconds: 10),
+  }) async {
+    if (_isSessionActive) return;
+    await stopPreview();
+
+    if (packId != null && _activePack.id != packId) {
+      _activePack = StradioSoundPack.byId(packId);
+    }
+
+    _isPreviewing = true;
+    _previewProgress = 0.0;
+    _previewStepCounter = 0;
+    isPreviewingNotifier.value = true;
+    previewProgressNotifier.value = 0.0;
+
+    await _sfx.preload(_activePack.stepSfxAssets);
+
+    // Audition Layer 1 at active jogging intensity so user hears the pack's full vibe.
+    switch (_activePack.backgroundMode) {
+      case BackgroundLayerMode.silent:
+        _primaryVolume = 0.0;
+        _secondaryVolume = 0.0;
+      case BackgroundLayerMode.joggingZoneOnly:
+        final asset = _activePack.primaryLoopAsset;
+        if (asset != null) {
+          _primaryVolume = 0.90;
+          await _primaryLoop.startLoop(asset, volume: _primaryVolume);
+        }
+      case BackgroundLayerMode.dualStemBarAligned:
+        final walkAsset = _activePack.primaryLoopAsset;
+        final jogAsset = _activePack.secondaryLoopAsset;
+        if (walkAsset != null && jogAsset != null) {
+          _primaryVolume = 0.95;
+          _secondaryVolume = 0.85;
+          await Future.wait([
+            _primaryLoop.startLoop(walkAsset, volume: _primaryVolume),
+            _secondaryLoop.startLoop(jogAsset, volume: _secondaryVolume),
+          ]);
+        }
+      case BackgroundLayerMode.continuousTempoScaled:
+        final asset = _activePack.primaryLoopAsset;
+        if (asset != null) {
+          _primaryVolume = 0.95;
+          final rate = _activePack.computePlaybackRate(156.0);
+          await _primaryLoop.startLoop(
+            asset,
+            volume: _primaryVolume,
+            playbackRate: rate,
+          );
+        }
+    }
+
+    // Trigger an immediate first footstrike SFX, then repeat every 375ms (~160 SPM).
+    unawaited(_triggerPreviewStepSfx());
+    _previewStepTimer = Timer.periodic(
+      const Duration(milliseconds: 375),
+      (_) {
+        if (!_isPreviewing || _isSessionActive) return;
+        unawaited(_triggerPreviewStepSfx());
+      },
+    );
+
+    final totalMs = duration.inMilliseconds.clamp(500, 60000);
+    const tickMs = 50;
+    var elapsedMs = 0;
+    _previewProgressTimer = Timer.periodic(
+      const Duration(milliseconds: tickMs),
+      (timer) {
+        if (!_isPreviewing || _isSessionActive) {
+          timer.cancel();
+          return;
+        }
+        elapsedMs += tickMs;
+        final next = (elapsedMs / totalMs).clamp(0.0, 1.0);
+        _previewProgress = next;
+        previewProgressNotifier.value = next;
+        if (elapsedMs >= totalMs) {
+          timer.cancel();
+          unawaited(stopPreview());
+        }
+      },
+    );
+  }
+
+  /// Stops any active audition preview and resets preview progress to `0.0`.
+  Future<void> stopPreview() async {
+    _previewProgressTimer?.cancel();
+    _previewProgressTimer = null;
+    _previewStepTimer?.cancel();
+    _previewStepTimer = null;
+    if (!_isPreviewing) return;
+
+    _isPreviewing = false;
+    _previewProgress = 0.0;
+    isPreviewingNotifier.value = false;
+    previewProgressNotifier.value = 0.0;
+
+    if (!_isSessionActive) {
+      _primaryVolume = 0.0;
+      _secondaryVolume = 0.0;
+      await _primaryLoop.stop();
+      await _secondaryLoop.stop();
+    }
+  }
+
+  Future<void> _triggerPreviewStepSfx() async {
+    final assets = _activePack.stepSfxAssets;
+    if (_activePack.stepSfxMode == StepSfxMode.off || assets.isEmpty) {
+      return;
+    }
+    _previewStepCounter++;
+    final (assetPath, rate) = switch (_activePack.stepSfxMode) {
+      StepSfxMode.off => ('', 1.0),
+      StepSfxMode.single => (assets.first, 1.0),
+      StepSfxMode.alternating => (
+        assets[(_previewStepCounter - 1) % assets.length],
+        1.0,
+      ),
+      StepSfxMode.roundRobin => (
+        assets[(_previewStepCounter - 1) % assets.length],
+        1.0,
+      ),
+      StepSfxMode.microPitchAlternating => (
+        assets.first,
+        _previewStepCounter.isOdd ? 1.0 : _activePack.rightStepPitchRate,
+      ),
+    };
+    if (assetPath.isNotEmpty) {
+      await _sfx.play(assetPath, rate: rate, volume: 0.92);
+    }
+  }
+
   /// Starts audio layers for a new running session.
   Future<void> startSession({double initialCadenceSpm = 0.0}) async {
+    await stopPreview();
     _cancelTimers();
     _isSessionActive = true;
     _isPaused = false;
@@ -423,6 +572,10 @@ class StradioAudioEngine {
   /// (`docs/PRD-MVP.md` FR-4.2: does not reset steps, timers, or foreground service).
   Future<void> switchPack(SoundPackId packId) async {
     if (_activePack.id == packId) return;
+    final wasPreviewing = _isPreviewing;
+    if (wasPreviewing) {
+      await stopPreview();
+    }
     _activePack = StradioSoundPack.byId(packId);
     await _sfx.preload(_activePack.stepSfxAssets);
 
@@ -683,9 +836,14 @@ class StradioAudioEngine {
     _secondaryFadeTimer = null;
     _barAlignTimer?.cancel();
     _barAlignTimer = null;
+    _previewProgressTimer?.cancel();
+    _previewProgressTimer = null;
+    _previewStepTimer?.cancel();
+    _previewStepTimer = null;
   }
 
   Future<void> dispose() async {
+    await stopPreview();
     _cancelTimers();
     await _primaryLoop.dispose();
     await _secondaryLoop.dispose();

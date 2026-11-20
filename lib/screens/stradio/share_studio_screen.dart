@@ -271,6 +271,17 @@ class _ShareStudioScreenState extends State<ShareStudioScreen> {
     }
   }
 
+  String _buildShareCaption() {
+    final s = StradioStrings.of(widget.language);
+    return s.buildShareCaption(
+      steps: widget.metrics.totalSteps,
+      distanceKm: ShareMetricFormat.distanceKm(widget.metrics),
+      duration: widget.metrics.formattedDuration,
+      avgSpm: ShareMetricFormat.avgSpm(widget.metrics),
+      soundPackTitle: widget.soundPack.title,
+    );
+  }
+
   Future<void> _handleShare() async {
     if (_busy) return;
     setState(() {
@@ -280,13 +291,14 @@ class _ShareStudioScreenState extends State<ShareStudioScreen> {
     });
     try {
       final file = await _renderExportPng();
+      final caption = _buildShareCaption();
       if (widget.onShareFile != null) {
         await widget.onShareFile!(file.path);
       } else {
         await SharePlus.instance.share(
           ShareParams(
             files: [XFile(file.path, mimeType: 'image/png')],
-            text: 'Stradio (${widget.soundPack.title})',
+            text: caption,
           ),
         );
       }

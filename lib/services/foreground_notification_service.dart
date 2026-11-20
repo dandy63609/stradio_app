@@ -205,6 +205,12 @@ class FlutterForegroundNotificationService
     return 'Stradio · $status ($targetBpm BPM)';
   }
 
+  @visibleForTesting
+  String formatWorkoutNotificationText(
+    int steps,
+    double activeDurationSeconds,
+  ) => 'Steps: $steps · ${_formatDuration(activeDurationSeconds)}';
+
   @override
   Future<void> startWorkoutService({
     required int steps,
@@ -223,8 +229,7 @@ class FlutterForegroundNotificationService
     await init();
 
     final title = _formatTitle(isRunning, targetBpm, soundPackTitle);
-    final text =
-        'Steps: $steps / $targetSteps ($algorithmName) · ${_formatDuration(activeDurationSeconds)}';
+    final text = formatWorkoutNotificationText(steps, activeDurationSeconds);
 
     try {
       if (await FlutterForegroundTask.isRunningService) {
@@ -267,8 +272,7 @@ class FlutterForegroundNotificationService
     if (!shouldDispatchUpdate(isRunning, now)) return;
 
     final title = _formatTitle(isRunning, targetBpm, soundPackTitle);
-    final text =
-        'Steps: $steps / $targetSteps ($algorithmName) · ${_formatDuration(activeDurationSeconds)}';
+    final text = formatWorkoutNotificationText(steps, activeDurationSeconds);
 
     try {
       await FlutterForegroundTask.updateService(

@@ -5,7 +5,7 @@ import 'package:stradio_app/services/posthog_service.dart';
 
 void main() {
   group('PostHogTelemetryService', () {
-    test('defaults to opt-in disabled and omits client IP (\$ip: null) per UU PDP', () async {
+    test('defaults to enabled=true and omits client IP (\$ip: null), and respects opt-out', () async {
       final sentPayloads = <Map<String, Object?>>[];
       final service = PostHogTelemetryService(
         apiKey: 'phc_live_key',
@@ -15,21 +15,24 @@ void main() {
         },
       );
 
-      expect(service.enabled, isFalse);
+      expect(service.enabled, isTrue);
       await service.captureAppOpened(
         distinctId: 'P01',
         developerOverlayEnabled: false,
       );
-      expect(sentPayloads, isEmpty);
-      expect(service.deliveredCount, 0);
-
-      service.setEnabled(true);
-      final flushed = await service.flushQueuedEvents();
-      expect(flushed, 1);
       expect(sentPayloads, hasLength(1));
+      expect(service.deliveredCount, 1);
       final props = sentPayloads.first['properties'] as Map<String, Object?>;
       expect(props.containsKey(r'$ip'), isTrue);
       expect(props[r'$ip'], isNull);
+
+      service.setEnabled(false);
+      await service.captureAppOpened(
+        distinctId: 'P01',
+        developerOverlayEnabled: false,
+      );
+      expect(sentPayloads, hasLength(1));
+      expect(service.queuedCount, 1);
     });
 
     test('queues events locally when API key is empty and flushes on configure', () async {

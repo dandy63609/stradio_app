@@ -132,16 +132,46 @@ void main() {
         );
         await tester.pumpAndSettle();
 
-        // Surface 1: select LARI_NGACIR and tap Swipe to start pill
+        // Surface 1: test Audio Preview button & progress line bar on Unified Glass Capsule
+        await tester.tap(
+          find.byKey(const Key('pre_run_preview_audio_button')),
+        );
+        await tester.pump(const Duration(milliseconds: 100));
+        expect(audioEngine.isPreviewing, isTrue);
+        expect(
+          find.byKey(const Key('pre_run_preview_progress_bar')),
+          findsOneWidget,
+        );
+        await tester.tap(
+          find.byKey(const Key('pre_run_preview_audio_button')),
+        );
+        await tester.pump();
+        expect(audioEngine.isPreviewing, isFalse);
+
+        // Expand Unified Timbre Glass Capsule, select LARI_NGACIR
+        await tester.tap(
+          find.byKey(const Key('pre_run_timbre_dropdown_button')),
+        );
+        await tester.pumpAndSettle();
         final lariTile = find.byKey(const Key('pre_run_pack_LARI_NGACIR'));
         await tester.ensureVisible(lariTile);
         await tester.tap(lariTile);
         await tester.pump();
 
+        // Tap alone on Swipe to start pill must NOT start run (Swipe-only lock)
         await tester.tap(find.byKey(const Key('swipe_to_start_pill')));
         await tester.pumpAndSettle();
+        expect(find.byKey(const Key('swipe_to_start_pill')), findsOneWidget);
 
-        // Surface 2: Active Run Instrument running with LARI_NGACIR & honest 0-step empty hint
+        // Drag Swipe to start pill across the track -> triggers Active Run
+        await tester.drag(
+          find.byKey(const Key('swipe_to_start_pill')),
+          const Offset(340, 0),
+        );
+        await tester.pumpAndSettle();
+
+        // Surface 2: Active Run Instrument running with Stradio top brand bar + Stride / Rhythm sub-header
+        expect(find.text('Stradio'), findsOneWidget);
         expect(find.text('Stride'), findsOneWidget);
         expect(find.text('Rhythm'), findsOneWidget);
         expect(find.byKey(const Key('active_run_glass_lens')), findsOneWidget);
@@ -207,11 +237,11 @@ void main() {
     );
 
     testWidgets(
-      'Daylight Settings Sheet toggles UU PDP PostHog opt-in, opens Earphone guide, and clears history',
+      'Daylight Settings Sheet defaults PostHog telemetry to true, omits UU PDP text, and opens Earphone guide',
       (tester) async {
         final store = InMemoryRecordingStore();
         final postHog = PostHogTelemetryService(apiKey: 'phc_key');
-        expect(postHog.enabled, isFalse);
+        expect(postHog.enabled, isTrue);
 
         await tester.pumpWidget(
           StradioApp(
@@ -228,15 +258,16 @@ void main() {
         await tester.tap(find.byKey(const Key('pre_run_settings_button')));
         await tester.pumpAndSettle();
         expect(find.byKey(const Key('daylight_settings_sheet')), findsOneWidget);
+        expect(find.textContaining('UU PDP'), findsNothing);
 
-        // Default UU PDP switch is OFF -> toggle ON calls postHog.setEnabled(true)
+        // Default telemetry switch is ON (true) -> toggle OFF calls postHog.setEnabled(false)
         final optInSwitch = find.byKey(
           const Key('settings_analytics_optin_switch'),
         );
-        expect(tester.widget<Switch>(optInSwitch).value, isFalse);
+        expect(tester.widget<Switch>(optInSwitch).value, isTrue);
         await tester.tap(optInSwitch);
         await tester.pumpAndSettle();
-        expect(postHog.enabled, isTrue);
+        expect(postHog.enabled, isFalse);
 
         // Toggle language to ID -> live-translates Settings and Earphone modal
         await tester.tap(find.text('ID'));
@@ -257,7 +288,7 @@ void main() {
     );
 
     testWidgets(
-      'Sensor unavailable fallback shows honest error strip, calibration sheet, and Simulate stride (+1)',
+      'Sensor unavailable fallback shows honest error strip, Mockup 09 calibration sheet controls, and Simulate stride (+1)',
       (tester) async {
         final unavailableService = RecordingService(
           source: (_) => const Stream<AccelerometerEvent>.empty(),
@@ -287,14 +318,35 @@ void main() {
         await tester.pump();
         expect(find.text('1'), findsOneWidget);
 
-        // Open P1 Sensor Calibration sheet
+        // Open Mockup 09 Sensor Calibration sheet and verify all 4 parameter controls
         await tester.tap(find.byKey(const Key('active_run_sensor_button')));
         await tester.pumpAndSettle();
         expect(
           find.byKey(const Key('sensor_calibration_sheet')),
           findsOneWidget,
         );
+        expect(find.text('Sensor Calibration'), findsOneWidget);
         expect(find.text('Motion sensor unavailable'), findsOneWidget);
+        expect(
+          find.byKey(const Key('sensor_sensitivity_slider')),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(const Key('sensor_latency_ultraLow')),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(const Key('sensor_cadence_window_slider')),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(const Key('sensor_spatial_eq_switch')),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(const Key('sensor_apply_calibrate_button')),
+          findsOneWidget,
+        );
       },
     );
 
@@ -412,7 +464,7 @@ void main() {
   });
 
   test(
-    'ForegroundNotificationService bypasses throttle on Running <-> Paused state transition',
+    'ForegroundNotificationService bypasses throttle on Running <-> Paused state transition and formats clean consumer notification copy',
     () {
       final service = FlutterForegroundNotificationService();
       expect(service.shouldDispatchUpdate(true, 1000), isTrue);
@@ -420,6 +472,11 @@ void main() {
       expect(service.shouldDispatchUpdate(false, 1350), isTrue);
       expect(service.shouldDispatchUpdate(false, 1500), isFalse);
       expect(service.shouldDispatchUpdate(true, 1600), isTrue);
+
+      final text = service.formatWorkoutNotificationText(342, 65.0);
+      expect(text, 'Steps: 342 · 01:05');
+      expect(text.contains('/ 100'), isFalse);
+      expect(text.contains('Adaptive midpoint'), isFalse);
     },
   );
 }

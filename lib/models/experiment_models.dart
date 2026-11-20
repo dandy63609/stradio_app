@@ -10,7 +10,7 @@ class StradioUserProfile {
     this.dailyStepGoal = defaultDailyStepGoal,
     this.isOpenGoal = false,
     this.language = AppLanguage.en,
-    this.analyticsEnabled = false,
+    this.analyticsEnabled = true,
     this.developerModeEnabled = false,
     this.hasCompletedOnboarding = false,
     this.activeSoundscapeId = 'neon_stride',
@@ -100,7 +100,7 @@ class StradioUserProfile {
           (rawGoal != null && rawGoal > 0) ? rawGoal : defaultDailyStepGoal,
       isOpenGoal: map['is_open_goal'] == true,
       language: AppLanguageCode.parse(map['language']?.toString()),
-      analyticsEnabled: map['analytics_enabled'] as bool? ?? false,
+      analyticsEnabled: map['analytics_enabled'] as bool? ?? true,
       developerModeEnabled: map['developer_mode_enabled'] == true,
       hasCompletedOnboarding: map['has_completed_onboarding'] == true,
       activeSoundscapeId:

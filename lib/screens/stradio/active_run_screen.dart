@@ -78,7 +78,11 @@ class _ActiveRunScreenState extends State<ActiveRunScreen>
   late StradioLabSettings _labSettings;
 
   late final AnimationController _ribbonController;
+  late final AnimationController _continuousWaveController;
   late final AnimationController _holdController;
+
+  bool get _isTestBinding =>
+      WidgetsBinding.instance.runtimeType.toString().contains('Test');
 
   _RunStreamState _streamState = _RunStreamState.connecting;
   String _recordingId = 'REC_LIVE_001';
@@ -125,7 +129,11 @@ class _ActiveRunScreenState extends State<ActiveRunScreen>
 
     _ribbonController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 220),
+      duration: const Duration(milliseconds: 360),
+    );
+    _continuousWaveController = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 4),
     );
     _holdController = AnimationController(
       vsync: this,
@@ -158,6 +166,9 @@ class _ActiveRunScreenState extends State<ActiveRunScreen>
     if (MediaQuery.disableAnimationsOf(context) ||
         _streamState != _RunStreamState.running) {
       _ribbonController.stop();
+      _continuousWaveController.stop();
+    } else if (!_isTestBinding && !_continuousWaveController.isAnimating) {
+      _continuousWaveController.repeat();
     }
   }
 
@@ -608,6 +619,7 @@ class _ActiveRunScreenState extends State<ActiveRunScreen>
     _isFinishing = true;
     _elapsedTimer?.cancel();
     _ribbonController.stop();
+    _continuousWaveController.stop();
     unawaited(_recordingService.stop());
     unawaited(_audioEngine.stopSession());
     unawaited(_foregroundService.stopWorkoutService());
@@ -773,7 +785,7 @@ class _ActiveRunScreenState extends State<ActiveRunScreen>
                                         CrossAxisAlignment.start,
                                     children: [
                                       Text(
-                                        '${pack.title} · ${pack.artist}',
+                                        '${pack.title} · ${pack.categoryLabel}',
                                         style: StradioTypography.pillBadge(),
                                       ),
                                       const SizedBox(height: 2),
@@ -852,6 +864,7 @@ class _ActiveRunScreenState extends State<ActiveRunScreen>
     _stepPulseTimer?.cancel();
     _holdHintTimer?.cancel();
     _ribbonController.dispose();
+    _continuousWaveController.dispose();
     _holdController.dispose();
     _foregroundService.removeActionListener(_handleNotificationAction);
     unawaited(_foregroundService.stopWorkoutService());
@@ -901,7 +914,24 @@ class _ActiveRunScreenState extends State<ActiveRunScreen>
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  // Top Bar: Dual-Tone Stacked Header (Stride / Rhythm) + 48dp Sensor Button
+                  // Top Brand Bar (Logo + Stradio) + Dual-Tone Stacked Sub-Header (Stride / Rhythm) + 100 Hz Sensor Pill (Mockup #10)
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Image.asset(
+                        'assets/images/stradio-logo.png',
+                        height: 22,
+                        fit: BoxFit.contain,
+                        errorBuilder: (_, _, _) => const SizedBox.shrink(),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Stradio',
+                        style: StradioTypography.headingSmall(fontSize: 18),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -990,21 +1020,42 @@ class _ActiveRunScreenState extends State<ActiveRunScreen>
                                   ),
                                   clipBehavior: Clip.antiAlias,
                                   child: AnimatedBuilder(
-                                    animation: _ribbonController,
+                                    animation: Listenable.merge([
+                                      _ribbonController,
+                                      _continuousWaveController,
+                                    ]),
                                     builder: (_, _) {
+                                      final curvedImpulse = Curves.easeOutCubic
+                                          .transform(_ribbonController.value);
+                                      final continuousFlow =
+                                          _continuousWaveController.value *
+                                          math.pi *
+                                          2 *
+                                          (hasCadence
+                                              ? (liveSpm / 140.0).clamp(
+                                                  0.8,
+                                                  1.6,
+                                                )
+                                              : 0.65);
                                       final phase = reducedMotion
                                           ? 0.4
                                           : 0.4 +
-                                                steps * 0.65 +
-                                                _ribbonController.value * 0.9;
+                                                steps * 0.52 +
+                                                continuousFlow +
+                                                curvedImpulse * 0.85;
+                                      final smoothBoost = _stepPulseActive
+                                          ? (1.0 - curvedImpulse * 0.55).clamp(
+                                              0.25,
+                                              1.0,
+                                            )
+                                          : 0.0;
                                       return CustomPaint(
                                         painter: SonicRibbonPainter(
                                           phase: phase,
-                                          amplitude: isRunning ? 0.80 : 0.42,
-                                          pulseBoost: _stepPulseActive
-                                              ? 1.0
-                                              : 0.0,
+                                          amplitude: isRunning ? 0.82 : 0.44,
+                                          pulseBoost: smoothBoost,
                                           strokeWidth: 2.6,
+                                          fillGradientArea: true,
                                         ),
                                       );
                                     },

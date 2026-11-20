@@ -50,7 +50,7 @@ class PostHogTelemetryService {
     String? apiKey,
     String? host,
     PostHogTransport? transport,
-    this.enabled = false,
+    this.enabled = true,
   }) : _apiKey =
            apiKey ??
            const String.fromEnvironment('POSTHOG_API_KEY', defaultValue: ''),

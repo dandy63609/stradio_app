@@ -42,6 +42,12 @@ class StradioStringsId extends StradioStrings {
   String get swipeToStart => 'Geser untuk mulai';
 
   @override
+  String get previewAudioAction => 'Pratinjau';
+
+  @override
+  String get stopPreviewAction => 'Berhenti';
+
+  @override
   String motionSensorReadyWithPack(String packTitle) =>
       'Sensor gerak siap · $packTitle';
 
@@ -246,6 +252,46 @@ class StradioStringsId extends StradioStrings {
   String get backdropAdd => '+ Tambah';
 
   @override
+  String buildShareCaption({
+    required int steps,
+    required String distanceKm,
+    required String duration,
+    required String avgSpm,
+    required String soundPackTitle,
+  }) =>
+      'Lari bareng Stradio: $steps langkah ($distanceKm) dalam $duration · Rata-rata $avgSpm SPM · Musik: $soundPackTitle #Stradio #RunTheVibe';
+
+  @override
+  String get sensorCalibrationTitle => 'Kalibrasi Sensor';
+
+  @override
+  String get sensorCalibrationSubtitle => 'Parameter Langkah & Mesin Audio';
+
+  @override
+  String get sensorSyncedBadge => '100 HZ SINKRON';
+
+  @override
+  String get strideSensitivityLabel => 'Sensitivitas Langkah (IMU)';
+
+  @override
+  String get audioSyncLatencyLabel => 'Latensi Sinkronisasi Audio';
+
+  @override
+  String get cadenceLockWindowLabel => 'Rentang Kunci Kadensi';
+
+  @override
+  String get adaptiveSpatialEqTitle => 'EQ Spasial Adaptif';
+
+  @override
+  String get adaptiveSpatialEqSubtitle => 'Kedalaman pulsa binaural dinamis';
+
+  @override
+  String get applyAndCalibrateAction => 'Terapkan & Kalibrasi';
+
+  @override
+  String get resetAction => 'Reset';
+
+  @override
   String get sensorActiveTitle => 'Sensor gerak aktif';
 
   @override
@@ -293,11 +339,11 @@ class StradioStringsId extends StradioStrings {
   String get settingsTitle => 'Pengaturan';
 
   @override
-  String get analyticsOptInTitle => 'Analitik Anonim (Opt-in)';
+  String get analyticsOptInTitle => 'Analitik Anonim';
 
   @override
   String get analyticsOptInSubtitle =>
-      'Nonaktif secara default (UU PDP). IP klien tidak pernah disimpan.';
+      'Aktif secara default untuk meningkatkan deteksi langkah. IP klien tidak pernah disimpan.';
 
   @override
   String get languageLabel => 'Bahasa';

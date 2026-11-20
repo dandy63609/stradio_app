@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
@@ -6,10 +7,10 @@ import '../l10n/stradio_strings.dart';
 import '../theme/stradio_theme.dart';
 import 'sonic_ribbon_painter.dart';
 
-/// P0 First-Launch Audio Immersion Modal (`docs/PRD-MVP.md` FR-5.0 & `docs/DESIGN.md` §9).
+/// P0 First-Launch Audio Immersion Modal (`docs/PRD-MVP.md` FR-5.0 & Mockup #08).
 ///
-/// Advises wearing earphones/headphones on cold first launch with a custom vector
-/// headphones illustration + acoustic ribbons (`CustomPainter`), zero external image bloat.
+/// Renders a 3D-shaded Warm Ivory / Alabaster Over-Ear Headphones vector illustration
+/// floating over sunlit window bokeh and glowing multi-layer acoustic ribbons.
 class EarphonesRecommendationModal extends StatelessWidget {
   const EarphonesRecommendationModal({
     super.key,
@@ -72,13 +73,13 @@ class EarphonesRecommendationModal extends StatelessWidget {
         child: Container(
           key: const Key('earphones_recommendation_modal'),
           decoration: BoxDecoration(
-            color: StradioColors.surfaceCard.withValues(alpha: 0.97),
+            color: StradioColors.surfaceCard.withValues(alpha: 0.98),
             borderRadius: BorderRadius.circular(StradioRadii.tray),
-            border: Border.all(color: StradioColors.borderSubtle),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.90)),
             boxShadow: [
               BoxShadow(
-                color: StradioColors.midnight.withValues(alpha: 0.14),
-                blurRadius: 32,
+                color: StradioColors.midnight.withValues(alpha: 0.16),
+                blurRadius: 34,
                 offset: const Offset(0, 14),
               ),
             ],
@@ -89,29 +90,53 @@ class EarphonesRecommendationModal extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                // 176px Daylight Recessed Header with CustomPainter Headphones & Ribbons
+                // 184px Mockup 08 Warm Studio Header: Window-Light Bokeh + Acoustic Ribbons + 3D Ivory Headphones SVG
                 SizedBox(
-                  height: 176,
+                  height: 184,
                   child: Stack(
                     fit: StackFit.expand,
                     children: [
-                      const ColoredBox(color: StradioColors.surfaceRecessed),
+                      const CustomPaint(
+                        painter: _Mockup08StudioBackdropPainter(),
+                      ),
                       const Padding(
-                        padding: EdgeInsets.symmetric(horizontal: 12),
+                        padding: EdgeInsets.symmetric(horizontal: 6),
                         child: CustomPaint(
                           painter: SonicRibbonPainter(
-                            phase: 0.7,
-                            amplitude: 0.75,
-                            strokeWidth: 2.4,
+                            phase: 0.95,
+                            amplitude: 0.86,
+                            strokeWidth: 2.3,
+                            fillGradientArea: true,
                           ),
                         ),
                       ),
                       const Center(
                         child: SizedBox(
-                          width: 124,
-                          height: 124,
+                          width: 156,
+                          height: 156,
                           child: CustomPaint(
-                            painter: _MinimalHeadphonesPainter(),
+                            painter: _Alabaster3DHeadphonesPainter(),
+                          ),
+                        ),
+                      ),
+                      // Subtle bottom fade into card surface
+                      Positioned(
+                        left: 0,
+                        right: 0,
+                        bottom: 0,
+                        height: 28,
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              begin: Alignment.topCenter,
+                              end: Alignment.bottomCenter,
+                              colors: [
+                                StradioColors.surfaceCard.withValues(
+                                  alpha: 0.0,
+                                ),
+                                StradioColors.surfaceCard,
+                              ],
+                            ),
                           ),
                         ),
                       ),
@@ -124,10 +149,10 @@ class EarphonesRecommendationModal extends StatelessWidget {
                           child: IconButton(
                             key: const Key('earphones_modal_close_button'),
                             onPressed: onDismiss,
-                            tooltip: 'Close',
+                            tooltip: s.closeLabel,
                             style: IconButton.styleFrom(
                               backgroundColor: StradioColors.midnight
-                                  .withValues(alpha: 0.18),
+                                  .withValues(alpha: 0.22),
                               foregroundColor: StradioColors.surfaceCard,
                               minimumSize: const Size(44, 44),
                             ),
@@ -140,7 +165,7 @@ class EarphonesRecommendationModal extends StatelessWidget {
                 ),
 
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 20, 20, 20),
+                  padding: const EdgeInsets.fromLTRB(20, 14, 20, 20),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -211,67 +236,215 @@ class EarphonesRecommendationModal extends StatelessWidget {
   }
 }
 
-/// Crisp geometric Midnight over-ear headphones vector (zero raster bloat).
-class _MinimalHeadphonesPainter extends CustomPainter {
-  const _MinimalHeadphonesPainter();
+/// Paints the warm sunlit architectural window bokeh & soft acoustic glow from Mockup 08.
+class _Mockup08StudioBackdropPainter extends CustomPainter {
+  const _Mockup08StudioBackdropPainter();
 
   @override
   void paint(Canvas canvas, Size size) {
-    final cx = size.width * 0.5;
+    final rect = Offset.zero & size;
+    final bgPaint = Paint()
+      ..shader = const LinearGradient(
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+        colors: [
+          Color(0xFFF6F1E7),
+          Color(0xFFDDCBB7),
+          Color(0xFFEDE5D8),
+        ],
+      ).createShader(rect);
+    canvas.drawRect(rect, bgPaint);
+
+    // Soft window sunlight panels on the left
+    final windowLight = Paint()
+      ..color = const Color(0xFFFFFBF4).withValues(alpha: 0.55)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8);
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        Rect.fromLTWH(10, 12, size.width * 0.18, size.height * 0.36),
+        const Radius.circular(6),
+      ),
+      windowLight,
+    );
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        Rect.fromLTWH(10, size.height * 0.54, size.width * 0.18, size.height * 0.34),
+        const Radius.circular(6),
+      ),
+      windowLight,
+    );
+
+    // Warm coral-violet acoustic aura behind the headphones
+    final auraPaint = Paint()
+      ..shader = RadialGradient(
+        center: const Alignment(-0.08, 0.04),
+        radius: 0.55,
+        colors: [
+          StradioColors.sonicCoral.withValues(alpha: 0.24),
+          StradioColors.rhythmViolet.withValues(alpha: 0.16),
+          Colors.transparent,
+        ],
+      ).createShader(rect);
+    canvas.drawRect(rect, auraPaint);
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
+/// 3/4-perspective Warm Ivory / Alabaster Over-Ear Headphones vector matching Mockup 08.
+class _Alabaster3DHeadphonesPainter extends CustomPainter {
+  const _Alabaster3DHeadphonesPainter();
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final cx = size.width * 0.50;
     final cy = size.height * 0.52;
-    final r = size.width * 0.34;
 
-    final bandPaint = Paint()
-      ..color = StradioColors.midnight
+    // Soft ambient drop shadow beneath floating headphones
+    final shadowPaint = Paint()
+      ..color = const Color(0xFF6B5847).withValues(alpha: 0.18)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 14);
+    canvas.drawOval(
+      Rect.fromCenter(
+        center: Offset(cx + 4, cy + 52),
+        width: 78,
+        height: 16,
+      ),
+      shadowPaint,
+    );
+
+    // 1. 3D Sculpted Headband Arc (Warm Ivory outer shell + soft bronze inner cushion)
+    final arcRect = Rect.fromCenter(
+      center: Offset(cx, cy - 6),
+      width: 78,
+      height: 88,
+    );
+    final innerShadowArc = Paint()
+      ..color = const Color(0xFFC4B5A2)
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 8.0
+      ..strokeWidth = 13.0
       ..strokeCap = StrokeCap.round
       ..isAntiAlias = true;
+    canvas.drawArc(arcRect.shift(const Offset(2, 2)), math.pi * 0.92, math.pi * 1.12, false, innerShadowArc);
 
-    // Headband arc
-    final arcRect = Rect.fromCircle(center: Offset(cx, cy), radius: r);
-    canvas.drawArc(arcRect, 3.14159, 3.14159, false, bandPaint);
-
-    // Subtle inner cushion highlight
-    final cushionPaint = Paint()
-      ..color = StradioColors.surfaceCard
+    final outerBandPaint = Paint()
+      ..shader = const LinearGradient(
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+        colors: [
+          Color(0xFFFDFBF7),
+          Color(0xFFE7DECF),
+          Color(0xFFD4C6B4),
+        ],
+      ).createShader(arcRect)
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 2.0
+      ..strokeWidth = 11.5
       ..strokeCap = StrokeCap.round
       ..isAntiAlias = true;
+    canvas.drawArc(arcRect, math.pi * 0.92, math.pi * 1.12, false, outerBandPaint);
+
+    // Metallic champagne hinge stems
+    final hingePaint = Paint()
+      ..color = const Color(0xFFB5A592)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 3.5
+      ..strokeCap = StrokeCap.round;
+    canvas.drawLine(Offset(cx - 38, cy - 2), Offset(cx - 34, cy + 12), hingePaint);
+    canvas.drawLine(Offset(cx + 37, cy - 1), Offset(cx + 34, cy + 14), hingePaint);
+
+    // 2. Right Ear Cup (angled three-quarter back cup with inner cushion cavity)
+    canvas.save();
+    canvas.translate(cx + 24, cy + 24);
+    canvas.rotate(0.24);
+    final rightCupRect = Rect.fromCenter(center: Offset.zero, width: 34, height: 48);
+    final rightShellPaint = Paint()
+      ..shader = const LinearGradient(
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+        colors: [Color(0xFFF5EFE6), Color(0xFFD6C8B6)],
+      ).createShader(rightCupRect);
+    canvas.drawOval(rightCupRect, rightShellPaint);
+
+    final rightCushionRect = Rect.fromCenter(
+      center: const Offset(-3, 0),
+      width: 24,
+      height: 38,
+    );
+    canvas.drawOval(
+      rightCushionRect,
+      Paint()..color = const Color(0xFFEAE1D5),
+    );
+    canvas.drawOval(
+      Rect.fromCenter(center: const Offset(-4, 0), width: 13, height: 24),
+      Paint()..color = const Color(0xFFC2B29F),
+    );
+    canvas.restore();
+
+    // 3. Left Ear Cup (prominent foreground sculpted Alabaster shell)
+    canvas.save();
+    canvas.translate(cx - 18, cy + 20);
+    canvas.rotate(-0.18);
+
+    // Back cushion ring
+    final leftCushionRect = Rect.fromCenter(
+      center: const Offset(5, 1),
+      width: 38,
+      height: 54,
+    );
+    canvas.drawOval(
+      leftCushionRect,
+      Paint()..color = const Color(0xFFD9CBB9),
+    );
+
+    // Main outer 3D dome
+    final leftDomeRect = Rect.fromCenter(
+      center: Offset.zero,
+      width: 38,
+      height: 54,
+    );
+    final leftDomePaint = Paint()
+      ..shader = const LinearGradient(
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+        colors: [
+          Color(0xFFFFFDF9),
+          Color(0xFFEEE6DA),
+          Color(0xFFD7C9B8),
+        ],
+      ).createShader(leftDomeRect);
+    canvas.drawOval(leftDomeRect, leftDomePaint);
+
+    // Specular rim & subtle acoustic wave emblem on left earcup
+    canvas.drawOval(
+      leftDomeRect.deflate(1.2),
+      Paint()
+        ..color = Colors.white.withValues(alpha: 0.78)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.2,
+    );
+
+    // Tiny acoustic wave mark + sensor port on the dome (matching Mockup 08)
+    final emblemPaint = Paint()
+      ..color = Colors.white.withValues(alpha: 0.90)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.4
+      ..strokeCap = StrokeCap.round;
     canvas.drawArc(
-      Rect.fromCircle(center: Offset(cx, cy), radius: r - 5),
-      3.55,
-      2.32,
+      Rect.fromCenter(center: const Offset(-3, 2), width: 8, height: 8),
+      0.2,
+      2.4,
       false,
-      cushionPaint,
+      emblemPaint,
     );
-
-    // Left & right ear cups
-    final cupFill = Paint()
-      ..color = StradioColors.midnight
-      ..style = PaintingStyle.fill
-      ..isAntiAlias = true;
-    final coralRing = Paint()
-      ..color = StradioColors.sonicCoral
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 2.4
-      ..isAntiAlias = true;
-
-    final leftCup = RRect.fromRectAndRadius(
-      Rect.fromCenter(center: Offset(cx - r, cy + 12), width: 18, height: 34),
-      const Radius.circular(9),
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        Rect.fromCenter(center: const Offset(11, 10), width: 2.2, height: 6.5),
+        const Radius.circular(2),
+      ),
+      Paint()..color = const Color(0xFF7B736B),
     );
-    final rightCup = RRect.fromRectAndRadius(
-      Rect.fromCenter(center: Offset(cx + r, cy + 12), width: 18, height: 34),
-      const Radius.circular(9),
-    );
-    canvas.drawRRect(leftCup, cupFill);
-    canvas.drawRRect(rightCup, cupFill);
-
-    // Small acoustic coral accent inside each ear cup
-    canvas.drawCircle(Offset(cx - r, cy + 12), 4.0, coralRing);
-    canvas.drawCircle(Offset(cx + r, cy + 12), 4.0, coralRing);
+    canvas.restore();
   }
 
   @override

@@ -7,9 +7,9 @@ import '../theme/stradio_theme.dart';
 
 /// Compact Daylight Settings Sheet reachable from Surface 1 top-right icon.
 ///
-/// Preserves UU PDP PostHog opt-in control, earphone guide re-access,
+/// Includes anonymous PostHog telemetry toggle (default true), earphone guide re-access,
 /// height stride calibration, language toggle, and workout history clearing
-/// without reintroducing a multi-tab navigation shell.
+/// with tactile animated press feedback on action buttons.
 class DaylightSettingsSheet extends StatefulWidget {
   const DaylightSettingsSheet({
     super.key,
@@ -184,7 +184,7 @@ class _DaylightSettingsSheetState extends State<DaylightSettingsSheet> {
                 ),
                 const SizedBox(height: 12),
 
-                // 1. UU PDP Opt-in Analytics Toggle
+                // 1. Anonymous Telemetry Toggle (Default ON)
                 Container(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 14,
@@ -294,32 +294,130 @@ class _DaylightSettingsSheetState extends State<DaylightSettingsSheet> {
                 ),
                 const SizedBox(height: 14),
 
-                // 4. Re-open First-Launch Earphone Recommendation
-                SizedBox(
-                  height: 48,
-                  child: OutlinedButton.icon(
-                    key: const Key('settings_earphone_guide_button'),
-                    onPressed: () {
-                      Navigator.of(context).pop();
-                      widget.onShowEarphoneGuide();
-                    },
-                    icon: const Icon(Icons.headphones_rounded, size: 18),
-                    label: Text(s.earphoneGuideAction),
-                  ),
+                // 4. Re-open First-Launch Earphone Recommendation (with tactile color transition)
+                _AnimatedActionButton(
+                  buttonKey: const Key('settings_earphone_guide_button'),
+                  icon: Icons.headphones_rounded,
+                  label: s.earphoneGuideAction,
+                  baseColor: StradioColors.warmIvory,
+                  pressedColor: StradioColors.glowVioletSoft,
+                  foregroundColor: StradioColors.textPrimary,
+                  pressedForegroundColor: StradioColors.twilightPlum,
+                  pressedBorderColor: StradioColors.twilightPlum,
+                  onTap: () {
+                    Navigator.of(context).pop();
+                    widget.onShowEarphoneGuide();
+                  },
                 ),
                 const SizedBox(height: 10),
 
-                // 5. Clear Local Workout History
-                SizedBox(
-                  height: 48,
-                  child: OutlinedButton.icon(
-                    key: const Key('settings_clear_history_button'),
-                    onPressed: _clearing ? null : _confirmAndClearHistory,
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: StradioColors.textAccentDeep,
-                    ),
-                    icon: const Icon(Icons.delete_outline_rounded, size: 18),
-                    label: Text(s.clearHistoryAction),
+                // 5. Clear Local Workout History (with tactile coral color transition)
+                _AnimatedActionButton(
+                  buttonKey: const Key('settings_clear_history_button'),
+                  icon: Icons.delete_outline_rounded,
+                  label: s.clearHistoryAction,
+                  baseColor: StradioColors.warmIvory,
+                  pressedColor: StradioColors.glowCoralSoft,
+                  foregroundColor: StradioColors.textAccentDeep,
+                  pressedForegroundColor: StradioColors.textAccentDeep,
+                  pressedBorderColor: StradioColors.sonicCoral,
+                  onTap: _clearing ? null : _confirmAndClearHistory,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _AnimatedActionButton extends StatefulWidget {
+  const _AnimatedActionButton({
+    required this.buttonKey,
+    required this.icon,
+    required this.label,
+    required this.baseColor,
+    required this.pressedColor,
+    required this.foregroundColor,
+    required this.pressedForegroundColor,
+    required this.pressedBorderColor,
+    required this.onTap,
+  });
+
+  final Key buttonKey;
+  final IconData icon;
+  final String label;
+  final Color baseColor;
+  final Color pressedColor;
+  final Color foregroundColor;
+  final Color pressedForegroundColor;
+  final Color pressedBorderColor;
+  final VoidCallback? onTap;
+
+  @override
+  State<_AnimatedActionButton> createState() => _AnimatedActionButtonState();
+}
+
+class _AnimatedActionButtonState extends State<_AnimatedActionButton> {
+  bool _isPressed = false;
+
+  void _setPressed(bool value) {
+    if (_isPressed == value) return;
+    setState(() => _isPressed = value);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final activeFg = _isPressed
+        ? widget.pressedForegroundColor
+        : widget.foregroundColor;
+
+    return Semantics(
+      button: true,
+      label: widget.label,
+      child: GestureDetector(
+        key: widget.buttonKey,
+        behavior: HitTestBehavior.opaque,
+        onTapDown: widget.onTap == null ? null : (_) => _setPressed(true),
+        onTapCancel: () => _setPressed(false),
+        onTapUp: widget.onTap == null
+            ? null
+            : (_) {
+                HapticFeedback.selectionClick();
+                _setPressed(false);
+                widget.onTap?.call();
+              },
+        child: AnimatedScale(
+          scale: _isPressed ? 0.985 : 1.0,
+          duration: const Duration(milliseconds: 140),
+          curve: Curves.easeOutCubic,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 180),
+            curve: Curves.easeOutCubic,
+            height: 48,
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            decoration: BoxDecoration(
+              color: _isPressed ? widget.pressedColor : widget.baseColor,
+              borderRadius: BorderRadius.circular(StradioRadii.full),
+              border: Border.all(
+                color: _isPressed
+                    ? widget.pressedBorderColor
+                    : StradioColors.borderSubtle,
+                width: _isPressed ? 1.5 : 1.0,
+              ),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(widget.icon, size: 18, color: activeFg),
+                const SizedBox(width: 8),
+                Flexible(
+                  child: Text(
+                    widget.label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: StradioTypography.buttonLabel(color: activeFg),
                   ),
                 ),
               ],

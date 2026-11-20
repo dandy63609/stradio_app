@@ -98,6 +98,58 @@ void main() {
       expect(pack.computePlaybackRate(150.0), closeTo(150.0 / 132.5, 1e-6));
       expect(pack.computePlaybackRate(190.0), closeTo(1.18, 1e-6));
     });
+
+    test('assigns unified categoryLabel and producerCredit across all 6 packs', () {
+      expect(
+        StradioSoundPack.catalog.map((p) => p.categoryLabel),
+        equals([
+          'Runner Groove',
+          'Runner Groove',
+          '16-Bit Nostalgia',
+          'Meme Pack',
+          'Meme Pack',
+          'Meme Pack',
+        ]),
+      );
+      expect(
+        StradioSoundPack.byId(SoundPackId.breakbeatFvnky).producerCredit,
+        'by DDHANNi',
+      );
+      expect(
+        StradioSoundPack.byId(SoundPackId.lariNgacir).producerCredit,
+        'by DDHANNi',
+      );
+    });
+  });
+
+  group('StradioAudioEngine Preview', () {
+    test('startPreview plays loop + simulated step SFX and updates previewProgressNotifier', () async {
+      final primary = _FakeLoopBackend();
+      final sfx = _FakeSfxBackend();
+      final engine = StradioAudioEngine(
+        primaryLoopBackend: primary,
+        secondaryLoopBackend: _FakeLoopBackend(),
+        sfxBackend: sfx,
+        initialPack: SoundPackId.breakbeatFvnky,
+      );
+
+      await engine.startPreview(duration: const Duration(milliseconds: 600));
+      expect(engine.isPreviewing, isTrue);
+      expect(engine.isPreviewingNotifier.value, isTrue);
+      expect(
+        primary.startedAssets,
+        equals(['assets/audio/breakbeat_fvnky/Full_Fade_NoKick_BG.mp3']),
+      );
+      expect(sfx.plays, isNotEmpty);
+
+      await Future<void>.delayed(const Duration(milliseconds: 120));
+      expect(engine.previewProgress, greaterThan(0.0));
+
+      await engine.stopPreview();
+      expect(engine.isPreviewing, isFalse);
+      expect(engine.previewProgress, 0.0);
+      await engine.dispose();
+    });
   });
 
   group('StradioAudioEngine', () {

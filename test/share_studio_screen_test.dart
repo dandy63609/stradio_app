@@ -55,8 +55,10 @@ void main() {
         );
         await tester.pumpAndSettle();
 
-        // Mode 1: Transparent Sticker (3 templates)
+        // Mode 1: Transparent Sticker (3 templates with promotional STRADIO watermark)
         expect(find.byKey(const Key('sticker_card_aura_wave')), findsOneWidget);
+        expect(find.text('STRADIO'), findsOneWidget);
+        expect(PhotoBackdropPreset.presets.length, 8);
 
         await tester.tap(find.byKey(const Key('share_template_sonicDial')));
         await tester.pumpAndSettle();

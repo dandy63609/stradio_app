@@ -24,6 +24,8 @@ void main() {
       expect(id.stepsCountLabel('2,450'), '2,450 langkah');
       expect(en.transparentStickerTab, 'Transparent Sticker');
       expect(id.transparentStickerTab, 'Stiker Transparan');
+      expect(en.analyticsOptInSubtitle.contains('UU PDP'), isFalse);
+      expect(id.analyticsOptInSubtitle.contains('UU PDP'), isFalse);
       expect(AppLanguageCode.parse('id'), AppLanguage.id);
       expect(AppLanguageCode.parse('unknown'), AppLanguage.en);
     });
@@ -38,8 +40,8 @@ void main() {
         expect(defaultProfile.effectiveNickname, 'Runner');
         expect(defaultProfile.language, AppLanguage.en);
         expect(defaultProfile.dailyStepGoal, 5000);
-        expect(defaultProfile.analyticsEnabled, isFalse);
-        expect(StradioUserProfile.fromMap(const {}).analyticsEnabled, isFalse);
+        expect(defaultProfile.analyticsEnabled, isTrue);
+        expect(StradioUserProfile.fromMap(const {}).analyticsEnabled, isTrue);
         expect(defaultProfile.developerModeEnabled, isFalse);
         expect(defaultProfile.hasCompletedOnboarding, isFalse);
 

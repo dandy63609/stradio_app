@@ -222,6 +222,7 @@ class _ClassicWaveGlassCard extends StatelessWidget {
                   ),
                 ),
               ),
+              const _StradioBrandWatermark(),
               const _AnchorDot(),
             ],
           ),
@@ -264,44 +265,71 @@ class _OrbitalNexusGlassCard extends StatelessWidget {
             child: Stack(
               alignment: Alignment.center,
               children: [
+                // Waveform positioned in upper radar hemisphere so it frames (not collides with) SPM digits
                 const Positioned.fill(
                   child: Padding(
                     padding: EdgeInsets.symmetric(horizontal: 10),
                     child: CustomPaint(
                       painter: SonicRibbonPainter(
                         phase: 0.85,
-                        amplitude: 0.66,
-                        strokeWidth: 2.2,
+                        amplitude: 0.44,
+                        strokeWidth: 2.0,
+                        verticalCenterFactor: 0.30,
                       ),
                     ),
                   ),
                 ),
-                Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      ShareMetricFormat.avgSpm(metrics),
-                      style: StradioTypography.metricHero(fontSize: 40),
+                // Radial Frosted Halo Pillow behind SPM text for 100% contrast separation
+                Container(
+                  width: 136,
+                  height: 112,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    gradient: RadialGradient(
+                      colors: [
+                        StradioColors.surfaceCard.withValues(alpha: 0.94),
+                        StradioColors.surfaceCard.withValues(alpha: 0.72),
+                        StradioColors.surfaceCard.withValues(alpha: 0.0),
+                      ],
                     ),
-                    Text('spm', style: StradioTypography.metricLabel()),
-                    const SizedBox(height: 6),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 3,
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.only(top: 14),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        ShareMetricFormat.avgSpm(metrics),
+                        style: StradioTypography.metricHero(fontSize: 40),
                       ),
-                      decoration: BoxDecoration(
-                        color: StradioColors.midnight.withValues(alpha: 0.08),
-                        borderRadius: BorderRadius.circular(StradioRadii.full),
-                      ),
-                      child: Text(
-                        ShareMetricFormat.resonanceLabel(metrics),
-                        style: StradioTypography.microCap(
-                          color: StradioColors.textPrimary,
+                      Text('spm', style: StradioTypography.metricLabel()),
+                      const SizedBox(height: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 3,
+                        ),
+                        decoration: BoxDecoration(
+                          color: StradioColors.surfaceCard.withValues(
+                            alpha: 0.88,
+                          ),
+                          borderRadius: BorderRadius.circular(
+                            StradioRadii.full,
+                          ),
+                          border: Border.all(
+                            color: StradioColors.borderSubtle,
+                          ),
+                        ),
+                        child: Text(
+                          ShareMetricFormat.resonanceLabel(metrics),
+                          style: StradioTypography.microCap(
+                            color: StradioColors.textPrimary,
+                          ),
                         ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ],
             ),
@@ -345,24 +373,33 @@ class _OrbitalNexusGlassCard extends StatelessWidget {
                 ),
                 const SizedBox(height: 8),
                 Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    const Icon(
-                      Icons.headphones_rounded,
-                      size: 13,
-                      color: StradioColors.twilightPlum,
-                    ),
-                    const SizedBox(width: 5),
                     Flexible(
-                      child: Text(
-                        soundPack.title,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: StradioTypography.metricLabel(
-                          color: StradioColors.textPrimary,
-                        ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(
+                            Icons.headphones_rounded,
+                            size: 13,
+                            color: StradioColors.twilightPlum,
+                          ),
+                          const SizedBox(width: 5),
+                          Flexible(
+                            child: Text(
+                              soundPack.title,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: StradioTypography.metricLabel(
+                                color: StradioColors.textPrimary,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
+                    const SizedBox(width: 6),
+                    const _StradioBrandWatermark(),
                   ],
                 ),
               ],
@@ -473,6 +510,8 @@ class _TopoShardGlassCard extends StatelessWidget {
                   ),
                 ),
               ),
+              const SizedBox(width: 6),
+              const _StradioBrandWatermark(),
             ],
           ),
         ],
@@ -582,6 +621,50 @@ class _AnchorDot extends StatelessWidget {
       decoration: const BoxDecoration(
         shape: BoxShape.circle,
         color: StradioColors.midnight,
+      ),
+    );
+  }
+}
+
+/// Promotional STRADIO logo & wordmark stamp embedded on exported Photo Glass cards.
+class _StradioBrandWatermark extends StatelessWidget {
+  const _StradioBrandWatermark();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+      decoration: BoxDecoration(
+        color: StradioColors.surfaceCard.withValues(alpha: 0.78),
+        borderRadius: BorderRadius.circular(StradioRadii.full),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.85),
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Image.asset(
+            'assets/images/stradio-logo.png',
+            height: 11,
+            fit: BoxFit.contain,
+            errorBuilder: (_, _, _) => Container(
+              width: 5,
+              height: 5,
+              decoration: const BoxDecoration(
+                shape: BoxShape.circle,
+                color: StradioColors.sonicCoral,
+              ),
+            ),
+          ),
+          const SizedBox(width: 4),
+          Text(
+            'STRADIO',
+            style: StradioTypography.microCap(
+              color: StradioColors.textPrimary,
+            ),
+          ),
+        ],
       ),
     );
   }
