@@ -77,9 +77,9 @@ Dokumen ini merangkum rencana tindak lanjut (**follow-up refactor**) setelah mig
 | **P0 (Core)** | [x] | **Active Run Instrument** | **Surface 2:** Dual-tone header (`Stride / Rhythm`), Circular Acoustic Dial + `LiquidGlassLens` yang bereaksi <30 ms per langkah, 2 borderless metrics (`Steps`, `Cadence`), bottom dock `LiquidGlassLens` + `Hold 1.5s to end`. |
 | **P0 (Core)** | [x] | **Cadence Summary** | **Surface 3:** Hero Glass Circle (SPM ring), 3 frosted metric pills (Distance, Duration, Pace), 3.5px cadence stems + filter Active/Walking, audio footer pill, `Export IG Story` & `Start new run`. |
 | **P1 (Support)** | [x] | **Sensor Calibration** | Sheet kalibrasi & fallback jujur jika izin/stream akselerometer belum tersedia (`SensorCalibrationSheet`). |
-| **P1 (Share)** | [x] | **Share Rhythm Modal** | Bottom sheet preview & export **Transparent Sticker PNG** (`RepaintBoundary` 3x DPR → `share_plus`). |
-| **P2 (Phase 3B)** | [ ] | **Photo Glass (3x):** *Classic Wave*, *Orbital Nexus*, *Topo Shard* | Template overlay foto (`image_picker`) + dynamic tint frosted glass metrics. |
-| **P2 (Phase 3B)** | [ ] | **9:16 Story (3x):** *Aura Wave*, *Sonic Dial*, *Minimal Stride* | Template kartu story 9:16 siap export tanpa foto latar. |
+| **P1 (Share)** | [x] | **Share Rhythm Modal / Studio** | Halaman penuh `ShareStudioScreen` dengan 2 mode (*Transparent Sticker* & *Photo Glass*), 1-tap `Save to Gallery` (`gal`), & `Share` (`share_plus`). |
+| **P2 (Phase 3B)** | [x] | **Photo Glass (3x):** *Classic Wave*, *Orbital Nexus*, *Topo Shard* | Template overlay foto 9:16 (`image_picker` Galeri + Kamera + 3 preset ambient) + auto-tint RGB dinamis + *drag-to-reposition*. |
+| **P2 (Phase 3B)** | [x] | **9:16 Story (3x):** *Aura Wave*, *Sonic Dial*, *Minimal Stride* | Template stiker transparan siap export PNG resolusi tinggi tanpa foto latar. |
 
 ---
 
@@ -88,5 +88,14 @@ Dokumen ini merangkum rencana tindak lanjut (**follow-up refactor**) setelah mig
 **Target Branch:** `chore/release-readiness`
 
 - [ ] Uji di HP Android fisik (tangan & saku celana, layar mati, TWS Bluetooth) untuk memverifikasi latensi deteksi <30 ms, latensi audio <50 ms, dan 0 *false steps* saat diam.
+- [ ] Verifikasi *gapless loop* `.mp3` `LARI_NGACIR` di HP Android fisik (jika ada klik/padding, convert master `.wav` di `assets/audio/_raw_sources/` ke `.ogg`, lalu pindahkan `_raw_sources/` ke cloud storage tim).
+- [ ] Uji rendering shader GPU `shaders/liquid_glass.frag`, `image_picker` (Galeri/Kamera), dan `gal` (`Save to Gallery`) di HP Android fisik.
 - [ ] Uji alur CI/CD rilis otomatis dengan tag `v*` di `.github/workflows/auto-release.yml` dan verifikasi ukuran APK split-ABI (`stradio-v*-arm64-v8a.apk` & `armeabi-v7a.apk`).
 - [ ] Siapkan dokumen **Privacy Policy** dan pengisian **Google Play Data Safety** (jika dipublikasikan ke Play Store).
+
+---
+
+## Post-MVP / Polish Backlog
+
+- [ ] **Direct Share Intent ke Instagram Stories** (`com.instagram.share.ADD_TO_STORY` via native Kotlin `MethodChannel` + `FileProvider` + **Meta App ID**): mendukung 1-tap tempel *Transparent Sticker* (`interactive_asset_uri`) & *Photo Glass* 9:16 langsung ke editor IG Story, dengan fallback ke `share_plus` jika Instagram tidak terpasang. *(Opsional: Facebook Stories memakai Meta App ID yang sama; WhatsApp/TikTok/lainnya cukup lewat Android Share Sheet `share_plus`.)*
+- [ ] **Cleanup & Wiring `lib/l10n/` (EN / ID):** Pangkas string lama `v0.2.0` yang sudah tidak terpakai di `stradio_strings*.dart` dan hubungkan seluruh copy UI Daylight 3-Surface + `ShareStudioScreen` ke `StradioStrings` agar toggle bahasa EN/ID di Settings menerjemahkan seluruh aplikasi secara konsisten.

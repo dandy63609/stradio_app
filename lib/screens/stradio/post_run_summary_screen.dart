@@ -10,8 +10,8 @@ import '../../services/posthog_service.dart';
 import '../../services/recording_repository.dart';
 import '../../theme/stradio_theme.dart';
 import '../../widgets/liquid_glass_lens.dart';
-import '../../widgets/share_rhythm_modal.dart';
 import '../../widgets/sonic_ribbon_painter.dart';
+import 'share_studio_screen.dart';
 
 enum _StemFilter { all, active, walking }
 
@@ -389,10 +389,13 @@ class _PostRunSummaryScreenState extends State<PostRunSummaryScreen> {
                         child: OutlinedButton.icon(
                           key: const Key('export_ig_story_button'),
                           onPressed: () {
-                            ShareRhythmModal.show(
-                              context,
-                              metrics: m,
-                              soundPack: pack,
+                            Navigator.of(context).push<void>(
+                              MaterialPageRoute<void>(
+                                builder: (_) => ShareStudioScreen(
+                                  metrics: m,
+                                  soundPack: pack,
+                                ),
+                              ),
                             );
                           },
                           icon: const Icon(Icons.ios_share_rounded, size: 18),
