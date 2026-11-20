@@ -19,7 +19,6 @@ import '../../services/recording_service.dart';
 import '../../theme/stradio_theme.dart';
 import 'post_run_summary_screen.dart';
 import 'root_navigation_shell.dart';
-import 'sensor_labs_sheet.dart';
 
 enum _RunStreamState { connecting, running, paused, sensorError }
 enum _RecoveryAction { reviewAndSave, discard }
@@ -72,7 +71,6 @@ class _ActiveRunScreenState extends State<ActiveRunScreen>
     with SingleTickerProviderStateMixin {
   late final RecordingStore _store;
   late final RecordingService _recordingService;
-  late final ExportService _exportService;
   late final PostHogTelemetryService _postHogService;
   late final ForegroundNotificationService _foregroundService;
   late StradioLabSettings _labSettings;
@@ -117,7 +115,6 @@ class _ActiveRunScreenState extends State<ActiveRunScreen>
     super.initState();
     _store = widget.store ?? FileRecordingStore();
     _recordingService = widget.recordingService ?? RecordingService();
-    _exportService = widget.exportService ?? ExportService();
     _postHogService = widget.postHogService ?? PostHogTelemetryService();
     _foregroundService =
         widget.foregroundService ?? FlutterForegroundNotificationService();
@@ -850,65 +847,6 @@ class _ActiveRunScreenState extends State<ActiveRunScreen>
     }
   }
 
-  Future<void> _openSensorLabsDrawer() async {
-    final health = RunMetricsCalculator.analyzeSensorHealth(
-      samples: _activeSamples,
-      requestedRateHz: 100.0,
-    );
-    _sensorHealthNotifier.value = health;
-
-    await showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (_) => SensorLabsSheet(
-        initialSettings: _labSettings,
-        sensorHealth: health,
-        sensorHealthListenable: _sensorHealthNotifier,
-        sensorStreamActive: _streamState == _RunStreamState.running,
-        store: _store,
-        recordingService: _recordingService,
-        exportService: _exportService,
-        postHogService: _postHogService,
-        onBeforeOpenLegacyExperiment: () {
-          if (!mounted) return;
-          if (_streamState == _RunStreamState.running ||
-              _recordingService.isRecording) {
-            unawaited(_recordingService.stop());
-            setState(() {
-              _streamState = _RunStreamState.paused;
-            });
-          }
-        },
-        onSettingsChanged: (updated) {
-          if (!mounted) return;
-          setState(() {
-            _labSettings = updated;
-          });
-          unawaited(StradioPreferencesService.saveLabSettings(updated));
-          if (_foregroundService.isServiceActive) {
-            unawaited(
-              _foregroundService.updateWorkoutService(
-                steps: _primaryDetections.length,
-                targetSteps: _labSettings.targetSteps,
-                activeDurationSeconds: _activeDurationSeconds,
-                targetBpm: _labSettings.targetBpm,
-                algorithmName: _labSettings.primaryAlgorithm.displayName,
-                isRunning: _streamState == _RunStreamState.running,
-              ),
-            );
-          }
-        },
-      ),
-    );
-
-    if (!mounted) return;
-    if (!_recordingService.isRecording &&
-        _streamState != _RunStreamState.sensorError) {
-      await _startSensorStream();
-    }
-  }
-
   void _updateTargetBpm(int bpm) {
     setState(() {
       _labSettings = _labSettings.copyWith(targetBpm: bpm);
@@ -1294,11 +1232,7 @@ class _ActiveRunScreenState extends State<ActiveRunScreen>
                         showBackButton:
                             widget.isConsumerMode &&
                             Navigator.of(context).canPop(),
-                        showLabsButton:
-                            !widget.isConsumerMode ||
-                            widget.developerModeEnabled,
                         onToggleTheme: widget.onToggleThemeMode,
-                        onOpenLabs: _openSensorLabsDrawer,
                       ),
                     ),
 
@@ -1429,18 +1363,14 @@ class _ActiveRunTopBar extends StatelessWidget {
     required this.participantId,
     required this.isDark,
     this.showBackButton = false,
-    this.showLabsButton = true,
     required this.onToggleTheme,
-    required this.onOpenLabs,
   });
 
   final _RunStreamState streamState;
   final String participantId;
   final bool isDark;
   final bool showBackButton;
-  final bool showLabsButton;
   final VoidCallback? onToggleTheme;
-  final VoidCallback onOpenLabs;
 
   @override
   Widget build(BuildContext context) {
@@ -1525,11 +1455,11 @@ class _ActiveRunTopBar extends StatelessWidget {
           ),
         ),
 
-        // Right: Theme Mode Toggle (Light/Dark) + Sensor Labs Icon (when Developer Mode is enabled)
+        // Right: Theme Mode Toggle (Light/Dark)
         Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            if (onToggleTheme != null) ...[
+            if (onToggleTheme != null)
               IconButton(
                 key: const Key('theme_mode_toggle_button'),
                 onPressed: onToggleTheme,
@@ -1545,28 +1475,6 @@ class _ActiveRunTopBar extends StatelessWidget {
                   isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
                   color: palette.textPrimary,
                   size: 20,
-                ),
-              ),
-              if (showLabsButton) const SizedBox(width: 8),
-            ],
-            if (showLabsButton)
-              Semantics(
-                button: true,
-                label: 'Open Sensor Labs and Diagnostics',
-                child: IconButton(
-                  key: const Key('open_sensor_labs_button'),
-                  onPressed: onOpenLabs,
-                  tooltip: 'Sensor Labs & Diagnostics',
-                  style: IconButton.styleFrom(
-                    backgroundColor: palette.surface,
-                    minimumSize: const Size(48, 48),
-                    shape: const CircleBorder(),
-                  ),
-                  icon: Icon(
-                    Icons.science_outlined,
-                    color: palette.accentViolet,
-                    size: 22,
-                  ),
                 ),
               ),
           ],

@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:smartphone_step_detection_experiment/l10n/stradio_strings.dart';
-import 'package:smartphone_step_detection_experiment/models/experiment_models.dart';
-import 'package:smartphone_step_detection_experiment/screens/stradio/root_navigation_shell.dart';
-import 'package:smartphone_step_detection_experiment/services/posthog_service.dart';
-import 'package:smartphone_step_detection_experiment/services/preferences_service.dart';
-import 'package:smartphone_step_detection_experiment/services/recording_repository.dart';
-import 'package:smartphone_step_detection_experiment/theme/stradio_theme.dart';
+import 'package:stradio_app/l10n/stradio_strings.dart';
+import 'package:stradio_app/models/experiment_models.dart';
+import 'package:stradio_app/screens/stradio/root_navigation_shell.dart';
+import 'package:stradio_app/services/posthog_service.dart';
+import 'package:stradio_app/services/preferences_service.dart';
+import 'package:stradio_app/services/recording_repository.dart';
+import 'package:stradio_app/theme/stradio_theme.dart';
 
 class _TestRecordingStore implements RecordingStore {
   final List<SavedRecording> saved = [];
@@ -410,15 +410,7 @@ void main() {
         findsOneWidget,
       );
       expect(
-        find.byKey(const Key('settings_open_sensor_labs_button')),
-        findsOneWidget,
-      );
-      expect(
         find.byKey(const Key('settings_export_csv_button')),
-        findsOneWidget,
-      );
-      expect(
-        find.byKey(const Key('settings_open_legacy_experiment_button')),
         findsOneWidget,
       );
 

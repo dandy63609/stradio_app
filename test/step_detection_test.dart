@@ -2,11 +2,11 @@ import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:smartphone_step_detection_experiment/algorithms/step_detector.dart';
-import 'package:smartphone_step_detection_experiment/evaluation/step_count_evaluation.dart';
-import 'package:smartphone_step_detection_experiment/models/experiment_models.dart';
-import 'package:smartphone_step_detection_experiment/services/csv_export.dart';
-import 'package:smartphone_step_detection_experiment/services/recording_repository.dart';
+import 'package:stradio_app/algorithms/step_detector.dart';
+import 'package:stradio_app/evaluation/step_count_evaluation.dart';
+import 'package:stradio_app/models/experiment_models.dart';
+import 'package:stradio_app/services/csv_export.dart';
+import 'package:stradio_app/services/recording_repository.dart';
 
 void main() {
   group('Sensor Models & Magnitude', () {

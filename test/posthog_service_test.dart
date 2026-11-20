@@ -1,15 +1,43 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:smartphone_step_detection_experiment/evaluation/run_metrics_calculator.dart';
-import 'package:smartphone_step_detection_experiment/models/experiment_models.dart';
-import 'package:smartphone_step_detection_experiment/services/posthog_service.dart';
+import 'package:stradio_app/evaluation/run_metrics_calculator.dart';
+import 'package:stradio_app/models/experiment_models.dart';
+import 'package:stradio_app/services/posthog_service.dart';
 
 void main() {
   group('PostHogTelemetryService', () {
+    test('defaults to opt-in disabled and omits client IP (\$ip: null) per UU PDP', () async {
+      final sentPayloads = <Map<String, Object?>>[];
+      final service = PostHogTelemetryService(
+        apiKey: 'phc_live_key',
+        transport: (uri, payload) async {
+          sentPayloads.add(payload);
+          return 200;
+        },
+      );
+
+      expect(service.enabled, isFalse);
+      await service.captureAppOpened(
+        distinctId: 'P01',
+        developerOverlayEnabled: false,
+      );
+      expect(sentPayloads, isEmpty);
+      expect(service.deliveredCount, 0);
+
+      service.setEnabled(true);
+      final flushed = await service.flushQueuedEvents();
+      expect(flushed, 1);
+      expect(sentPayloads, hasLength(1));
+      final props = sentPayloads.first['properties'] as Map<String, Object?>;
+      expect(props.containsKey(r'$ip'), isTrue);
+      expect(props[r'$ip'], isNull);
+    });
+
     test('queues events locally when API key is empty and flushes on configure', () async {
       final sentPayloads = <Map<String, Object?>>[];
       final service = PostHogTelemetryService(
         apiKey: '',
         host: 'https://us.i.posthog.com',
+        enabled: true,
         transport: (uri, payload) async {
           expect(uri.toString(), 'https://us.i.posthog.com/capture/');
           sentPayloads.add(payload);
@@ -40,6 +68,7 @@ void main() {
       final sentPayloads = <Map<String, Object?>>[];
       final service = PostHogTelemetryService(
         apiKey: 'phc_live_key',
+        enabled: true,
         transport: (uri, payload) async {
           sentPayloads.add(payload);
           return 200;

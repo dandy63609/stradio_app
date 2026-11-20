@@ -3,12 +3,12 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:smartphone_step_detection_experiment/evaluation/run_metrics_calculator.dart';
-import 'package:smartphone_step_detection_experiment/l10n/stradio_strings.dart';
-import 'package:smartphone_step_detection_experiment/models/experiment_models.dart';
-import 'package:smartphone_step_detection_experiment/services/posthog_service.dart';
-import 'package:smartphone_step_detection_experiment/services/preferences_service.dart';
-import 'package:smartphone_step_detection_experiment/services/recording_repository.dart';
+import 'package:stradio_app/evaluation/run_metrics_calculator.dart';
+import 'package:stradio_app/l10n/stradio_strings.dart';
+import 'package:stradio_app/models/experiment_models.dart';
+import 'package:stradio_app/services/posthog_service.dart';
+import 'package:stradio_app/services/preferences_service.dart';
+import 'package:stradio_app/services/recording_repository.dart';
 
 void main() {
   group('Stage 4A: Localization, Profile, Height Stride & Summary Storage', () {
@@ -36,7 +36,8 @@ void main() {
         expect(defaultProfile.effectiveNickname, 'Runner');
         expect(defaultProfile.language, AppLanguage.en);
         expect(defaultProfile.dailyStepGoal, 5000);
-        expect(defaultProfile.analyticsEnabled, isTrue);
+        expect(defaultProfile.analyticsEnabled, isFalse);
+        expect(StradioUserProfile.fromMap(const {}).analyticsEnabled, isFalse);
         expect(defaultProfile.developerModeEnabled, isFalse);
         expect(defaultProfile.hasCompletedOnboarding, isFalse);
 
@@ -45,7 +46,7 @@ void main() {
           heightCm: 172.0,
           dailyStepGoal: 8000,
           language: AppLanguage.id,
-          analyticsEnabled: false,
+          analyticsEnabled: true,
           developerModeEnabled: true,
           hasCompletedOnboarding: true,
           favoriteSoundscapeIds: {'neon_stride', 'lofi_pace'},
@@ -61,7 +62,7 @@ void main() {
         expect(reloaded.validHeightCm, 172.0);
         expect(reloaded.dailyStepGoal, 8000);
         expect(reloaded.language, AppLanguage.id);
-        expect(reloaded.analyticsEnabled, isFalse);
+        expect(reloaded.analyticsEnabled, isTrue);
         expect(reloaded.developerModeEnabled, isTrue);
         expect(reloaded.hasCompletedOnboarding, isTrue);
         expect(

@@ -3,7 +3,6 @@ import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/experiment_models.dart';
-import '../screens/stradio/sensor_labs_sheet.dart';
 
 /// Centralized local persistence service using [SharedPreferences] for user preferences,
 /// telemetry credentials, target steps, and activity configs.

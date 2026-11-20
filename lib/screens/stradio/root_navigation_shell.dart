@@ -17,7 +17,6 @@ import 'activity_screen.dart';
 import 'home_screen.dart';
 import 'library_screen.dart';
 import 'post_run_summary_screen.dart';
-import 'sensor_labs_sheet.dart';
 import 'settings_screen.dart';
 
 /// Soundscape tempo theme metadata used across Home, Library, and Active Run.
@@ -255,7 +254,7 @@ class _RootNavigationShellState extends State<RootNavigationShell> {
     _profile =
         widget.initialProfile ?? StradioPreferencesService.loadUserProfile();
     _selectedTabIndex = widget.initialTabIndex.clamp(0, 3);
-    _postHogService.enabled = _profile.analyticsEnabled;
+    _postHogService.setEnabled(_profile.analyticsEnabled);
 
     _reloadRecordings();
   }
@@ -273,7 +272,7 @@ class _RootNavigationShellState extends State<RootNavigationShell> {
     setState(() {
       _profile = updated;
     });
-    _postHogService.enabled = updated.analyticsEnabled;
+    _postHogService.setEnabled(updated.analyticsEnabled);
     await StradioPreferencesService.saveUserProfile(updated);
     widget.onProfileChanged?.call(updated);
   }
@@ -1027,48 +1026,8 @@ class _RootNavigationShellState extends State<RootNavigationShell> {
         await _store.clearAll();
         await _reloadRecordings();
       },
-      onOpenSensorLabs: _openSensorLabsFromSettings,
       onExportCsvDataset: _exportCsvFromSettings,
-      onOpenLegacyExperiment: () async {
-        await Navigator.of(context).push<void>(
-          MaterialPageRoute<void>(
-            builder: (_) => LegacyExperimentShell(
-              store: _store,
-              recordingService: _recordingService,
-            ),
-          ),
-        );
-        await _reloadRecordings();
-      },
     );
-  }
-
-  Future<void> _openSensorLabsFromSettings() async {
-    final savedLab = StradioPreferencesService.loadLabSettings();
-    await showModalBottomSheet<void>(
-      context: context,
-      backgroundColor: Colors.transparent,
-      isScrollControlled: true,
-      builder: (_) => SensorLabsSheet(
-        initialSettings: savedLab,
-        sensorHealth: const SensorHealthReport(
-          sampleCount: 0,
-          requestedRateHz: 100.0,
-          effectiveRateHz: 0.0,
-          sampleDrops: 0,
-          latestTimestampNs: 0,
-        ),
-        sensorStreamActive: _recordingService.isRecording,
-        store: _store,
-        recordingService: _recordingService,
-        exportService: _exportService,
-        postHogService: _postHogService,
-        onSettingsChanged: (updated) {
-          StradioPreferencesService.saveLabSettings(updated);
-        },
-      ),
-    );
-    await _reloadRecordings();
   }
 
   Future<String> _exportCsvFromSettings() async {

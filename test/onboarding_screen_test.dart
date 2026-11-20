@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:smartphone_step_detection_experiment/l10n/stradio_strings.dart';
-import 'package:smartphone_step_detection_experiment/models/experiment_models.dart';
-import 'package:smartphone_step_detection_experiment/screens/stradio/onboarding_screen.dart';
-import 'package:smartphone_step_detection_experiment/services/preferences_service.dart';
-import 'package:smartphone_step_detection_experiment/theme/stradio_theme.dart';
+import 'package:stradio_app/l10n/stradio_strings.dart';
+import 'package:stradio_app/models/experiment_models.dart';
+import 'package:stradio_app/screens/stradio/onboarding_screen.dart';
+import 'package:stradio_app/services/preferences_service.dart';
+import 'package:stradio_app/theme/stradio_theme.dart';
 
 void main() {
   setUp(() async {
@@ -129,11 +129,12 @@ void main() {
       expect(customField, findsOneWidget);
       await tester.enterText(customField, '7500');
 
-      // Toggle PostHog telemetry OFF
+      // Toggle PostHog telemetry ON (opt-in default is OFF per UU PDP)
       final telemetrySwitch = find.byKey(
         const Key('onboarding_telemetry_switch'),
       );
       await tester.ensureVisible(telemetrySwitch);
+      expect(tester.widget<Switch>(telemetrySwitch).value, isFalse);
       await tester.tap(telemetrySwitch);
       await tester.pumpAndSettle();
 
@@ -146,7 +147,7 @@ void main() {
       expect(completed!.validHeightCm, 168.0);
       expect(completed!.dailyStepGoal, 7500);
       expect(completed!.isOpenGoal, isFalse);
-      expect(completed!.analyticsEnabled, isFalse);
+      expect(completed!.analyticsEnabled, isTrue);
       expect(completed!.hasCompletedOnboarding, isTrue);
     },
   );

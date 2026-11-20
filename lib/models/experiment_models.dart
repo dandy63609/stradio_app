@@ -10,7 +10,7 @@ class StradioUserProfile {
     this.dailyStepGoal = defaultDailyStepGoal,
     this.isOpenGoal = false,
     this.language = AppLanguage.en,
-    this.analyticsEnabled = true,
+    this.analyticsEnabled = false,
     this.developerModeEnabled = false,
     this.hasCompletedOnboarding = false,
     this.activeSoundscapeId = 'neon_stride',
@@ -100,7 +100,7 @@ class StradioUserProfile {
           (rawGoal != null && rawGoal > 0) ? rawGoal : defaultDailyStepGoal,
       isOpenGoal: map['is_open_goal'] == true,
       language: AppLanguageCode.parse(map['language']?.toString()),
-      analyticsEnabled: map['analytics_enabled'] as bool? ?? true,
+      analyticsEnabled: map['analytics_enabled'] as bool? ?? false,
       developerModeEnabled: map['developer_mode_enabled'] == true,
       hasCompletedOnboarding: map['has_completed_onboarding'] == true,
       activeSoundscapeId:
@@ -559,5 +559,66 @@ class SavedRecording {
       return (samples.last.timestampNs - samples.first.timestampNs) / 1e9;
     }
     return summaryDurationSeconds ?? 0.0;
+  }
+}
+
+/// Configuration state shared across [ActiveRunScreen], [RootNavigationShell],
+/// and [StradioPreferencesService].
+class StradioLabSettings {
+  const StradioLabSettings({
+    this.developerOverlayEnabled = false,
+    this.participantId = 'P01',
+    this.activity = Activity.walking,
+    this.phonePlacement = PhonePlacement.hand,
+    this.placementDetail = 'Right hand',
+    this.primaryAlgorithm = ThresholdAlgorithm.adaptiveMidpoint,
+    this.targetSteps = ExperimentConfig.defaultTargetSteps,
+    this.trialNumber = 1,
+    this.targetBpm = 165,
+  });
+
+  final bool developerOverlayEnabled;
+  final String participantId;
+  final Activity activity;
+  final PhonePlacement phonePlacement;
+  final String placementDetail;
+  final ThresholdAlgorithm primaryAlgorithm;
+  final int targetSteps;
+  final int trialNumber;
+  final int targetBpm;
+
+  ExperimentConfig toExperimentConfig() => ExperimentConfig(
+    participantId: participantId,
+    activity: activity,
+    phonePlacement: phonePlacement,
+    placementDetail: placementDetail,
+    trialNumber: trialNumber,
+    primaryLiveAlgorithm: primaryAlgorithm,
+    targetSteps: targetSteps,
+  );
+
+  StradioLabSettings copyWith({
+    bool? developerOverlayEnabled,
+    String? participantId,
+    Activity? activity,
+    PhonePlacement? phonePlacement,
+    String? placementDetail,
+    ThresholdAlgorithm? primaryAlgorithm,
+    int? targetSteps,
+    int? trialNumber,
+    int? targetBpm,
+  }) {
+    return StradioLabSettings(
+      developerOverlayEnabled:
+          developerOverlayEnabled ?? this.developerOverlayEnabled,
+      participantId: participantId ?? this.participantId,
+      activity: activity ?? this.activity,
+      phonePlacement: phonePlacement ?? this.phonePlacement,
+      placementDetail: placementDetail ?? this.placementDetail,
+      primaryAlgorithm: primaryAlgorithm ?? this.primaryAlgorithm,
+      targetSteps: targetSteps ?? this.targetSteps,
+      trialNumber: trialNumber ?? this.trialNumber,
+      targetBpm: targetBpm ?? this.targetBpm,
+    );
   }
 }
