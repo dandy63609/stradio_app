@@ -1,12 +1,9 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 
 import 'models/experiment_models.dart';
-import 'screens/stradio/active_run_screen.dart';
-import 'screens/stradio/onboarding_screen.dart';
-import 'screens/stradio/root_navigation_shell.dart';
-import 'services/export_service.dart';
+import 'models/sound_pack.dart';
+import 'screens/stradio/pre_run_ignition_screen.dart';
+import 'services/audio_engine_service.dart';
 import 'services/foreground_notification_service.dart';
 import 'services/posthog_service.dart';
 import 'services/preferences_service.dart';
@@ -24,134 +21,60 @@ Future<void> main() async {
     apiKey: cachedApiKey ?? '',
     enabled: initialProfile.analyticsEnabled,
   );
-  final savedLabSettings = StradioPreferencesService.loadLabSettings();
-  final initialDark = StradioPreferencesService.isDarkMode();
+  final initialPackId = StradioPreferencesService.loadActiveSoundPackId();
 
   runApp(
     StradioApp(
       postHogService: postHogService,
-      initialLabSettings: savedLabSettings,
-      initialDarkMode: initialDark,
-      enableConsumerShell: true,
       initialUserProfile: initialProfile,
+      initialSoundPackId: initialPackId,
     ),
   );
 }
 
 /// Primary STRADIO application shell ("Stride + Audio: Movement becomes music").
 ///
-/// In `v0.2.0` consumer mode ([enableConsumerShell] = `true` or when
-/// [initialUserProfile] is provided), launches into [OnboardingScreen] on first
-/// run (`hasCompletedOnboarding == false`) and then into [RootNavigationShell]
-/// with [HomeScreen]. Preserves direct [ActiveRunScreen] launch when
-/// [enableConsumerShell] is `false` for backward-compatible widget test suites.
-class StradioApp extends StatefulWidget {
+/// Launches directly into Surface 1 ([PreRunIgnitionScreen]) with zero onboarding
+/// or login friction (`docs/EXPERIENCE.md` & `docs/PRD-MVP.md` FR-5.1), using the
+/// fixed Daylight Instrument Minimalism theme (`docs/DESIGN.md`).
+class StradioApp extends StatelessWidget {
   const StradioApp({
     super.key,
     this.store,
     this.recordingService,
-    this.exportService,
     this.postHogService,
     this.foregroundNotificationService,
-    this.initialLabSettings = const StradioLabSettings(),
-    this.initialDarkMode = false,
-    this.enableConsumerShell = false,
+    this.audioEngine,
     this.initialUserProfile,
+    this.initialSoundPackId,
+    this.showFirstLaunchModal,
   });
 
   final RecordingStore? store;
   final RecordingService? recordingService;
-  final ExportService? exportService;
   final PostHogTelemetryService? postHogService;
   final ForegroundNotificationService? foregroundNotificationService;
-  final StradioLabSettings initialLabSettings;
-  final bool initialDarkMode;
-  final bool enableConsumerShell;
+  final StradioAudioEngine? audioEngine;
   final StradioUserProfile? initialUserProfile;
-
-  @override
-  State<StradioApp> createState() => _StradioAppState();
-}
-
-class _StradioAppState extends State<StradioApp> {
-  late bool _isDarkMode;
-  late StradioUserProfile _userProfile;
-
-  @override
-  void initState() {
-    super.initState();
-    _isDarkMode = widget.initialDarkMode;
-    _userProfile =
-        widget.initialUserProfile ??
-        StradioPreferencesService.loadUserProfile();
-  }
-
-  void _toggleThemeMode() {
-    setState(() {
-      _isDarkMode = !_isDarkMode;
-    });
-    unawaited(StradioPreferencesService.setDarkMode(_isDarkMode));
-  }
+  final SoundPackId? initialSoundPackId;
+  final bool? showFirstLaunchModal;
 
   @override
   Widget build(BuildContext context) {
-    final useConsumerShell =
-        widget.enableConsumerShell || widget.initialUserProfile != null;
-
-    Widget homeWidget;
-    if (useConsumerShell) {
-      if (!_userProfile.hasCompletedOnboarding) {
-        homeWidget = OnboardingScreen(
-          initialProfile: _userProfile,
-          onLanguageChanged: (lang) {
-            setState(() {
-              _userProfile = _userProfile.copyWith(language: lang);
-            });
-          },
-          onComplete: (completedProfile) {
-            widget.postHogService?.setEnabled(
-              completedProfile.analyticsEnabled,
-            );
-            setState(() {
-              _userProfile = completedProfile;
-            });
-          },
-        );
-      } else {
-        homeWidget = RootNavigationShell(
-          initialProfile: _userProfile,
-          store: widget.store,
-          recordingService: widget.recordingService,
-          exportService: widget.exportService,
-          postHogService: widget.postHogService,
-          foregroundService: widget.foregroundNotificationService,
-          onToggleThemeMode: _toggleThemeMode,
-          onProfileChanged: (updated) {
-            setState(() {
-              _userProfile = updated;
-            });
-          },
-        );
-      }
-    } else {
-      homeWidget = ActiveRunScreen(
-        store: widget.store,
-        recordingService: widget.recordingService,
-        exportService: widget.exportService,
-        postHogService: widget.postHogService,
-        foregroundService: widget.foregroundNotificationService,
-        initialLabSettings: widget.initialLabSettings,
-        onToggleThemeMode: _toggleThemeMode,
-      );
-    }
-
     return MaterialApp(
       title: 'Stradio',
       debugShowCheckedModeBanner: false,
-      theme: StradioTheme.lightTheme,
-      darkTheme: StradioTheme.darkTheme,
-      themeMode: _isDarkMode ? ThemeMode.dark : ThemeMode.light,
-      home: homeWidget,
+      theme: StradioTheme.daylightTheme,
+      home: PreRunIgnitionScreen(
+        store: store,
+        recordingService: recordingService,
+        postHogService: postHogService,
+        foregroundService: foregroundNotificationService,
+        audioEngine: audioEngine,
+        initialProfile: initialUserProfile,
+        initialSoundPackId: initialSoundPackId,
+        showFirstLaunchModal: showFirstLaunchModal,
+      ),
     );
   }
 }

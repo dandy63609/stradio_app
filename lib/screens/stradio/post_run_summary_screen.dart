@@ -1,35 +1,28 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
-import 'package:share_plus/share_plus.dart';
 
 import '../../evaluation/run_metrics_calculator.dart';
-import '../../evaluation/step_count_evaluation.dart';
 import '../../models/experiment_models.dart';
+import '../../models/sound_pack.dart';
 import '../../services/posthog_service.dart';
 import '../../services/recording_repository.dart';
 import '../../theme/stradio_theme.dart';
-import '../../widgets/stradio_logo_widget.dart';
+import '../../widgets/liquid_glass_lens.dart';
+import '../../widgets/share_rhythm_modal.dart';
+import '../../widgets/sonic_ribbon_painter.dart';
 
-/// Formats an integer with standard thousands separators (e.g. `1248` -> `1,248`).
-String formatStepCount(int value) {
-  final raw = value.toString();
-  final buffer = StringBuffer();
-  for (var i = 0; i < raw.length; i++) {
-    final reverseIndex = raw.length - i;
-    buffer.write(raw[i]);
-    if (reverseIndex > 1 && reverseIndex % 3 == 1) {
-      buffer.write(',');
-    }
-  }
-  return buffer.toString();
-}
+enum _StemFilter { all, active, walking }
 
-/// Screen 3: STRADIO Post-Run Summary Screen (100% User-Focused).
+/// Surface 3: Cadence Summary (`docs/DESIGN.md` & `docs/PRD-MVP.md` FR-5.4).
 ///
-/// Highlights real workout achievements, the Stradio Signature Rhythm Score
-/// circular visualizer, a Cadence Consistency graph, and "Save & Finish Workout"
-/// (which persists the immutable recording and sends telemetry to PostHog Cloud).
+/// Renders:
+/// - Dual-tone stacked header (`Cadence` / `Flow`) + interactive `Active` / `Walking` stem filters.
+/// - Hero Glass Circle ([LiquidGlassLens], 1 glass element per `R-10`) showing average SPM & stride ribbons.
+/// - 3 Frosted/Alabaster Metric Pills (Distance, Duration, Pace: honest real-data values only).
+/// - Minimal 3.5px vertical cadence stems (`14px` spacing) with min/max SPM.
+/// - Audio Footer Pill + `Export IG Story` (`ShareRhythmModal`) & solid Midnight `Start new run`.
 class PostRunSummaryScreen extends StatefulWidget {
   const PostRunSummaryScreen({
     super.key,
@@ -38,7 +31,8 @@ class PostRunSummaryScreen extends StatefulWidget {
     required this.sensorHealth,
     required this.store,
     required this.postHogService,
-    this.developerModeEnabled = true,
+    this.soundPackId = SoundPackId.breakbeatFvnky,
+    this.alreadySaved = false,
   });
 
   final SavedRecording recording;
@@ -46,205 +40,191 @@ class PostRunSummaryScreen extends StatefulWidget {
   final SensorHealthReport sensorHealth;
   final RecordingStore store;
   final PostHogTelemetryService postHogService;
-  final bool developerModeEnabled;
+  final SoundPackId soundPackId;
+  final bool alreadySaved;
 
   @override
   State<PostRunSummaryScreen> createState() => _PostRunSummaryScreenState();
 }
 
 class _PostRunSummaryScreenState extends State<PostRunSummaryScreen> {
+  _StemFilter _filter = _StemFilter.all;
   bool _saving = false;
-  bool _saved = false;
-  String? _feedbackMessage;
-  bool _feedbackIsError = false;
+  late bool _saved;
 
-  Future<void> _saveAndFinishWorkout() async {
+  @override
+  void initState() {
+    super.initState();
+    _saved = widget.alreadySaved;
+  }
+
+  String _formatPace(RunSummaryMetrics m) {
+    if (m.distanceKm <= 0.01 || m.activeDurationSeconds <= 0) return '--';
+    final secPerKm = (m.activeDurationSeconds / m.distanceKm).round();
+    final mins = secPerKm ~/ 60;
+    final secs = (secPerKm % 60).toString().padLeft(2, '0');
+    return '$mins:$secs /km';
+  }
+
+  String _formatSteps(int value) {
+    final raw = value.toString();
+    final buf = StringBuffer();
+    for (var i = 0; i < raw.length; i++) {
+      if (i > 0 && (raw.length - i) % 3 == 0) buf.write(',');
+      buf.write(raw[i]);
+    }
+    return buf.toString();
+  }
+
+  Future<void> _saveAndStartNewRun() async {
     if (_saving) return;
-    setState(() {
-      _saving = true;
-      _feedbackMessage = null;
-      _feedbackIsError = false;
-    });
-
+    setState(() => _saving = true);
     try {
       if (!_saved) {
-        try {
-          await widget.store.save(widget.recording);
-        } on StateError {
-          // Already saved with this immutable ID; continue to telemetry.
-        }
-        await widget.postHogService.captureWorkoutAndBenchmarks(
-          recording: widget.recording,
-          metrics: widget.metrics,
-          health: widget.sensorHealth,
+        await widget.store.save(widget.recording.toSummaryOnly());
+        await widget.store.clearActiveSessionCache();
+        unawaited(
+          widget.postHogService.captureWorkoutAndBenchmarks(
+            recording: widget.recording,
+            metrics: widget.metrics,
+            health: widget.sensorHealth,
+          ),
         );
         _saved = true;
       }
-
       if (!mounted) return;
       Navigator.of(context).pop(true);
     } on Object catch (error) {
       if (!mounted) return;
-      setState(() {
-        _saving = false;
-        _feedbackIsError = true;
-        _feedbackMessage = 'Could not save workout: $error';
-      });
-    }
-  }
-
-  Future<void> _shareWorkout() async {
-    final m = widget.metrics;
-    final stepsFormatted = formatStepCount(m.totalSteps);
-    final summaryText =
-        'STRADIO Workout Complete\n'
-        'Steps: $stepsFormatted STEPS\n'
-        'Duration: ${m.formattedDuration}\n'
-        'Avg Cadence: ${m.averageCadenceSpm.round()} SPM\n'
-        'Distance: ${m.distanceKm.toStringAsFixed(2)} KM\n'
-        'Rhythm Score: ${m.rhythmScorePercent.round()}% Match (${m.targetBpm} BPM)';
-
-    setState(() {
-      _feedbackIsError = false;
-      _feedbackMessage = 'Workout summary prepared for sharing.';
-    });
-
-    try {
-      await SharePlus.instance
-          .share(
-            ShareParams(
-              text: summaryText,
-              subject: 'STRADIO Workout Summary',
-            ),
-          )
-          .timeout(const Duration(milliseconds: 50));
-    } on Object {
-      // Native share sheet is optional in desktop/widget test environments.
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not save run locally: $error')),
+      );
+      setState(() => _saving = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final palette = StradioPalette.of(context);
     final m = widget.metrics;
-    final formattedSteps = formatStepCount(m.totalSteps);
-    final rhythmPercent = m.rhythmScorePercent.round();
-    final benchmarkResults = evaluateRecordingAllFour(widget.recording);
-    final errorPercent =
-        (m.totalSteps - widget.recording.config.targetSteps).toDouble();
+    final pack = StradioSoundPack.byId(widget.soundPackId);
+    final hasCadence = m.averageCadenceSpm > 0;
+    final avgSpmText = hasCadence ? '${m.averageCadenceSpm.round()}' : '--';
+    final buckets = m.cadenceBucketsSpm.where((v) => v > 0).toList();
+    final minSpm = buckets.isEmpty ? null : buckets.reduce(math.min).round();
+    final maxSpm = buckets.isEmpty ? null : buckets.reduce(math.max).round();
+    final resonanceLabel = !hasCadence
+        ? 'No steps recorded'
+        : (m.averageCadenceSpm >= 130
+              ? 'Stride Resonance Lock'
+              : 'Steady Walking Flow');
 
     return Scaffold(
-      backgroundColor: palette.canvas,
+      backgroundColor: StradioColors.warmIvory,
       body: SafeArea(
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            final isWide = constraints.maxWidth >= 900;
-            final isTablet = constraints.maxWidth >= 600;
-            final horizontalPad = isWide ? 40.0 : (isTablet ? 28.0 : 20.0);
-
-            return Center(
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 960),
-                child: Column(
-                  children: [
-                    // Minimalist Top Header Bar
-                    Padding(
-                      padding: EdgeInsets.fromLTRB(
-                        horizontalPad,
-                        12,
-                        horizontalPad,
-                        8,
-                      ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Semantics(
-                            button: true,
-                            label: 'Return to Run',
-                            child: IconButton(
-                              key: const Key('summary_back_button'),
-                              onPressed: () => Navigator.of(context).pop(false),
-                              tooltip: 'Discard / Back to Run',
-                              style: IconButton.styleFrom(
-                                backgroundColor: palette.surface,
-                                shape: const CircleBorder(),
-                              ),
-                              icon: Icon(
-                                Icons.arrow_back_rounded,
-                                color: palette.textPrimary,
-                                size: 20,
-                              ),
-                            ),
-                          ),
-                          Text(
-                            'POST-RUN INSIGHTS',
-                            style: StradioTypography.interLabel(
-                              fontSize: 11,
-                              color: palette.textSecondary,
-                              letterSpacing: 1.2,
-                            ),
-                          ),
-                          Semantics(
-                            button: true,
-                            label: 'Share Workout',
-                            child: IconButton(
-                              key: const Key('summary_top_share_button'),
-                              onPressed: _shareWorkout,
-                              tooltip: 'Share Workout',
-                              style: IconButton.styleFrom(
-                                backgroundColor: palette.surface,
-                                shape: const CircleBorder(),
-                              ),
-                              icon: Icon(
-                                Icons.share_outlined,
-                                color: palette.accentCoral,
-                                size: 20,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-
-                    Expanded(
-                      child: SingleChildScrollView(
-                        padding: EdgeInsets.fromLTRB(
-                          horizontalPad,
-                          12,
-                          horizontalPad,
-                          16,
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 480),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.fromLTRB(24, 16, 24, 16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        // Dual-Tone Stacked Header (Cadence / Flow)
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            // Top Area: Celebratory Header + Mini Ribbon Wave Badge
-                            Row(
-                              crossAxisAlignment: CrossAxisAlignment.center,
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Cadence',
+                                    style: StradioTypography.titlePrimary(),
+                                  ),
+                                  Text(
+                                    'Flow',
+                                    style: StradioTypography.titleMuted(),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            Text(
+                              hasCadence
+                                  ? 'Avg. ${m.averageCadenceSpm.round()} spm'
+                                  : 'Avg. -- spm',
+                              style: StradioTypography.pillBadge(
+                                color: StradioColors.textSecondary,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 18),
+
+                        // Hero Glass Circle (sole LiquidGlassLens on Surface 3 per R-10)
+                        Center(
+                          child: SizedBox(
+                            width: 212,
+                            height: 212,
+                            child: Stack(
+                              alignment: Alignment.center,
                               children: [
-                                const StradioMiniWaveBadge(),
-                                const SizedBox(width: 14),
-                                Expanded(
+                                Container(
+                                  width: 212,
+                                  height: 212,
+                                  decoration: const BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    color: StradioColors.surfaceRecessed,
+                                  ),
+                                  clipBehavior: Clip.antiAlias,
+                                  child: const CustomPaint(
+                                    painter: SonicRibbonPainter(
+                                      phase: 1.0,
+                                      amplitude: 0.72,
+                                      strokeWidth: 2.6,
+                                    ),
+                                  ),
+                                ),
+                                LiquidGlassLens(
+                                  key: const Key('summary_hero_glass_circle'),
+                                  shape: LiquidGlassShape.circle,
+                                  width: 176,
+                                  height: 176,
                                   child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
+                                    mainAxisAlignment: MainAxisAlignment.center,
                                     children: [
                                       Text(
-                                        'Run Complete! : You Found Your Rhythm',
-                                        style: StradioTypography.soraHeading(
-                                          fontSize: isTablet ? 22 : 19,
-                                          fontWeight: FontWeight.w800,
-                                          color: palette.textPrimary,
+                                        avgSpmText,
+                                        key: const Key('summary_avg_spm_value'),
+                                        style: StradioTypography.metricHero(
+                                          fontSize: 44,
                                         ),
                                       ),
-                                      const SizedBox(height: 4),
                                       Text(
-                                        widget.developerModeEnabled
-                                            ? 'Session ${widget.recording.recordingId} (${widget.recording.config.activity.value.toUpperCase()} / ${widget.recording.config.phonePlacement.value.toUpperCase()})'
-                                            : '${widget.recording.config.activity.value.toUpperCase()} · ${m.targetBpm} BPM',
-                                        style: StradioTypography.interLabel(
-                                          fontSize: 12,
-                                          color: palette.textSecondary,
-                                          letterSpacing: 0.4,
+                                        'spm',
+                                        style: StradioTypography.metricLabel(),
+                                      ),
+                                      const SizedBox(height: 8),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 10,
+                                          vertical: 4,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: StradioColors.midnight
+                                              .withValues(alpha: 0.08),
+                                          borderRadius: BorderRadius.circular(
+                                            StradioRadii.full,
+                                          ),
+                                        ),
+                                        child: Text(
+                                          resonanceLabel,
+                                          style: StradioTypography.microCap(
+                                            color: StradioColors.textPrimary,
+                                          ),
                                         ),
                                       ),
                                     ],
@@ -252,881 +232,345 @@ class _PostRunSummaryScreenState extends State<PostRunSummaryScreen> {
                                 ),
                               ],
                             ),
-                            const SizedBox(height: 20),
+                          ),
+                        ),
+                        const SizedBox(height: 20),
 
-                            // 1. Main Stat Hero Card
-                            _MainStatHeroCard(
-                              stepsLabel: '$formattedSteps STEPS',
-                              targetSteps: widget.recording.config.targetSteps,
-                              errorPercent: errorPercent,
-                              durationLabel: m.formattedDuration,
-                              spmLabel: '${m.averageCadenceSpm.round()} SPM',
-                              distanceLabel:
-                                  '${m.distanceKm.toStringAsFixed(2)} km',
-                              isTablet: isTablet,
-                              developerModeEnabled: widget.developerModeEnabled,
+                        // 3 Frosted Metric Pills: Distance, Duration, Pace
+                        Row(
+                          children: [
+                            Expanded(
+                              child: _SummaryMetricPill(
+                                label: 'Distance',
+                                value: '${m.distanceKm.toStringAsFixed(2)} km',
+                              ),
                             ),
-                            const SizedBox(height: 16),
-
-                            // 2 & 3. Signature Rhythm Card + Pace/Cadence Consistency Card
-                            if (isTablet)
-                              Row(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Expanded(
-                                    child: _StradioSignatureRhythmCard(
-                                      rhythmPercent: rhythmPercent,
-                                      targetBpm: m.targetBpm,
-                                      actualSpm: m.averageCadenceSpm,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 16),
-                                  Expanded(
-                                    child: _CadenceConsistencyCard(
-                                      bucketsSpm: m.cadenceBucketsSpm,
-                                      targetBpm: m.targetBpm,
-                                    ),
-                                  ),
-                                ],
-                              )
-                            else ...[
-                              _StradioSignatureRhythmCard(
-                                rhythmPercent: rhythmPercent,
-                                targetBpm: m.targetBpm,
-                                actualSpm: m.averageCadenceSpm,
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: _SummaryMetricPill(
+                                label: 'Duration',
+                                value: m.formattedDuration,
                               ),
-                              const SizedBox(height: 16),
-                              _CadenceConsistencyCard(
-                                bucketsSpm: m.cadenceBucketsSpm,
-                                targetBpm: m.targetBpm,
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: _SummaryMetricPill(
+                                label: 'Pace',
+                                value: _formatPace(m),
                               ),
-                            ],
-
-                            // 4. Research Benchmark: 4-Algorithm Replay Scoreboard (Only when Developer Mode is ON)
-                            if (widget.developerModeEnabled) ...[
-                              const SizedBox(height: 16),
-                              _AlgorithmBenchmarkScoreboardCard(
-                                results: benchmarkResults,
-                                targetSteps:
-                                    widget.recording.config.targetSteps,
-                              ),
-                            ],
-
-                            if (_feedbackMessage != null) ...[
-                              const SizedBox(height: 16),
-                              Container(
-                                padding: const EdgeInsets.all(12),
-                                decoration: BoxDecoration(
-                                  color: _feedbackIsError
-                                      ? StradioColors.statusError.withValues(
-                                          alpha: 0.15,
-                                        )
-                                      : palette.surface,
-                                  borderRadius: BorderRadius.circular(
-                                    StradioRadii.squircle,
-                                  ),
-                                  boxShadow: palette.cardShadow,
-                                ),
-                                child: Text(
-                                  _feedbackMessage!,
-                                  style: StradioTypography.interBody(
-                                    fontSize: 13,
-                                    color: palette.textPrimary,
-                                  ),
-                                ),
-                              ),
-                            ],
+                            ),
                           ],
                         ),
-                      ),
-                    ),
+                        const SizedBox(height: 20),
 
-                    // Bottom Action Bar
-                    Container(
-                      padding: EdgeInsets.fromLTRB(
-                        horizontalPad,
-                        12,
-                        horizontalPad,
-                        16,
-                      ),
-                      decoration: BoxDecoration(
-                        color: palette.canvas,
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          // Primary glowing button "Save & Finish Workout" (Stadium Pill per Reference 1)
-                          DecoratedBox(
-                            decoration: BoxDecoration(
-                              gradient: StradioColors.heroGradient,
-                              borderRadius: BorderRadius.circular(
-                                StradioRadii.pill,
+                        // Interactive Active / Walking Stem Filter Legend
+                        Row(
+                          children: [
+                            _LegendChip(
+                              key: const Key('summary_filter_active'),
+                              label: 'Active',
+                              dotColor: StradioColors.sonicCoral,
+                              selected: _filter == _StemFilter.active,
+                              onTap: () => setState(() {
+                                _filter = _filter == _StemFilter.active
+                                    ? _StemFilter.all
+                                    : _StemFilter.active;
+                              }),
+                            ),
+                            const SizedBox(width: 8),
+                            _LegendChip(
+                              key: const Key('summary_filter_walking'),
+                              label: 'Walking',
+                              dotColor: StradioColors.rhythmViolet,
+                              selected: _filter == _StemFilter.walking,
+                              onTap: () => setState(() {
+                                _filter = _filter == _StemFilter.walking
+                                    ? _StemFilter.all
+                                    : _StemFilter.walking;
+                              }),
+                            ),
+                            const Spacer(),
+                            Text(
+                              '${_formatSteps(m.totalSteps)} steps',
+                              style: StradioTypography.pillBadge(
+                                color: StradioColors.textSecondary,
                               ),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: StradioColors.sonicCoral.withValues(
-                                    alpha: 0.28,
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 14),
+
+                        // Minimal 3.5px Vertical Cadence Stems directly on Warm Ivory
+                        SizedBox(
+                          height: 108,
+                          child: buckets.isEmpty
+                              ? Center(
+                                  child: Text(
+                                    'Complete a few steps to chart cadence rhythm.',
+                                    style: StradioTypography.body(fontSize: 13),
                                   ),
-                                  blurRadius: 18,
-                                  offset: const Offset(0, 4),
+                                )
+                              : _CadenceStemChart(
+                                  bucketsSpm: buckets,
+                                  filter: _filter,
                                 ),
-                              ],
+                        ),
+                        const SizedBox(height: 8),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              minSpm != null
+                                  ? 'min. $minSpm spm'
+                                  : 'min. -- spm',
+                              style: StradioTypography.metricLabel(),
                             ),
-                            child: FilledButton(
-                              key: const Key('save_finish_workout_button'),
-                              onPressed: _saving ? null : _saveAndFinishWorkout,
-                              style: FilledButton.styleFrom(
-                                backgroundColor: Colors.transparent,
-                                shadowColor: Colors.transparent,
-                                foregroundColor: Colors.white,
-                                minimumSize: const Size.fromHeight(56),
-                                shape: const StadiumBorder(),
-                              ),
-                              child: _saving
-                                  ? const SizedBox(
-                                      width: 22,
-                                      height: 22,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2.4,
-                                        color: Colors.white,
-                                      ),
-                                    )
-                                  : Text(
-                                      'Save & Finish Workout',
-                                      style: StradioTypography.soraHeading(
-                                        fontSize: 16,
-                                        fontWeight: FontWeight.w800,
-                                        color: Colors.white,
-                                      ),
-                                    ),
+                            Text(
+                              maxSpm != null
+                                  ? 'max. $maxSpm spm'
+                                  : 'max. -- spm',
+                              style: StradioTypography.metricLabel(),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 18),
+
+                        // Audio Footer Pill
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 12,
+                          ),
+                          decoration: BoxDecoration(
+                            color: StradioColors.surfaceCard,
+                            borderRadius: BorderRadius.circular(
+                              StradioRadii.full,
+                            ),
+                            border: Border.all(
+                              color: StradioColors.borderSubtle,
                             ),
                           ),
-                          const SizedBox(height: 10),
-                          OutlinedButton.icon(
-                            key: const Key('share_workout_button'),
-                            onPressed: _shareWorkout,
-                            style: OutlinedButton.styleFrom(
-                              minimumSize: const Size.fromHeight(48),
-                              backgroundColor: palette.surface,
-                              shape: const StadiumBorder(),
-                              side: BorderSide.none,
-                              foregroundColor: palette.textPrimary,
-                            ),
-                            icon: const Icon(Icons.share_outlined, size: 18),
-                            label: Text(
-                              'Share Workout',
-                              style: StradioTypography.interLabel(
-                                fontSize: 14,
-                                color: palette.textPrimary,
+                          child: Row(
+                            children: [
+                              const Icon(
+                                Icons.headphones_rounded,
+                                size: 18,
+                                color: StradioColors.twilightPlum,
                               ),
-                            ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Text(
+                                  pack.title,
+                                  style: StradioTypography.pillBadge(),
+                                ),
+                              ),
+                              Text(
+                                '${m.rhythmScorePercent.round()}% sync',
+                                style: StradioTypography.metricLabel(
+                                  color: StradioColors.textSecondary,
+                                ),
+                              ),
+                            ],
                           ),
-                        ],
-                      ),
+                        ),
+                      ],
                     ),
-                  ],
+                  ),
                 ),
-              ),
-            );
-          },
+
+                // Bottom Thumb Actions: Export IG Story + Start new run
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(24, 8, 24, 20),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      SizedBox(
+                        height: 48,
+                        child: OutlinedButton.icon(
+                          key: const Key('export_ig_story_button'),
+                          onPressed: () {
+                            ShareRhythmModal.show(
+                              context,
+                              metrics: m,
+                              soundPack: pack,
+                            );
+                          },
+                          icon: const Icon(Icons.ios_share_rounded, size: 18),
+                          label: const Text('Export IG Story'),
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      SizedBox(
+                        height: 56,
+                        child: FilledButton(
+                          key: const Key('start_new_run_button'),
+                          onPressed: _saving ? null : _saveAndStartNewRun,
+                          child: Text(
+                            _saving ? 'Saving run...' : 'Start new run',
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );
   }
 }
 
-class _MainStatHeroCard extends StatelessWidget {
-  const _MainStatHeroCard({
-    required this.stepsLabel,
-    required this.targetSteps,
-    required this.errorPercent,
-    required this.durationLabel,
-    required this.spmLabel,
-    required this.distanceLabel,
-    required this.isTablet,
-    this.developerModeEnabled = true,
-  });
+class _SummaryMetricPill extends StatelessWidget {
+  const _SummaryMetricPill({required this.label, required this.value});
 
-  final String stepsLabel;
-  final int targetSteps;
-  final double errorPercent;
-  final String durationLabel;
-  final String spmLabel;
-  final String distanceLabel;
-  final bool isTablet;
-  final bool developerModeEnabled;
-
-  @override
-  Widget build(BuildContext context) {
-    final palette = StradioPalette.of(context);
-    final absError = errorPercent.abs();
-    final signPrefix = errorPercent > 0 ? '+' : (errorPercent < 0 ? '-' : '');
-    final formattedTarget = formatStepCount(targetSteps);
-
-    return Container(
-      padding: EdgeInsets.all(isTablet ? 24 : 20),
-      decoration: BoxDecoration(
-        color: palette.surface,
-        borderRadius: BorderRadius.circular(StradioRadii.hero),
-        boxShadow: palette.cardShadow,
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Expanded(
-                child: Text(
-                  'SESSION HIGHLIGHTS',
-                  overflow: TextOverflow.ellipsis,
-                  style: StradioTypography.interLabel(
-                    fontSize: 11,
-                    color: palette.textSecondary,
-                    letterSpacing: 1.0,
-                  ),
-                ),
-              ),
-              if (developerModeEnabled) ...[
-                const SizedBox(width: 8),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 4,
-                  ),
-                  decoration: BoxDecoration(
-                    color: palette.surfaceSubtle,
-                    borderRadius: BorderRadius.circular(StradioRadii.pill),
-                  ),
-                  child: Text(
-                    '100 Steps Benchmark',
-                    style: StradioTypography.interLabel(
-                      fontSize: 10,
-                      color: palette.accentViolet,
-                    ),
-                  ),
-                ),
-              ],
-            ],
-          ),
-          const SizedBox(height: 12),
-          Wrap(
-            crossAxisAlignment: WrapCrossAlignment.center,
-            spacing: 10,
-            runSpacing: 4,
-            children: [
-              Text(
-                stepsLabel,
-                key: const Key('summary_steps_headline'),
-                style: StradioTypography.soraMetric(
-                  fontSize: isTablet ? 42 : 34,
-                  fontWeight: FontWeight.w800,
-                  color: palette.textPrimary,
-                ),
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                  color: developerModeEnabled
-                      ? (absError <= 2.0
-                            ? StradioColors.statusLive.withValues(alpha: 0.14)
-                            : StradioColors.sonicCoral.withValues(alpha: 0.14))
-                      : palette.accentCoral.withValues(alpha: 0.14),
-                  borderRadius: BorderRadius.circular(StradioRadii.pill),
-                ),
-                child: Text(
-                  developerModeEnabled
-                      ? 'Target: $targetSteps ($signPrefix${absError.toStringAsFixed(1)}% err)'
-                      : 'Target: $formattedTarget steps',
-                  style: StradioTypography.interLabel(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
-                    color: developerModeEnabled
-                        ? (absError <= 2.0
-                              ? StradioColors.statusLive
-                              : StradioColors.sonicCoral)
-                        : palette.accentCoral,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          Divider(color: palette.textSecondary.withValues(alpha: 0.12), height: 1),
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              Expanded(
-                child: _SummaryMetricColumn(
-                  icon: Icons.timer_outlined,
-                  value: durationLabel,
-                  label: 'Duration',
-                ),
-              ),
-              Container(
-                width: 1,
-                height: 36,
-                color: palette.textSecondary.withValues(alpha: 0.12),
-              ),
-              Expanded(
-                child: _SummaryMetricColumn(
-                  icon: Icons.speed_rounded,
-                  value: spmLabel,
-                  label: 'Avg Cadence',
-                ),
-              ),
-              Container(
-                width: 1,
-                height: 36,
-                color: palette.textSecondary.withValues(alpha: 0.12),
-              ),
-              Expanded(
-                child: _SummaryMetricColumn(
-                  icon: Icons.route_outlined,
-                  value: distanceLabel,
-                  label: 'Distance',
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _AlgorithmBenchmarkScoreboardCard extends StatelessWidget {
-  const _AlgorithmBenchmarkScoreboardCard({
-    required this.results,
-    required this.targetSteps,
-  });
-
-  final List<StepCountResult> results;
-  final int targetSteps;
-
-  @override
-  Widget build(BuildContext context) {
-    final palette = StradioPalette.of(context);
-
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: palette.surface,
-        borderRadius: BorderRadius.circular(StradioRadii.squircle),
-        boxShadow: palette.cardShadow,
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Expanded(
-                child: Text(
-                  '4-ALGORITHM EVALUATION BENCHMARK',
-                  style: StradioTypography.interLabel(
-                    fontSize: 11,
-                    color: palette.textSecondary,
-                    letterSpacing: 1.0,
-                  ),
-                ),
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                  color: palette.surfaceSubtle,
-                  borderRadius: BorderRadius.circular(StradioRadii.pill),
-                ),
-                child: Text(
-                  'Target: $targetSteps Steps',
-                  style: StradioTypography.interLabel(
-                    fontSize: 10,
-                    color: palette.accentViolet,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 6),
-          Text(
-            'Compares detected step counts against the physical 100-step ground truth across all 4 algorithmic pipelines.',
-            style: StradioTypography.interBody(
-              fontSize: 12,
-              color: palette.textSecondary,
-            ),
-          ),
-          const SizedBox(height: 14),
-          ...results.map((r) => _AlgorithmResultRow(result: r)),
-        ],
-      ),
-    );
-  }
-}
-
-class _AlgorithmResultRow extends StatelessWidget {
-  const _AlgorithmResultRow({required this.result});
-
-  final StepCountResult result;
-
-  @override
-  Widget build(BuildContext context) {
-    final palette = StradioPalette.of(context);
-    final (badgeColor, badgeTextColor) = switch (result.status) {
-      DetectionStatus.accurate => (
-        StradioColors.statusLive.withValues(alpha: 0.14),
-        StradioColors.statusLive,
-      ),
-      DetectionStatus.overcounting => (
-        StradioColors.sonicCoral.withValues(alpha: 0.14),
-        StradioColors.sonicCoral,
-      ),
-      DetectionStatus.undercounting => (
-        palette.accentViolet.withValues(alpha: 0.14),
-        palette.accentViolet,
-      ),
-    };
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: BoxDecoration(
-        color: palette.surfaceSubtle,
-        borderRadius: BorderRadius.circular(StradioRadii.control),
-      ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(
-              color: palette.surface,
-              borderRadius: BorderRadius.circular(StradioRadii.tag),
-              boxShadow: palette.cardShadow,
-            ),
-            child: Text(
-              result.variantCode,
-              style: StradioTypography.soraHeading(
-                fontSize: 12,
-                fontWeight: FontWeight.w700,
-                color: palette.textPrimary,
-              ),
-            ),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  result.variantDisplayName,
-                  style: StradioTypography.interBody(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: palette.textPrimary,
-                  ),
-                ),
-                Text(
-                  '${result.predictedSteps} steps (${result.marginOfErrorPercent.toStringAsFixed(1)}% error)',
-                  style: StradioTypography.interLabel(
-                    fontSize: 11,
-                    color: palette.textSecondary,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(
-              color: badgeColor,
-              borderRadius: BorderRadius.circular(StradioRadii.tag),
-            ),
-            child: Text(
-              result.status.label,
-              style: StradioTypography.interLabel(
-                fontSize: 11,
-                fontWeight: FontWeight.w700,
-                color: badgeTextColor,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _SummaryMetricColumn extends StatelessWidget {
-  const _SummaryMetricColumn({
-    required this.icon,
-    required this.value,
-    required this.label,
-  });
-
-  final IconData icon;
-  final String value;
   final String label;
+  final String value;
 
   @override
   Widget build(BuildContext context) {
-    final palette = StradioPalette.of(context);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+      decoration: BoxDecoration(
+        color: StradioColors.surfaceCard,
+        borderRadius: BorderRadius.circular(StradioRadii.lg),
+        border: Border.all(color: StradioColors.borderSubtle),
+      ),
+      child: Column(
+        children: [
+          Text(label, style: StradioTypography.metricLabel()),
+          const SizedBox(height: 4),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(value, style: StradioTypography.pillBadge()),
+          ),
+        ],
+      ),
+    );
+  }
+}
 
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.center,
-      children: [
-        Row(
-          mainAxisSize: MainAxisSize.min,
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(icon, size: 14, color: palette.accentCoral),
-            const SizedBox(width: 5),
-            Flexible(
-              child: Text(
-                label,
-                overflow: TextOverflow.ellipsis,
-                style: StradioTypography.interLabel(
-                  fontSize: 11,
-                  color: palette.textSecondary,
-                  letterSpacing: 0.3,
+class _LegendChip extends StatelessWidget {
+  const _LegendChip({
+    super.key,
+    required this.label,
+    required this.dotColor,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final Color dotColor;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: selected
+          ? StradioColors.surfaceCard
+          : StradioColors.surfaceRecessed,
+      borderRadius: BorderRadius.circular(StradioRadii.full),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(StradioRadii.full),
+        onTap: onTap,
+        child: Container(
+          constraints: const BoxConstraints(minHeight: 36),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(StradioRadii.full),
+            border: Border.all(
+              color: selected ? StradioColors.midnight : Colors.transparent,
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(label, style: StradioTypography.metricLabel(
+                color: StradioColors.textPrimary,
+              )),
+              const SizedBox(width: 6),
+              Container(
+                width: 6,
+                height: 6,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: dotColor,
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// 3.5px vertical cadence stems spaced cleanly on Warm Ivory (`docs/DESIGN.md` §5).
+class _CadenceStemChart extends StatelessWidget {
+  const _CadenceStemChart({required this.bucketsSpm, required this.filter});
+
+  final List<double> bucketsSpm;
+  final _StemFilter filter;
+
+  @override
+  Widget build(BuildContext context) {
+    final display = _downsampleToMax(bucketsSpm, 14);
+    final maxVal = math.max(180.0, display.reduce(math.max));
+
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        for (var i = 0; i < display.length; i++)
+          _buildStem(display[i], maxVal, i),
+      ],
+    );
+  }
+
+  List<double> _downsampleToMax(List<double> source, int maxBars) {
+    if (source.length <= maxBars) return source;
+    final step = source.length / maxBars;
+    return [
+      for (var i = 0; i < maxBars; i++) source[(i * step).floor()],
+    ];
+  }
+
+  Widget _buildStem(double spm, double maxVal, int index) {
+    final isJog = spm >= 130.0;
+    final dimmed =
+        (filter == _StemFilter.active && !isJog) ||
+        (filter == _StemFilter.walking && isJog);
+
+    final color = dimmed
+        ? StradioColors.borderSubtle
+        : (isJog
+              ? (index.isEven
+                    ? StradioColors.twilightPlum
+                    : StradioColors.sonicCoral)
+              : StradioColors.rhythmViolet);
+
+    final norm = (spm / maxVal).clamp(0.18, 1.0);
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.end,
+      children: [
+        AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          width: 3.5,
+          height: 86 * norm,
+          decoration: BoxDecoration(
+            color: color,
+            borderRadius: BorderRadius.circular(StradioRadii.full),
+          ),
         ),
         const SizedBox(height: 6),
-        Text(
-          value,
-          textAlign: TextAlign.center,
-          overflow: TextOverflow.ellipsis,
-          style: StradioTypography.soraHeading(
-            fontSize: 15,
-            fontWeight: FontWeight.w700,
-            color: palette.textPrimary,
-          ),
+        Container(
+          width: 3.5,
+          height: 3.5,
+          decoration: BoxDecoration(shape: BoxShape.circle, color: color),
         ),
       ],
     );
   }
 }
-
-class _StradioSignatureRhythmCard extends StatelessWidget {
-  const _StradioSignatureRhythmCard({
-    required this.rhythmPercent,
-    required this.targetBpm,
-    required this.actualSpm,
-  });
-
-  final int rhythmPercent;
-  final int targetBpm;
-  final double actualSpm;
-
-  @override
-  Widget build(BuildContext context) {
-    final palette = StradioPalette.of(context);
-    final hasSteps = actualSpm > 0;
-
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: palette.surface,
-        borderRadius: BorderRadius.circular(StradioRadii.squircle),
-        boxShadow: palette.cardShadow,
-      ),
-      child: Row(
-        children: [
-          Semantics(
-            label: 'Rhythm Score circular match indicator $rhythmPercent percent',
-            child: SizedBox(
-              width: 84,
-              height: 84,
-              child: CustomPaint(
-                painter: _RhythmRingPainter(
-                  progress: (rhythmPercent / 100.0).clamp(0.0, 1.0),
-                ),
-                child: Center(
-                  child: Text(
-                    '$rhythmPercent%',
-                    style: StradioTypography.soraMetric(
-                      fontSize: 20,
-                      fontWeight: FontWeight.w800,
-                      color: palette.textPrimary,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(width: 18),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'STRADIO SIGNATURE',
-                  style: StradioTypography.interLabel(
-                    fontSize: 11,
-                    color: palette.accentViolet,
-                    letterSpacing: 1.0,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'Rhythm Score: $rhythmPercent% Match',
-                  key: const Key('rhythm_score_headline'),
-                  style: StradioTypography.soraHeading(
-                    fontSize: 17,
-                    fontWeight: FontWeight.w700,
-                    color: palette.textPrimary,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  hasSteps
-                      ? 'Your ${actualSpm.round()} SPM stride cadence synced against the $targetBpm BPM Neon Stride tempo.'
-                      : 'No steps recorded in this session. Walk or jog during a run to measure your rhythm sync.',
-                  style: StradioTypography.interBody(
-                    fontSize: 13,
-                    color: palette.textSecondary,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _RhythmRingPainter extends CustomPainter {
-  const _RhythmRingPainter({required this.progress});
-
-  final double progress;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final center = Offset(size.width / 2, size.height / 2);
-    final radius = (math.min(size.width, size.height) / 2) - 6;
-
-    final trackPaint = Paint()
-      ..color = StradioColors.secondaryNeutral.withValues(alpha: 0.15)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 8
-      ..strokeCap = StrokeCap.round;
-
-    canvas.drawCircle(center, radius, trackPaint);
-
-    if (progress <= 0) return;
-
-    final rect = Rect.fromCircle(center: center, radius: radius);
-    final arcPaint = Paint()
-      ..shader = const SweepGradient(
-        startAngle: -math.pi / 2,
-        endAngle: math.pi * 1.5,
-        colors: [
-          StradioColors.sonicCoral,
-          StradioColors.rhythmViolet,
-          StradioColors.sonicCoral,
-        ],
-      ).createShader(rect)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 8
-      ..strokeCap = StrokeCap.round;
-
-    canvas.drawArc(
-      rect,
-      -math.pi / 2,
-      math.pi * 2 * progress,
-      false,
-      arcPaint,
-    );
-  }
-
-  @override
-  bool shouldRepaint(covariant _RhythmRingPainter oldDelegate) =>
-      oldDelegate.progress != progress;
-}
-
-class _CadenceConsistencyCard extends StatelessWidget {
-  const _CadenceConsistencyCard({
-    required this.bucketsSpm,
-    required this.targetBpm,
-  });
-
-  final List<double> bucketsSpm;
-  final int targetBpm;
-
-  @override
-  Widget build(BuildContext context) {
-    final palette = StradioPalette.of(context);
-    final hasChartData = bucketsSpm.any((v) => v > 0);
-
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: palette.surface,
-        borderRadius: BorderRadius.circular(StradioRadii.squircle),
-        boxShadow: palette.cardShadow,
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  'Cadence Consistency Across Run (SPM)',
-                  style: StradioTypography.soraHeading(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w700,
-                    color: palette.textPrimary,
-                  ),
-                ),
-              ),
-              Text(
-                'Target $targetBpm BPM',
-                style: StradioTypography.interLabel(
-                  fontSize: 12,
-                  color: palette.accentViolet,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 6),
-          Text(
-            'Measures how steady your stride cadence remained from start to finish.',
-            style: StradioTypography.interBody(
-              fontSize: 12,
-              color: palette.textSecondary,
-            ),
-          ),
-          const SizedBox(height: 16),
-          if (!hasChartData)
-            Container(
-              height: 110,
-              alignment: Alignment.center,
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: palette.surfaceSubtle,
-                borderRadius: BorderRadius.circular(StradioRadii.control),
-              ),
-              child: Text(
-                'Not enough stride intervals yet to plot cadence segments. Complete a run with active steps to view your consistency curve.',
-                textAlign: TextAlign.center,
-                style: StradioTypography.interBody(
-                  fontSize: 12,
-                  color: palette.textSecondary,
-                ),
-              ),
-            )
-          else
-            Semantics(
-              label: 'Cadence consistency line chart across workout segments',
-              child: SizedBox(
-                height: 120,
-                width: double.infinity,
-                child: CustomPaint(
-                  painter: _CadenceConsistencyChartPainter(
-                    bucketsSpm: bucketsSpm,
-                    targetBpm: targetBpm,
-                  ),
-                ),
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-}
-
-class _CadenceConsistencyChartPainter extends CustomPainter {
-  const _CadenceConsistencyChartPainter({
-    required this.bucketsSpm,
-    required this.targetBpm,
-  });
-
-  final List<double> bucketsSpm;
-  final int targetBpm;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    if (bucketsSpm.isEmpty) return;
-
-    final maxVal = math.max(
-      targetBpm * 1.25,
-      bucketsSpm.reduce(math.max) * 1.1,
-    );
-    const minVal = 0.0;
-    final range = math.max(1.0, maxVal - minVal);
-
-    // Draw target BPM reference line
-    final targetY =
-        size.height - ((targetBpm - minVal) / range) * (size.height - 20) - 10;
-    final guidePaint = Paint()
-      ..color = StradioColors.secondaryNeutral.withValues(alpha: 0.20)
-      ..strokeWidth = 1.2;
-    canvas.drawLine(
-      Offset(0, targetY.clamp(8.0, size.height - 8.0)),
-      Offset(size.width, targetY.clamp(8.0, size.height - 8.0)),
-      guidePaint,
-    );
-
-    final points = <Offset>[];
-    final count = bucketsSpm.length;
-    for (var i = 0; i < count; i++) {
-      final x = count == 1 ? size.width / 2 : (i / (count - 1)) * size.width;
-      final normalized = ((bucketsSpm[i] - minVal) / range).clamp(0.0, 1.0);
-      final y = size.height - (normalized * (size.height - 24)) - 12;
-      points.add(Offset(x, y));
-    }
-
-    final linePath = Path()..moveTo(points.first.dx, points.first.dy);
-    for (var i = 1; i < points.length; i++) {
-      final prev = points[i - 1];
-      final curr = points[i];
-      final midX = (prev.dx + curr.dx) / 2;
-      linePath.cubicTo(midX, prev.dy, midX, curr.dy, curr.dx, curr.dy);
-    }
-
-    final fillPath = Path.from(linePath)
-      ..lineTo(points.last.dx, size.height)
-      ..lineTo(points.first.dx, size.height)
-      ..close();
-
-    final rect = Offset.zero & size;
-    final fillPaint = Paint()
-      ..style = PaintingStyle.fill
-      ..shader = LinearGradient(
-        begin: Alignment.topCenter,
-        end: Alignment.bottomCenter,
-        colors: [
-          StradioColors.sonicCoral.withValues(alpha: 0.30),
-          StradioColors.rhythmViolet.withValues(alpha: 0.04),
-        ],
-      ).createShader(rect);
-
-    canvas.drawPath(fillPath, fillPaint);
-
-    final strokePaint = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 3.0
-      ..strokeCap = StrokeCap.round
-      ..shader = const LinearGradient(
-        colors: [StradioColors.sonicCoral, StradioColors.rhythmViolet],
-      ).createShader(rect);
-
-    canvas.drawPath(linePath, strokePaint);
-
-    final dotPaint = Paint()..color = StradioColors.sonicCoral;
-    for (final pt in points) {
-      canvas.drawCircle(pt, 3.5, dotPaint);
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant _CadenceConsistencyChartPainter oldDelegate) =>
-      oldDelegate.bucketsSpm != bucketsSpm ||
-      oldDelegate.targetBpm != targetBpm;
-}
-

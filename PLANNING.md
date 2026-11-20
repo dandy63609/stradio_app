@@ -60,27 +60,26 @@ Dokumen ini merangkum rencana tindak lanjut (**follow-up refactor**) setelah mig
 
 ## Phase 3 — Frontend Refactor ke Daylight Liquid Glass
 
-**Target Branch:** `feat/ui-daylight-liquid-glass`  
+**Target Branch:** `feat/ui-daylight-liquid-glass` (Phase 3A: Design System + P0 & P1; Phase 3B: 6 Template P2)  
 **Referensi Utama:** [`docs/DESIGN.md`](docs/DESIGN.md), [`docs/EXPERIENCE.md`](docs/EXPERIENCE.md), [`docs/mockups/daylight-minimal-screens.html`](docs/mockups/daylight-minimal-screens.html)
 
 ### 3.1 Design System & Shader Foundation (`lib/theme/` & `lib/widgets/`)
-- Terapkan palet **Daylight Instrument Minimalism**:
-  - Canvas `#F5F0E8` (*Warm Ivory*), Recessed `#EAE4DC`, Card `#FAF7F2`, Glass `rgba(250, 247, 242, 0.72)`, Solid Dock `#191923` (*Midnight*), Aksen `#FF765F` (*Sonic Coral*), `#A995DB` (*Rhythm Violet*), `#46509E` (*Twilight Plum*).
-- Terapkan tipografi `Sora` (500/600) + `Inter` (400/500) dengan *tabular figures* (`tnum`) agar angka cadence tidak bergetar.
-- Bangun widget reusable **`LiquidGlassLens`** menggunakan `FragmentProgram` + `shaders/liquid_glass.frag` (dengan fallback untuk *reduced motion* & *reduced transparency*).
-- Pastikan seluruh *touch target* $\ge 48\ \text{dp}$ ($56\ \text{dp}$ untuk primary dock pill).
+- [x] Terapkan palet tetap **Daylight Instrument Minimalism**: Canvas `#F5F0E8` (*Warm Ivory*), Recessed `#EAE4DC`, Card `#FAF7F2`, Glass `rgba(250, 247, 242, 0.72)`, Solid Dock `#191923` (*Midnight*), Aksen `#FF765F` (*Sonic Coral*), `#B53D28` (*Deep Coral* AA), `#A995DB` (*Rhythm Violet*), `#46509E` (*Twilight Plum*).
+- [x] Bundle 4 font statis resmi `Sora` (500/600) + `Inter` (400/500) di `assets/fonts/` dengan *tabular figures* (`tnum`).
+- [x] Bangun widget reusable **`LiquidGlassLens`** menggunakan `FragmentProgram` + `shaders/liquid_glass.frag` (dengan fallback untuk *high contrast / reduced transparency* & *reduced motion*).
+- [x] Pastikan seluruh *touch target* $\ge 48\ \text{dp}$ ($56\ \text{dp}$ untuk primary dock pill) dan pangkas 6 screen shell 5-tab lama (`onboarding`, `root_navigation_shell`, `home`, `library`, `activity`, `settings`) beserta `stradio-reference-1..3.png`.
 
 ### 3.2 Core MVP Surfaces (Mapping dari 12 Layar Mockup Stitch)
-| Prioritas | Layar Mockup (`daylight-minimal-screens.html`) | Fungsi di Flutter MVP |
-| :--- | :--- | :--- |
-| **P0 (Core)** | **Audio Device Recommendation** | Modal *first-launch* (`340px` Daylight Cream card, persist `has_seen_audio_recommendation` di `SharedPreferences`). |
-| **P0 (Core)** | **Pre-Run Ignition** | **Surface 1:** Zero-friction launch (<3 detik), pemilih 6 Sound Pack, solid Midnight pill `Swipe to start`. |
-| **P0 (Core)** | **Active Run Instrument** | **Surface 2:** Dual-tone header (`Stride / Rhythm`), `280px` Circular Acoustic Dial + `LiquidGlassLens` yang bereaksi <30 ms per langkah, 2 borderless metrics (`Steps`, `Cadence`), recessed bottom dock + `Hold 1.5s to end`. |
-| **P0 (Core)** | **Cadence Summary** | **Surface 3:** Hero Glass Circle (SPM ring), 3 frosted metric pills (Distance, Duration, Pace), 3px cadence stems, audio footer pill, tombol `Export IG Story` & `Start new run`. |
-| **P1 (Support)** | **Sensor Calibration** | Layar/sheet kalibrasi atau fallback jika izin/stream accelerometer belum tersedia. |
-| **P1 (Share)** | **Share Rhythm Modal** | Bottom sheet pemilihan template share & export transparent sticker / image ke Instagram Stories/Reels. |
-| **P2 (Templates)** | **Photo Glass (3x):** *Classic Wave*, *Orbital Nexus*, *Topo Shard* | Template overlay foto + frosted glass metrics untuk dibagikan ke media sosial. |
-| **P2 (Templates)** | **9:16 Story (3x):** *Aura Wave*, *Sonic Dial*, *Minimal Stride* | Template kartu story 9:16 siap export tanpa foto latar. |
+| Prioritas | Status | Layar Mockup (`daylight-minimal-screens.html`) | Fungsi di Flutter MVP |
+| :--- | :---: | :--- | :--- |
+| **P0 (Core)** | [x] | **Audio Device Recommendation** | Modal *first-launch* (`340px` Daylight Cream card + vektor headphone `CustomPainter`, persist `has_seen_audio_recommendation` di `SharedPreferences`). |
+| **P0 (Core)** | [x] | **Pre-Run Ignition** | **Surface 1:** Zero-friction launch (<3 detik), 1 `LiquidGlassLens` tray 6 Sound Pack, solid Midnight pill `Swipe to start`, tombol Settings ringkas (UU PDP opt-in). |
+| **P0 (Core)** | [x] | **Active Run Instrument** | **Surface 2:** Dual-tone header (`Stride / Rhythm`), Circular Acoustic Dial + `LiquidGlassLens` yang bereaksi <30 ms per langkah, 2 borderless metrics (`Steps`, `Cadence`), bottom dock `LiquidGlassLens` + `Hold 1.5s to end`. |
+| **P0 (Core)** | [x] | **Cadence Summary** | **Surface 3:** Hero Glass Circle (SPM ring), 3 frosted metric pills (Distance, Duration, Pace), 3.5px cadence stems + filter Active/Walking, audio footer pill, `Export IG Story` & `Start new run`. |
+| **P1 (Support)** | [x] | **Sensor Calibration** | Sheet kalibrasi & fallback jujur jika izin/stream akselerometer belum tersedia (`SensorCalibrationSheet`). |
+| **P1 (Share)** | [x] | **Share Rhythm Modal** | Bottom sheet preview & export **Transparent Sticker PNG** (`RepaintBoundary` 3x DPR → `share_plus`). |
+| **P2 (Phase 3B)** | [ ] | **Photo Glass (3x):** *Classic Wave*, *Orbital Nexus*, *Topo Shard* | Template overlay foto (`image_picker`) + dynamic tint frosted glass metrics. |
+| **P2 (Phase 3B)** | [ ] | **9:16 Story (3x):** *Aura Wave*, *Sonic Dial*, *Minimal Stride* | Template kartu story 9:16 siap export tanpa foto latar. |
 
 ---
 
