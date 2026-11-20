@@ -1,0 +1,93 @@
+# STRADIO App — Refactor & MVP Implementation Plan
+
+Dokumen ini merangkum rencana tindak lanjut (**follow-up refactor**) setelah migrasi awal Flutter dari repo eksperimen (`chore/migrate-app`), sekaligus peta jalan implementasi frontend sesuai spesifikasi di [`docs/PRD-MVP.md`](docs/PRD-MVP.md), [`docs/EXPERIENCE.md`](docs/EXPERIENCE.md), [`docs/DESIGN.md`](docs/DESIGN.md), dan mockup interaktif di [`docs/mockups/daylight-minimal-screens.html`](docs/mockups/daylight-minimal-screens.html).
+
+> **Prinsip Eksekusi:** Setiap fase dikerjakan pada **PR terpisah** (bukan di PR migrasi awal) agar diff tetap bersih, mudah di-review, dan terverifikasi oleh CI (`flutter analyze` & `flutter test`).
+
+---
+
+## Status Saat Ini (PR #1 — `chore/migrate-app`)
+
+- [x] Migrasi scaffold Flutter (`lib/`, `test/`, `android/`, `.github/`, `assets/images/`, `pubspec.yaml`, `analysis_options.yaml`) tanpa mengubah fitur/logic.
+- [x] Gabung `.gitignore` dan pastikan 0 file sensitif (`.env`, `*.keystore`) ter-commit.
+- [x] Registrasi `shaders/liquid_glass.frag` dan 13 file audio aktif (`.mp3` + `hoenn_island_loop.mp4`, hemat ~45 MB dari `.wav` & `.md`) di `pubspec.yaml`.
+- [x] Update nama aset rilis APK di `.github/workflows/auto-release.yml` menjadi `stradio-*` + setup 5 GitHub Actions Secrets baru.
+- [x] Verifikasi `flutter pub get`, `flutter analyze` (0 issues), dan `flutter test` (53/53 passed).
+
+---
+
+## Phase 1 — Housekeeping, Identitas Package & Privasi (UU PDP)
+
+**Target Branch:** `chore/cleanup-and-privacy`
+
+1. **Identitas Package & Android App ID**
+   - Rename package di `pubspec.yaml` dari `smartphone_step_detection_experiment` menjadi `stradio_app` dan perbarui seluruh `import 'package:...'` di `lib/` dan `test/`.
+   - Ubah `namespace` dan `applicationId` di `android/app/build.gradle.kts` dari `com.example.flutter_application_1` ke ID resmi STRADIO (misal `com.stradio.app`).
+2. **Penyatuan Sumber Algoritma (Single Source of Truth)**
+   - Pastikan `lib/algorithms/step_detector.dart` menjadi satu-satunya *source of truth* untuk algoritma **Adaptive Midpoint + Gravity (A1)**.
+   - Hapus folder duplikat `algorithm_reference/` serta hapus pengecualian `- algorithm_reference/**` di `analysis_options.yaml`.
+3. **Kepatuhan UU PDP (UU No. 27/2022) untuk PostHog Analytics**
+   - Ubah default `analyticsEnabled` dari `true` (opt-out) menjadi **`false` (opt-in)** di `lib/models/experiment_models.dart` dan `lib/services/posthog_service.dart`.
+   - Matikan perekaman IP pada `PostHogEventRecord.toPostHogJson` dengan menambahkan `r'$ip': null` **dan** aktifkan *"Discard client IP data"* di PostHog Project Settings.
+   - Rapikan wiring toggle analytics agar konsisten memanggil `PostHogTelemetryService.setEnabled()` dan tetap dapat diakses user setelah `OnboardingScreen` lama dipangkas.
+4. **Pemangkasan Kode Riset Lama**
+   - Hapus atau arsipkan screen eksperimen lama yang tidak dipakai di MVP (`dashboard_screen.dart`, `setup_screen.dart`, `live_recording_screen.dart`, `results_screen.dart`, `export_screen.dart`, `sensor_labs_sheet.dart`) beserta test terkait yang sudah tidak relevan.
+5. **Kebersihan Aset Repo (Opsional)**
+   - Pertimbangkan memindahkan `assets/audio/_raw_sources/` ke cloud storage tim agar ukuran clone repo tetap ringan *(tidak perlu Git LFS untuk menghindari limit kuota bandwidth & rewrite history)*.
+
+---
+
+## Phase 2 — Core Audio Engine & Background Pocket Mode
+
+**Target Branch:** `feat/audio-engine`
+
+1. **Arsitektur Audio 2 Layer (`docs/PRD-MVP.md` FR-3)**
+   - **Layer 1 (Background Loop):** Implementasi via `audioplayers` dengan *gapless looping*, fade-in/fade-out 800 ms, dan hysteresis lockout (`>= 130 SPM` masuk Jogging Zone, `< 120 SPM` selama 3 detik keluar).
+   - **Layer 2 (Step SFX):** Implementasi via `soundpool` ($\le 15\ \text{ms}$ native latency, $< 50\ \text{ms}$ end-to-end dari footstrike).
+2. **Orkestrasi 6 Sound Pack (`README.md` & `docs/PRD-MVP.md` FR-4)**
+   - `BREAKBEAT_FVNKY`: `Full_Fade_NoKick_BG.mp3` (>= 130 SPM) + `drums_1_step.mp3` per langkah.
+   - `LARI_NGACIR`: Dual-stem sinkron 140 BPM (`lari_ngacir_layer1_walk.mp3` + `lari_ngacir_layer2_jog.mp3` bar-aligned fade-in, Step SFX off).
+   - `GBA_SAND_HOP`: `hoenn_island_loop.mp4` dengan dynamic playback rate (`clamp(SPM / 132.5, 0.90, 1.18)`) + round-robin `gba_sand_01..03.mp3`.
+   - `SQUID` & `SPONGE`: Alternating left/right step SFX (`squid_1/2.MP3`, `sponge_1/2.mp3`).
+   - `RUBBER_BOUNCY`: `rubber_01.mp3` dengan micro-pitch alternation (1.00 / 1.03).
+   - Dukung **zero-interruption switching** (ganti pack saat lari tanpa reset step/timer).
+3. **Verifikasi Seamless Loop `LARI_NGACIR` di Perangkat Android**
+   - Uji apakah versi `.mp3` 320k sudah *gapless* tanpa klik di titik loop 72-bar. Jika ditemukan jeda/padding MP3, convert dari `.wav` master ke `.ogg` (Vorbis/Opus) agar tetap *gapless* tanpa membengkakkan APK.
+4. **Pocket Mode (Foreground Service)**
+   - Hubungkan step detector + audio engine ke `flutter_foreground_task` agar tetap berjalan stabil saat layar dikunci di saku, lengkap dengan notifikasi durasi, jumlah langkah, dan tombol `Stop run`.
+
+---
+
+## Phase 3 — Frontend Refactor ke Daylight Liquid Glass
+
+**Target Branch:** `feat/ui-daylight-liquid-glass`  
+**Referensi Utama:** [`docs/DESIGN.md`](docs/DESIGN.md), [`docs/EXPERIENCE.md`](docs/EXPERIENCE.md), [`docs/mockups/daylight-minimal-screens.html`](docs/mockups/daylight-minimal-screens.html)
+
+### 3.1 Design System & Shader Foundation (`lib/theme/` & `lib/widgets/`)
+- Terapkan palet **Daylight Instrument Minimalism**:
+  - Canvas `#F5F0E8` (*Warm Ivory*), Recessed `#EAE4DC`, Card `#FAF7F2`, Glass `rgba(250, 247, 242, 0.72)`, Solid Dock `#191923` (*Midnight*), Aksen `#FF765F` (*Sonic Coral*), `#A995DB` (*Rhythm Violet*), `#46509E` (*Twilight Plum*).
+- Terapkan tipografi `Sora` (500/600) + `Inter` (400/500) dengan *tabular figures* (`tnum`) agar angka cadence tidak bergetar.
+- Bangun widget reusable **`LiquidGlassLens`** menggunakan `FragmentProgram` + `shaders/liquid_glass.frag` (dengan fallback untuk *reduced motion* & *reduced transparency*).
+- Pastikan seluruh *touch target* $\ge 48\ \text{dp}$ ($56\ \text{dp}$ untuk primary dock pill).
+
+### 3.2 Core MVP Surfaces (Mapping dari 12 Layar Mockup Stitch)
+| Prioritas | Layar Mockup (`daylight-minimal-screens.html`) | Fungsi di Flutter MVP |
+| :--- | :--- | :--- |
+| **P0 (Core)** | **Audio Device Recommendation** | Modal *first-launch* (`340px` Daylight Cream card, persist `has_seen_audio_recommendation` di `SharedPreferences`). |
+| **P0 (Core)** | **Pre-Run Ignition** | **Surface 1:** Zero-friction launch (<3 detik), pemilih 6 Sound Pack, solid Midnight pill `Swipe to start`. |
+| **P0 (Core)** | **Active Run Instrument** | **Surface 2:** Dual-tone header (`Stride / Rhythm`), `280px` Circular Acoustic Dial + `LiquidGlassLens` yang bereaksi <30 ms per langkah, 2 borderless metrics (`Steps`, `Cadence`), recessed bottom dock + `Hold 1.5s to end`. |
+| **P0 (Core)** | **Cadence Summary** | **Surface 3:** Hero Glass Circle (SPM ring), 3 frosted metric pills (Distance, Duration, Pace), 3px cadence stems, audio footer pill, tombol `Export IG Story` & `Start new run`. |
+| **P1 (Support)** | **Sensor Calibration** | Layar/sheet kalibrasi atau fallback jika izin/stream accelerometer belum tersedia. |
+| **P1 (Share)** | **Share Rhythm Modal** | Bottom sheet pemilihan template share & export transparent sticker / image ke Instagram Stories/Reels. |
+| **P2 (Templates)** | **Photo Glass (3x):** *Classic Wave*, *Orbital Nexus*, *Topo Shard* | Template overlay foto + frosted glass metrics untuk dibagikan ke media sosial. |
+| **P2 (Templates)** | **9:16 Story (3x):** *Aura Wave*, *Sonic Dial*, *Minimal Stride* | Template kartu story 9:16 siap export tanpa foto latar. |
+
+---
+
+## Phase 4 — Validasi Perangkat Fisik & Kesiapan Rilis
+
+**Target Branch:** `chore/release-readiness`
+
+- [ ] Uji di HP Android fisik (tangan & saku celana, layar mati, TWS Bluetooth) untuk memverifikasi latensi deteksi <30 ms, latensi audio <50 ms, dan 0 *false steps* saat diam.
+- [ ] Uji alur CI/CD rilis otomatis dengan tag `v*` di `.github/workflows/auto-release.yml` dan verifikasi ukuran APK split-ABI (`stradio-v*-arm64-v8a.apk` & `armeabi-v7a.apk`).
+- [ ] Siapkan dokumen **Privacy Policy** dan pengisian **Google Play Data Safety** (jika dipublikasikan ke Play Store).
