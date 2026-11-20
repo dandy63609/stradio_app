@@ -54,6 +54,7 @@ abstract class ForegroundNotificationService {
     required int targetBpm,
     required String algorithmName,
     required bool isRunning,
+    String? soundPackTitle,
   });
 
   Future<void> updateWorkoutService({
@@ -63,6 +64,7 @@ abstract class ForegroundNotificationService {
     required int targetBpm,
     required String algorithmName,
     required bool isRunning,
+    String? soundPackTitle,
   });
 
   Future<void> stopWorkoutService();
@@ -190,9 +192,17 @@ class FlutterForegroundNotificationService
       ),
       const NotificationButton(
         id: 'finish',
-        text: 'Finish',
+        text: 'Stop run',
       ),
     ];
+  }
+
+  String _formatTitle(bool isRunning, int targetBpm, String? soundPackTitle) {
+    final status = isRunning ? 'Running' : 'Paused';
+    if (soundPackTitle != null && soundPackTitle.isNotEmpty) {
+      return 'Stradio · $status · $soundPackTitle';
+    }
+    return 'Stradio · $status ($targetBpm BPM)';
   }
 
   @override
@@ -203,6 +213,7 @@ class FlutterForegroundNotificationService
     required int targetBpm,
     required String algorithmName,
     required bool isRunning,
+    String? soundPackTitle,
   }) async {
     if (!_isAndroid) {
       _active = true;
@@ -211,7 +222,7 @@ class FlutterForegroundNotificationService
 
     await init();
 
-    final title = 'Stradio · ${isRunning ? "Running" : "Paused"} ($targetBpm BPM)';
+    final title = _formatTitle(isRunning, targetBpm, soundPackTitle);
     final text =
         'Steps: $steps / $targetSteps ($algorithmName) · ${_formatDuration(activeDurationSeconds)}';
 
@@ -248,13 +259,14 @@ class FlutterForegroundNotificationService
     required int targetBpm,
     required String algorithmName,
     required bool isRunning,
+    String? soundPackTitle,
   }) async {
     if (!_active || !_isAndroid) return;
 
     final now = DateTime.now().millisecondsSinceEpoch;
     if (!shouldDispatchUpdate(isRunning, now)) return;
 
-    final title = 'Stradio · ${isRunning ? "Running" : "Paused"} ($targetBpm BPM)';
+    final title = _formatTitle(isRunning, targetBpm, soundPackTitle);
     final text =
         'Steps: $steps / $targetSteps ($algorithmName) · ${_formatDuration(activeDurationSeconds)}';
 
@@ -326,6 +338,7 @@ class NoopForegroundNotificationService
     required int targetBpm,
     required String algorithmName,
     required bool isRunning,
+    String? soundPackTitle,
   }) async {
     _active = true;
     lastSteps = steps;
@@ -340,6 +353,7 @@ class NoopForegroundNotificationService
     required int targetBpm,
     required String algorithmName,
     required bool isRunning,
+    String? soundPackTitle,
   }) async {
     lastSteps = steps;
     lastIsRunning = isRunning;

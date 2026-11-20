@@ -5,6 +5,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:sensors_plus/sensors_plus.dart';
 import 'package:stradio_app/main.dart';
 import 'package:stradio_app/models/experiment_models.dart';
+import 'package:stradio_app/models/sound_pack.dart';
+import 'package:stradio_app/screens/stradio/active_run_screen.dart';
+import 'package:stradio_app/services/audio_engine_service.dart';
 import 'package:stradio_app/services/foreground_notification_service.dart';
 import 'package:stradio_app/services/posthog_service.dart';
 import 'package:stradio_app/services/recording_repository.dart';
@@ -689,6 +692,60 @@ void main() {
 
       // State transition back to Running within 800ms (t = 1600ms) -> MUST bypass throttle!
       expect(service.shouldDispatchUpdate(true, 1600), isTrue);
+    },
+  );
+
+  testWidgets(
+    'Phase 2: ActiveRunScreen switches Sound Pack mid-run with zero interruption to active steps and running state',
+    (WidgetTester tester) async {
+      final store = InMemoryRecordingStore();
+      final audioEngine = StradioAudioEngine.noop();
+      final foregroundService = NoopForegroundNotificationService();
+      final recordingService = RecordingService(
+        source: (_) => Stream.value(
+          AccelerometerEvent(0.0, 0.0, 9.81, DateTime.now()),
+        ),
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: ActiveRunScreen(
+            store: store,
+            recordingService: recordingService,
+            foregroundService: foregroundService,
+            audioEngine: audioEngine,
+            initialLabSettings: const StradioLabSettings(
+              developerOverlayEnabled: true,
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Start run & simulate 1 stride
+      await tester.tap(find.byKey(const Key('pause_resume_run_button')));
+      await tester.pump();
+      expect(find.text('RUNNING'), findsOneWidget);
+      expect(audioEngine.isSessionActive, isTrue);
+
+      await tester.tap(find.byKey(const Key('overlay_simulate_stride_button')));
+      await tester.pump();
+      expect(find.text('1'), findsWidgets);
+
+      // Switch Sound Pack from BREAKBEAT_FVNKY -> SQUID without interrupting run
+      await tester.tap(find.byKey(const Key('sound_pack_selector_button')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('sound_pack_picker_sheet')), findsOneWidget);
+
+      final squidOption = find.byKey(const Key('sound_pack_option_SQUID'));
+      await tester.ensureVisible(squidOption);
+      await tester.tap(squidOption);
+      await tester.pumpAndSettle();
+
+      expect(audioEngine.activePackId, SoundPackId.squid);
+      expect(audioEngine.isSessionActive, isTrue);
+      expect(find.text('RUNNING'), findsOneWidget);
+      expect(find.text('Squid Stride'), findsOneWidget);
     },
   );
 }

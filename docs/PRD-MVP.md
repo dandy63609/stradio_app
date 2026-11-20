@@ -194,3 +194,4 @@ By detecting footsteps in real-time ($<30\ \text{ms}$) using raw smartphone acce
 | **OQ-1** | **Silly SFX Sourcing** | Curated acoustic cartoon samples bundled directly in repo (`SQUID`, `SPONGE`, `RUBBER_BOUNCY`, and `GBA_SAND_HOP`). | Resolved |
 | **OQ-2** | **Aggressive OEM Battery Killers** | Android foreground service with persistent sticky notification and wake-lock to prevent OS sensor thread killing on Xiaomi/Samsung. | Architecture Phase |
 | **OQ-3** | **Audio Fadeout on Transitions & Pause** | Decided: 800 ms smooth crossfade curve for pace-triggered background entry/exit and session pause/stop. | Resolved |
+| **OQ-4** | **Layer 2 Low-Latency SFX Package (`soundpool` discontinued)** | Decided: Use `audioplayers` with `PlayerMode.lowLatency` (wraps native Android `SoundPool` under the hood) instead of the discontinued `soundpool` pub.dev package to avoid AGP 8+ build breakage with no audio quality loss. | Resolved |
