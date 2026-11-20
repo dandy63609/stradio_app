@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 
 import '../../algorithms/step_detector.dart';
 import '../../evaluation/run_metrics_calculator.dart';
+import '../../l10n/stradio_strings.dart';
 import '../../models/experiment_models.dart';
 import '../../models/sound_pack.dart';
 import '../../services/audio_engine_service.dart';
@@ -45,6 +46,7 @@ class ActiveRunScreen extends StatefulWidget {
     this.initialSoundPackId = SoundPackId.breakbeatFvnky,
     this.initialLabSettings = const StradioLabSettings(),
     this.userHeightCm,
+    this.language = AppLanguage.en,
     this.autoStart = false,
   });
 
@@ -56,6 +58,7 @@ class ActiveRunScreen extends StatefulWidget {
   final SoundPackId initialSoundPackId;
   final StradioLabSettings initialLabSettings;
   final double? userHeightCm;
+  final AppLanguage language;
   final bool autoStart;
 
   @override
@@ -184,6 +187,7 @@ class _ActiveRunScreenState extends State<ActiveRunScreen>
   Future<_RecoveryAction?> _showCrashRecoveryDialog(
     ActiveSessionSnapshot snapshot,
   ) {
+    final s = StradioStrings.of(widget.language);
     final samplesCount = snapshot.samples.length;
     return showDialog<_RecoveryAction>(
       context: context,
@@ -191,11 +195,11 @@ class _ActiveRunScreenState extends State<ActiveRunScreen>
       builder: (dialogContext) => AlertDialog(
         backgroundColor: StradioColors.surfaceCard,
         title: Text(
-          'Recover unfinished run?',
+          s.recoverRunTitle,
           style: StradioTypography.headingSmall(),
         ),
         content: Text(
-          'Found an unsaved session with $samplesCount sensor samples (${snapshot.activeDurationSeconds.round()}s).',
+          s.recoverRunBody(samplesCount, snapshot.activeDurationSeconds.round()),
           style: StradioTypography.body(),
         ),
         actions: [
@@ -203,13 +207,13 @@ class _ActiveRunScreenState extends State<ActiveRunScreen>
             key: const Key('recovery_discard_button'),
             onPressed: () =>
                 Navigator.of(dialogContext).pop(_RecoveryAction.discard),
-            child: const Text('Discard'),
+            child: Text(s.discardAction),
           ),
           FilledButton(
             key: const Key('recovery_review_button'),
             onPressed: () =>
                 Navigator.of(dialogContext).pop(_RecoveryAction.reviewAndSave),
-            child: const Text('Review & Save'),
+            child: Text(s.reviewAndSaveAction),
           ),
         ],
       ),
@@ -260,6 +264,7 @@ class _ActiveRunScreenState extends State<ActiveRunScreen>
           store: _store,
           postHogService: _postHogService,
           soundPackId: _audioEngine.activePackId,
+          language: widget.language,
         ),
       ),
     );
@@ -589,7 +594,8 @@ class _ActiveRunScreenState extends State<ActiveRunScreen>
     final wasShort = _holdController.value < 0.95;
     _holdController.reverse();
     if (wasShort) {
-      setState(() => _holdHintText = 'Hold 1.5s to end');
+      final s = StradioStrings.of(widget.language);
+      setState(() => _holdHintText = s.holdToEndHint);
       _holdHintTimer?.cancel();
       _holdHintTimer = Timer(const Duration(seconds: 2), () {
         if (mounted) setState(() => _holdHintText = null);
@@ -650,6 +656,7 @@ class _ActiveRunScreenState extends State<ActiveRunScreen>
           store: _store,
           postHogService: _postHogService,
           soundPackId: _audioEngine.activePackId,
+          language: widget.language,
         ),
       ),
     );
@@ -667,6 +674,7 @@ class _ActiveRunScreenState extends State<ActiveRunScreen>
   }
 
   Future<void> _showSoundPackPickerSheet() async {
+    final s = StradioStrings.of(widget.language);
     await showModalBottomSheet<void>(
       context: context,
       backgroundColor: Colors.transparent,
@@ -700,12 +708,12 @@ class _ActiveRunScreenState extends State<ActiveRunScreen>
                     ),
                     const SizedBox(height: 14),
                     Text(
-                      'Sound Pack',
+                      s.soundPackSheetTitle,
                       style: StradioTypography.headingSmall(fontSize: 18),
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      'Switch live without interrupting your run',
+                      s.soundPackSheetSubtitle,
                       style: StradioTypography.body(fontSize: 13),
                     ),
                     const SizedBox(height: 12),
@@ -815,6 +823,7 @@ class _ActiveRunScreenState extends State<ActiveRunScreen>
       state: pipelineState,
       healthReport: health,
       errorMessage: _sensorErrorText,
+      language: widget.language,
       onRetrySensor: _startSensorStream,
       onSimulateStride: _simulateSingleStride,
     );
@@ -857,6 +866,7 @@ class _ActiveRunScreenState extends State<ActiveRunScreen>
 
   @override
   Widget build(BuildContext context) {
+    final s = StradioStrings.of(widget.language);
     final steps = _primaryDetections.length;
     final liveSpm = _currentLiveCadenceSpm();
     final hasCadence = liveSpm > 0;
@@ -866,12 +876,18 @@ class _ActiveRunScreenState extends State<ActiveRunScreen>
 
     final (pillLabel, dotColor) = switch (_streamState) {
       _RunStreamState.running => (
-        isJogZone ? 'Active Stride' : 'Walking groove',
+        isJogZone ? s.activeStrideLabel : s.walkingGrooveLabel,
         isJogZone ? StradioColors.sonicCoral : StradioColors.rhythmViolet,
       ),
-      _RunStreamState.paused => ('Paused', StradioColors.statusPaused),
-      _RunStreamState.connecting => ('Calibrating', StradioColors.twilightPlum),
-      _RunStreamState.sensorError => ('Standby', StradioColors.textAccentDeep),
+      _RunStreamState.paused => (s.pausedLabel, StradioColors.statusPaused),
+      _RunStreamState.connecting => (
+        s.calibratingLabel,
+        StradioColors.twilightPlum,
+      ),
+      _RunStreamState.sensorError => (
+        s.standbyLabel,
+        StradioColors.textAccentDeep,
+      ),
     };
 
     return Scaffold(
@@ -894,11 +910,11 @@ class _ActiveRunScreenState extends State<ActiveRunScreen>
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              'Stride',
+                              s.strideTitle,
                               style: StradioTypography.titlePrimary(),
                             ),
                             Text(
-                              'Rhythm',
+                              s.rhythmTitle,
                               style: StradioTypography.titleMuted(),
                             ),
                           ],
@@ -936,15 +952,14 @@ class _ActiveRunScreenState extends State<ActiveRunScreen>
                     const SizedBox(height: 10),
                     _InlineStatusStrip(
                       dotColor: StradioColors.twilightPlum,
-                      message: 'Calibrating motion sensor...',
+                      message: s.calibratingSensorMessage,
                     ),
                   ] else if (_streamState == _RunStreamState.sensorError) ...[
                     const SizedBox(height: 10),
                     _InlineStatusStrip(
                       dotColor: StradioColors.textAccentDeep,
-                      message:
-                          _sensorErrorText ?? 'Motion sensor unavailable.',
-                      actionLabel: 'Simulate stride (+1)',
+                      message: _sensorErrorText ?? s.sensorUnavailableShort,
+                      actionLabel: s.simulateStrideAction,
                       actionKey: const Key('simulate_stride_banner_button'),
                       onAction: _simulateSingleStride,
                     ),
@@ -1083,7 +1098,7 @@ class _ActiveRunScreenState extends State<ActiveRunScreen>
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'Steps',
+                            s.stepsLabel,
                             style: StradioTypography.metricLabel(),
                           ),
                           const SizedBox(height: 2),
@@ -1098,7 +1113,7 @@ class _ActiveRunScreenState extends State<ActiveRunScreen>
                         crossAxisAlignment: CrossAxisAlignment.end,
                         children: [
                           Text(
-                            'Cadence',
+                            s.cadenceLabel,
                             style: StradioTypography.metricLabel(),
                           ),
                           const SizedBox(height: 2),
@@ -1120,7 +1135,7 @@ class _ActiveRunScreenState extends State<ActiveRunScreen>
                       child: Text(
                         _holdHintText ??
                             (steps == 0
-                                ? 'Take a step to trigger audio'
+                                ? s.takeStepHint
                                 : '${_formatDuration(_activeDurationSeconds)} · ${_audioEngine.activePack.title}'),
                         key: const Key('active_run_helper_text'),
                         maxLines: 1,

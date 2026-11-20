@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../evaluation/run_metrics_calculator.dart';
+import '../l10n/stradio_strings.dart';
 import '../theme/stradio_theme.dart';
 
 /// Honest state of the 100 Hz smartphone accelerometer pipeline.
@@ -18,6 +19,7 @@ class SensorCalibrationSheet extends StatelessWidget {
     this.errorMessage,
     this.onRetrySensor,
     this.onSimulateStride,
+    this.language = AppLanguage.en,
   });
 
   final SensorPipelineState state;
@@ -25,6 +27,7 @@ class SensorCalibrationSheet extends StatelessWidget {
   final String? errorMessage;
   final VoidCallback? onRetrySensor;
   final VoidCallback? onSimulateStride;
+  final AppLanguage language;
 
   static Future<void> show(
     BuildContext context, {
@@ -33,6 +36,7 @@ class SensorCalibrationSheet extends StatelessWidget {
     String? errorMessage,
     VoidCallback? onRetrySensor,
     VoidCallback? onSimulateStride,
+    AppLanguage language = AppLanguage.en,
   }) {
     return showModalBottomSheet<void>(
       context: context,
@@ -44,32 +48,33 @@ class SensorCalibrationSheet extends StatelessWidget {
         errorMessage: errorMessage,
         onRetrySensor: onRetrySensor,
         onSimulateStride: onSimulateStride,
+        language: language,
       ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
+    final s = StradioStrings.of(language);
     final (statusTitle, statusBody, dotColor) = switch (state) {
       SensorPipelineState.active => (
-        'Motion sensor active',
-        'Streaming raw 3-axis acceleration (A1 Adaptive Midpoint + Gravity).',
+        s.sensorActiveTitle,
+        s.sensorActiveBody,
         StradioColors.statusLive,
       ),
       SensorPipelineState.ready => (
-        'Motion sensor ready',
-        '100 Hz accelerometer ready. Stationary noise gate keeps idle steps at zero.',
+        s.sensorReadyTitle,
+        s.sensorReadyBody,
         StradioColors.twilightPlum,
       ),
       SensorPipelineState.calibrating => (
-        'Calibrating motion sensor...',
-        'Waiting for initial accelerometer samples to establish dynamic midpoint.',
+        s.sensorCalibratingTitle,
+        s.sensorCalibratingBody,
         StradioColors.statusPaused,
       ),
       SensorPipelineState.unavailable => (
-        'Motion sensor unavailable',
-        errorMessage ??
-            'Accelerometer stream could not start. Check motion permissions or test with simulated steps.',
+        s.sensorUnavailableTitle,
+        errorMessage ?? s.sensorUnavailableBody,
         StradioColors.textAccentDeep,
       ),
     };
@@ -145,7 +150,7 @@ class SensorCalibrationSheet extends StatelessWidget {
                     children: [
                       Expanded(
                         child: _SensorStat(
-                          label: 'Sampling rate',
+                          label: s.samplingRateLabel,
                           value: hasRealSamples
                               ? '${report.effectiveRateHz.toStringAsFixed(1)} Hz'
                               : '-- Hz',
@@ -153,7 +158,7 @@ class SensorCalibrationSheet extends StatelessWidget {
                       ),
                       Expanded(
                         child: _SensorStat(
-                          label: 'Samples',
+                          label: s.samplesLabel,
                           value: hasRealSamples
                               ? '${report.sampleCount}'
                               : '0',
@@ -161,7 +166,7 @@ class SensorCalibrationSheet extends StatelessWidget {
                       ),
                       Expanded(
                         child: _SensorStat(
-                          label: 'Dropped',
+                          label: s.droppedLabel,
                           value: hasRealSamples
                               ? '${report.sampleDrops}'
                               : '0',
@@ -180,7 +185,7 @@ class SensorCalibrationSheet extends StatelessWidget {
                     borderRadius: BorderRadius.circular(StradioRadii.lg),
                   ),
                   child: Text(
-                    'Pocket mode tip: keep Stradio battery optimization set to Unrestricted in Android settings so step audio continues with the screen locked.',
+                    s.pocketModeTip,
                     style: StradioTypography.body(
                       fontSize: 12,
                       color: StradioColors.textPrimary,
@@ -199,7 +204,7 @@ class SensorCalibrationSheet extends StatelessWidget {
                         onRetrySensor?.call();
                       },
                       icon: const Icon(Icons.refresh_rounded, size: 18),
-                      label: const Text('Reconnect motion sensor'),
+                      label: Text(s.reconnectSensorAction),
                     ),
                   ),
                 if (onSimulateStride != null) ...[
@@ -213,7 +218,7 @@ class SensorCalibrationSheet extends StatelessWidget {
                         Navigator.of(context).pop();
                       },
                       icon: const Icon(Icons.directions_run_rounded, size: 18),
-                      label: const Text('Simulate stride (+1)'),
+                      label: Text(s.simulateStrideAction),
                     ),
                   ),
                 ],

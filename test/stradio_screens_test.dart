@@ -238,6 +238,11 @@ void main() {
         await tester.pumpAndSettle();
         expect(postHog.enabled, isTrue);
 
+        // Toggle language to ID -> live-translates Settings and Earphone modal
+        await tester.tap(find.text('ID'));
+        await tester.pumpAndSettle();
+        expect(find.text('Pengaturan'), findsOneWidget);
+
         // Re-open Earphone Recommendation modal from Settings
         final guideBtn = find.byKey(const Key('settings_earphone_guide_button'));
         await tester.ensureVisible(guideBtn);
@@ -247,6 +252,7 @@ void main() {
           find.byKey(const Key('earphones_recommendation_modal')),
           findsOneWidget,
         );
+        expect(find.text('Disarankan'), findsOneWidget);
       },
     );
 

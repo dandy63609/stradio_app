@@ -2,6 +2,7 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 
+import '../l10n/stradio_strings.dart';
 import '../theme/stradio_theme.dart';
 import 'sonic_ribbon_painter.dart';
 
@@ -13,18 +14,21 @@ class EarphonesRecommendationModal extends StatelessWidget {
   const EarphonesRecommendationModal({
     super.key,
     required this.onDismiss,
+    this.language = AppLanguage.en,
   });
 
   final VoidCallback onDismiss;
+  final AppLanguage language;
 
   static Future<void> show(
     BuildContext context, {
     required VoidCallback onDismissed,
+    AppLanguage language = AppLanguage.en,
   }) async {
     await showGeneralDialog<void>(
       context: context,
       barrierDismissible: true,
-      barrierLabel: 'Close audio recommendation',
+      barrierLabel: StradioStrings.of(language).closeLabel,
       barrierColor: StradioColors.midnight.withValues(alpha: 0.30),
       transitionDuration: const Duration(milliseconds: 180),
       pageBuilder: (dialogContext, _, _) {
@@ -34,6 +38,7 @@ class EarphonesRecommendationModal extends StatelessWidget {
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
               child: EarphonesRecommendationModal(
+                language: language,
                 onDismiss: () => Navigator.of(dialogContext).pop(),
               ),
             ),
@@ -59,6 +64,7 @@ class EarphonesRecommendationModal extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final s = StradioStrings.of(language);
     return Material(
       color: Colors.transparent,
       child: ConstrainedBox(
@@ -148,7 +154,7 @@ class EarphonesRecommendationModal extends StatelessWidget {
                           borderRadius: BorderRadius.circular(StradioRadii.full),
                         ),
                         child: Text(
-                          'Recommended',
+                          s.earphonesBadge,
                           style: StradioTypography.microCap(
                             color: StradioColors.textAccentDeep,
                           ),
@@ -156,12 +162,12 @@ class EarphonesRecommendationModal extends StatelessWidget {
                       ),
                       const SizedBox(height: 10),
                       Text(
-                        'Use Earphones for Full Immersion',
+                        s.earphonesTitle,
                         style: StradioTypography.headingSmall(fontSize: 18),
                       ),
                       const SizedBox(height: 8),
                       Text(
-                        'For a better experience, please use your earphones or headphones so you can clearly hear adaptive tempo soundscapes and stride feedback.',
+                        s.earphonesBody,
                         style: StradioTypography.body(fontSize: 13),
                       ),
                       const SizedBox(height: 20),
@@ -173,7 +179,7 @@ class EarphonesRecommendationModal extends StatelessWidget {
                             child: FilledButton(
                               key: const Key('earphones_modal_primary_button'),
                               onPressed: onDismiss,
-                              child: const Text("I'm Wearing Earphones"),
+                              child: Text(s.earphonesPrimaryAction),
                             ),
                           ),
                           const SizedBox(height: 8),
@@ -188,7 +194,7 @@ class EarphonesRecommendationModal extends StatelessWidget {
                                   color: StradioColors.textSecondary,
                                 ),
                               ),
-                              child: const Text('Maybe later'),
+                              child: Text(s.earphonesLaterAction),
                             ),
                           ),
                         ],

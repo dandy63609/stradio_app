@@ -1,7 +1,7 @@
 import 'stradio_strings_en.dart';
 import 'stradio_strings_id.dart';
 
-/// Supported application languages for Stradio end-user UI (`v0.2.0`).
+/// Supported application languages for STRADIO (`en` default, `id` Bahasa Indonesia).
 enum AppLanguage { en, id }
 
 extension AppLanguageCode on AppLanguage {
@@ -20,136 +20,136 @@ extension AppLanguageCode on AppLanguage {
   };
 }
 
-/// Abstract localization contract providing compile-time completeness across
-/// every supported language file (`stradio_strings_en.dart`, `stradio_strings_id.dart`).
+/// Compile-time complete localization contract for STRADIO's Daylight 3-Surface MVP.
 ///
-/// Adding a getter here forces the Dart analyzer/compiler to verify every
-/// language implementation defines it.
+/// Adding a getter here forces the Dart analyzer to verify both `en` and `id`
+/// implementations define it.
 abstract class StradioStrings {
   const StradioStrings();
 
   static const StradioStrings _en = StradioStringsEn();
   static const StradioStrings _id = StradioStringsId();
 
-  /// Returns the localized string bundle for [language].
   factory StradioStrings.of(AppLanguage language) => switch (language) {
     AppLanguage.en => _en,
     AppLanguage.id => _id,
   };
 
-  // --- Navigation (Floating Island 5-Slot) ---
-  String get navHome;
-  String get navLibrary;
-  String get navRun;
-  String get navActivity;
-  String get navSettings;
+  // --- Common ---
+  String get closeLabel;
+  String get backLabel;
+  String get cancelAction;
+  String get saveLabel;
+  String get clearAction;
 
-  // --- Onboarding Step 1: Welcome & Privacy ---
-  String get onboardingWelcomeTitle;
-  String get onboardingWelcomeSubtitle;
-  String get onboardingPrivacyBadge;
-  String get onboardingPrivacyBody;
-  String get onboardingLanguageLabel;
-  String get onboardingContinueButton;
+  // --- First-Launch Earphones Modal ---
+  String get earphonesBadge;
+  String get earphonesTitle;
+  String get earphonesBody;
+  String get earphonesPrimaryAction;
+  String get earphonesLaterAction;
 
-  // --- Onboarding Step 2: Quick Personalization ---
-  String get onboardingProfileTitle;
-  String get onboardingProfileSubtitle;
-  String get nicknameLabel;
-  String get nicknameHint;
-  String get skipNicknameButton;
-  String get heightLabel;
-  String get heightHint;
-  String get heightHelper;
-  String get dailyGoalSectionTitle;
-  String get openGoalOptionLabel;
-  String get customGoalHint;
-  String get telemetryToggleTitle;
-  String get telemetryToggleSubtitle;
-  String get onboardingStartButton;
-  String get onboardingBackButton;
+  // --- Surface 1: Pre-Run Ignition ---
+  String get soundPacksHeading;
+  String get swipeToStart;
+  String motionSensorReadyWithPack(String packTitle);
+  String get modeKickJogLoop;
+  String get modeDualStem;
+  String get modeTempoScaled;
+  String get modeStepSfxOnly;
 
-  // --- Home Screen ---
-  String get homeGreetingPrefix;
-  String homeTimeGreeting(int hour);
-  String get homeDailyGoalTitle;
-  String get homeOpenGoalBadge;
-  String homeStepsOfTarget(String current, String target);
-  String get homeGoalReachedBanner;
-  String get metricSteps;
-  String get metricDistance;
-  String get metricActiveTime;
-  String get activeSoundscapeLabel;
-  String get changeSoundscapeAction;
-  String get quickStartTitle;
-  String get recentSessionTitle;
-  String get emptyHomeHistoryTitle;
-  String get emptyHomeHistoryBody;
+  // --- Surface 2: Active Run Instrument ---
+  String get strideTitle;
+  String get rhythmTitle;
+  String get stepsLabel;
+  String get cadenceLabel;
+  String get takeStepHint;
+  String get holdToEndHint;
+  String get activeStrideLabel;
+  String get walkingGrooveLabel;
+  String get pausedLabel;
+  String get calibratingLabel;
+  String get standbyLabel;
+  String get calibratingSensorMessage;
+  String get sensorUnavailableShort;
+  String get simulateStrideAction;
+  String get soundPackSheetTitle;
+  String get soundPackSheetSubtitle;
+  String get recoverRunTitle;
+  String recoverRunBody(int sampleCount, int durationSeconds);
+  String get discardAction;
+  String get reviewAndSaveAction;
 
-  // --- Pre-Run Goal Selector Sheet ---
-  String get preRunSheetTitle;
-  String get preRunContinueDailyTitle;
-  String preRunRemainingStepsSubtitle(String remaining);
-  String get preRunDailyAlreadyMetSubtitle;
-  String get preRunOpenGoalTitle;
-  String get preRunOpenGoalSubtitle;
+  // --- Surface 3: Cadence Summary ---
+  String get cadenceTitle;
+  String get flowTitle;
+  String avgSpmLabel(String value);
+  String get distanceLabel;
+  String get durationLabel;
+  String get paceLabel;
+  String get activeFilterLabel;
+  String get walkingFilterLabel;
+  String stepsCountLabel(String formattedSteps);
+  String get noStepsRecorded;
+  String get strideResonanceLock;
+  String get steadyWalkingFlow;
+  String get readyToStride;
+  String get emptyCadenceChartHint;
+  String minSpmLabel(String value);
+  String maxSpmLabel(String value);
+  String syncPercentLabel(int percent);
+  String get exportIgStoryAction;
+  String get startNewRunAction;
+  String get savingRunAction;
 
-  // --- Library & Audio Placeholder ---
-  String get libraryHeaderSubtitle;
-  String get libraryFilterAll;
-  String get libraryFilterFavorites;
-  String get libraryEmptyFavoritesTitle;
-  String get libraryEmptyFavoritesBody;
-  String get libraryRunWithThemeAction;
-  String get libraryPreviewingBadge;
-  String get audioComingSoonNotice;
-  String get emptyActivityBody;
+  // --- Share Studio (Phase 3B) ---
+  String get transparentStickerTab;
+  String get photoGlassTab;
+  String get addRunPhotoTitle;
+  String get addRunPhotoSubtitle;
+  String get chooseFromGallery;
+  String get takePhotoWithCamera;
+  String get dragCardHint;
+  String get doubleTapResetHint;
+  String get samplingPaletteHint;
+  String get renderingPng;
+  String get shareStoryAction;
+  String get shareStickerAction;
+  String get savedToGalleryMessage;
+  String get storyReadyMessage;
+  String get stickerReadyMessage;
+  String get noCadenceSamplesYet;
+  String get cadenceLockTitle;
+  String get noLockZoneYet;
+  String lockZoneRange(int minSpm, int maxSpm);
+  String get backdropNone;
+  String get backdropAdd;
 
-  // --- Activity Journal ---
-  String get activityWeeklyTitle;
-  String get activityRangeWeek;
-  String get activityRangeMonth;
-  String get activityRangeQuarter;
-  String get activityRangeAll;
-  String get activityChartBarLabel;
-  String get activityChartLineLabel;
-  String get activityChartSplitLabel;
-  String get activityTooltipGoalLabel;
-  String get activityFilterAll;
-  String get activityFilterWalking;
-  String get activityFilterJogging;
-  String activitySessionsCount(int count);
-  String get activityEmptyFilterBody;
-  String get activityStartFirstRunAction;
+  // --- Sensor Calibration Sheet ---
+  String get sensorActiveTitle;
+  String get sensorActiveBody;
+  String get sensorReadyTitle;
+  String get sensorReadyBody;
+  String get sensorCalibratingTitle;
+  String get sensorCalibratingBody;
+  String get sensorUnavailableTitle;
+  String get sensorUnavailableBody;
+  String get samplingRateLabel;
+  String get samplesLabel;
+  String get droppedLabel;
+  String get pocketModeTip;
+  String get reconnectSensorAction;
 
-  // --- Active Run & Soundscape Picker ---
-  String get tempoPickerTitle;
-  String get tempoPickerSubtitle;
-  String get placementHandLabel;
-  String get placementPocketLabel;
-
-  // --- Settings & Profile ---
-  String get settingsProfileSectionTitle;
-  String get settingsEditProfileAction;
-  String get settingsSaveProfileAction;
-  String get settingsAppearanceTitle;
-  String get settingsAppearanceSubtitle;
-  String get settingsBatteryGuideTitle;
-  String get settingsBatteryGuideSubtitle;
-  String get settingsClearHistoryAction;
-  String get settingsClearHistoryConfirmTitle;
-  String get settingsClearHistoryConfirmBody;
-  String get settingsClearHistoryClearedToast;
-  String get settingsCancelAction;
-  String get settingsDeleteAction;
-
-  // --- Developer Mode ---
-  String get settingsDevToolsTitle;
-  String get settingsDevToolsSubtitle;
-  String get settingsOpenSensorLabsAction;
-  String get settingsExportCsvAction;
-  String get settingsOpenLegacyShellAction;
-  String get devModeEnabledToast;
-  String get devModeDisabledToast;
-  String devModeTapsRemaining(int remaining);
+  // --- Daylight Settings Sheet ---
+  String get settingsTitle;
+  String get analyticsOptInTitle;
+  String get analyticsOptInSubtitle;
+  String get languageLabel;
+  String get heightFieldLabel;
+  String get heightErrorRange;
+  String get earphoneGuideAction;
+  String get clearHistoryAction;
+  String get clearHistoryDialogTitle;
+  String get clearHistoryDialogBody;
+  String get historyClearedMessage;
 }

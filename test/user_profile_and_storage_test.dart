@@ -16,12 +16,14 @@ void main() {
       final en = StradioStrings.of(AppLanguage.en);
       final id = StradioStrings.of(AppLanguage.id);
 
-      expect(en.navRun, 'Run');
-      expect(id.navRun, 'Lari');
-      expect(en.homeGreetingPrefix, 'Hello again,');
-      expect(id.homeGreetingPrefix, 'Halo lagi,');
-      expect(en.homeStepsOfTarget('2,450', '5,000'), '2,450 / 5,000 steps');
-      expect(id.homeStepsOfTarget('2,450', '5,000'), '2,450 / 5,000 langkah');
+      expect(en.swipeToStart, 'Swipe to start');
+      expect(id.swipeToStart, 'Geser untuk mulai');
+      expect(en.strideTitle, 'Stride');
+      expect(id.strideTitle, 'Langkah');
+      expect(en.stepsCountLabel('2,450'), '2,450 steps');
+      expect(id.stepsCountLabel('2,450'), '2,450 langkah');
+      expect(en.transparentStickerTab, 'Transparent Sticker');
+      expect(id.transparentStickerTab, 'Stiker Transparan');
       expect(AppLanguageCode.parse('id'), AppLanguage.id);
       expect(AppLanguageCode.parse('unknown'), AppLanguage.en);
     });

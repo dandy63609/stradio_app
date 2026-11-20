@@ -10,6 +10,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../../evaluation/run_metrics_calculator.dart';
+import '../../l10n/stradio_strings.dart';
 import '../../models/sound_pack.dart';
 import '../../theme/stradio_theme.dart';
 import '../../widgets/share/photo_glass_cards.dart';
@@ -32,6 +33,7 @@ class ShareStudioScreen extends StatefulWidget {
     required this.metrics,
     required this.soundPack,
     this.initialMode = ShareExportMode.transparentSticker,
+    this.language = AppLanguage.en,
     this.onPickPhoto,
     this.onSaveToGallery,
     this.onShareFile,
@@ -40,6 +42,7 @@ class ShareStudioScreen extends StatefulWidget {
   final RunSummaryMetrics metrics;
   final StradioSoundPack soundPack;
   final ShareExportMode initialMode;
+  final AppLanguage language;
   final PhotoBytesPicker? onPickPhoto;
   final Future<void> Function(String filePath)? onSaveToGallery;
   final Future<void> Function(String filePath)? onShareFile;
@@ -73,6 +76,7 @@ class _ShareStudioScreenState extends State<ShareStudioScreen> {
   }
 
   Future<void> _showPhotoSourceChooser() async {
+    final s = StradioStrings.of(widget.language);
     await showModalBottomSheet<void>(
       context: context,
       backgroundColor: Colors.transparent,
@@ -103,12 +107,12 @@ class _ShareStudioScreenState extends State<ShareStudioScreen> {
                 ),
                 const SizedBox(height: 14),
                 Text(
-                  'Add Run Photo',
+                  s.addRunPhotoTitle,
                   style: StradioTypography.headingSmall(fontSize: 18),
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  'Glass tint adapts automatically to your photo palette.',
+                  s.addRunPhotoSubtitle,
                   style: StradioTypography.body(fontSize: 13),
                 ),
                 const SizedBox(height: 14),
@@ -121,7 +125,7 @@ class _ShareStudioScreenState extends State<ShareStudioScreen> {
                       _pickPhoto(ImageSource.gallery);
                     },
                     icon: const Icon(Icons.photo_library_outlined, size: 18),
-                    label: const Text('Choose from Gallery'),
+                    label: Text(s.chooseFromGallery),
                   ),
                 ),
                 const SizedBox(height: 10),
@@ -134,7 +138,7 @@ class _ShareStudioScreenState extends State<ShareStudioScreen> {
                       _pickPhoto(ImageSource.camera);
                     },
                     icon: const Icon(Icons.photo_camera_outlined, size: 18),
-                    label: const Text('Take Photo with Camera'),
+                    label: Text(s.takePhotoWithCamera),
                   ),
                 ),
               ],
@@ -251,8 +255,9 @@ class _ShareStudioScreenState extends State<ShareStudioScreen> {
         await Gal.putImage(file.path, album: 'Stradio');
       }
       if (!mounted) return;
+      final s = StradioStrings.of(widget.language);
       setState(() {
-        _statusMessage = 'Saved to Stradio album in Gallery.';
+        _statusMessage = s.savedToGalleryMessage;
         _statusIsError = false;
       });
     } on Object catch (error) {
@@ -286,10 +291,11 @@ class _ShareStudioScreenState extends State<ShareStudioScreen> {
         );
       }
       if (!mounted) return;
+      final s = StradioStrings.of(widget.language);
       setState(() {
         _statusMessage = _mode == ShareExportMode.photoGlass
-            ? '9:16 Story PNG ready to share.'
-            : 'Transparent sticker PNG ready to share.';
+            ? s.storyReadyMessage
+            : s.stickerReadyMessage;
         _statusIsError = false;
       });
     } on Object catch (error) {
@@ -305,6 +311,7 @@ class _ShareStudioScreenState extends State<ShareStudioScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final s = StradioStrings.of(widget.language);
     final isPhotoGlass = _mode == ShareExportMode.photoGlass;
 
     return Scaffold(
@@ -359,7 +366,7 @@ class _ShareStudioScreenState extends State<ShareStudioScreen> {
                               Expanded(
                                 child: _ModeTabPill(
                                   key: const Key('share_mode_sticker_tab'),
-                                  label: 'Transparent Sticker',
+                                  label: s.transparentStickerTab,
                                   selected: !isPhotoGlass,
                                   onTap: () => setState(() {
                                     _mode = ShareExportMode.transparentSticker;
@@ -370,7 +377,7 @@ class _ShareStudioScreenState extends State<ShareStudioScreen> {
                               Expanded(
                                 child: _ModeTabPill(
                                   key: const Key('share_mode_photo_glass_tab'),
-                                  label: 'Photo Glass',
+                                  label: s.photoGlassTab,
                                   selected: isPhotoGlass,
                                   onTap: () => setState(() {
                                     _mode = ShareExportMode.photoGlass;
@@ -449,7 +456,7 @@ class _ShareStudioScreenState extends State<ShareStudioScreen> {
                     const SizedBox(height: 8),
                     Text(
                       _samplingTint
-                          ? 'Sampling photo palette...'
+                          ? s.samplingPaletteHint
                           : _statusMessage!,
                       key: const Key('share_studio_status_text'),
                       textAlign: TextAlign.center,
@@ -472,7 +479,7 @@ class _ShareStudioScreenState extends State<ShareStudioScreen> {
                           key: const Key('share_save_gallery_button'),
                           onPressed: _busy ? null : _handleSaveToGallery,
                           icon: const Icon(Icons.download_rounded, size: 18),
-                          label: const Text('Save'),
+                          label: Text(s.saveLabel),
                         ),
                       ),
                       const SizedBox(width: 10),
@@ -494,10 +501,10 @@ class _ShareStudioScreenState extends State<ShareStudioScreen> {
                                 : const Icon(Icons.ios_share_rounded, size: 18),
                             label: Text(
                               _busy
-                                  ? 'Rendering PNG...'
+                                  ? s.renderingPng
                                   : (isPhotoGlass
-                                        ? 'Share 9:16 Story'
-                                        : 'Share Sticker'),
+                                        ? s.shareStoryAction
+                                        : s.shareStickerAction),
                             ),
                           ),
                         ),
@@ -631,8 +638,8 @@ class _ShareStudioScreenState extends State<ShareStudioScreen> {
         const SizedBox(height: 6),
         Text(
           _overlayOffset == Offset.zero
-              ? 'Drag card to reposition over photo'
-              : 'Double-tap card to reset center',
+              ? StradioStrings.of(widget.language).dragCardHint
+              : StradioStrings.of(widget.language).doubleTapResetHint,
           key: const Key('photo_glass_drag_hint'),
           style: StradioTypography.metricLabel(),
         ),
@@ -641,6 +648,7 @@ class _ShareStudioScreenState extends State<ShareStudioScreen> {
   }
 
   Widget _buildBackdropStrip() {
+    final s = StradioStrings.of(widget.language);
     return SizedBox(
       height: 54,
       child: ListView(
@@ -649,7 +657,7 @@ class _ShareStudioScreenState extends State<ShareStudioScreen> {
           // None (Warm Ivory Daylight)
           _BackdropChip(
             key: const Key('backdrop_option_none'),
-            label: 'None',
+            label: s.backdropNone,
             selected: _customPhotoBytes == null && _selectedPreset.isNone,
             colors: PhotoBackdropPreset.none.gradientColors,
             onTap: () => _selectPreset(PhotoBackdropPreset.none),
@@ -679,7 +687,7 @@ class _ShareStudioScreenState extends State<ShareStudioScreen> {
                       color: StradioColors.textPrimary,
                     ),
                     const SizedBox(height: 2),
-                    Text('+ Add', style: StradioTypography.metricLabel()),
+                    Text(s.backdropAdd, style: StradioTypography.metricLabel()),
                   ],
                 ),
               ),

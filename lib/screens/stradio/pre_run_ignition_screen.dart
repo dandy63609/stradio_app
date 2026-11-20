@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../l10n/stradio_strings.dart';
 import '../../models/experiment_models.dart';
 import '../../models/sound_pack.dart';
 import '../../services/audio_engine_service.dart';
@@ -104,6 +105,7 @@ class _PreRunIgnitionScreenState extends State<PreRunIgnitionScreen>
 
     await EarphonesRecommendationModal.show(
       context,
+      language: _profile.language,
       onDismissed: () {
         unawaited(StradioPreferencesService.setHasSeenAudioRecommendation(true));
       },
@@ -134,6 +136,7 @@ class _PreRunIgnitionScreenState extends State<PreRunIgnitionScreen>
         unawaited(
           EarphonesRecommendationModal.show(
             context,
+            language: _profile.language,
             onDismissed: () {
               unawaited(
                 StradioPreferencesService.setHasSeenAudioRecommendation(true),
@@ -152,6 +155,7 @@ class _PreRunIgnitionScreenState extends State<PreRunIgnitionScreen>
     await SensorCalibrationSheet.show(
       context,
       state: _sensorState,
+      language: _profile.language,
       onRetrySensor: () {
         setState(() => _sensorState = SensorPipelineState.ready);
       },
@@ -185,6 +189,7 @@ class _PreRunIgnitionScreenState extends State<PreRunIgnitionScreen>
           initialSoundPackId: pack.id,
           initialLabSettings: labSettings,
           userHeightCm: _profile.validHeightCm,
+          language: _profile.language,
           autoStart: true,
         ),
       ),
@@ -202,6 +207,7 @@ class _PreRunIgnitionScreenState extends State<PreRunIgnitionScreen>
 
   @override
   Widget build(BuildContext context) {
+    final s = StradioStrings.of(_profile.language);
     final activePack = StradioSoundPack.byId(_selectedPackId);
     final reducedMotion = MediaQuery.disableAnimationsOf(context);
 
@@ -402,7 +408,7 @@ class _PreRunIgnitionScreenState extends State<PreRunIgnitionScreen>
                                           MainAxisAlignment.spaceBetween,
                                       children: [
                                         Text(
-                                          'SOUND PACKS',
+                                          s.soundPacksHeading,
                                           style: StradioTypography.microCap(),
                                         ),
                                         Text(
@@ -432,6 +438,7 @@ class _PreRunIgnitionScreenState extends State<PreRunIgnitionScreen>
                                                 width: tileWidth,
                                                 child: _SoundPackTile(
                                                   pack: pack,
+                                                  strings: s,
                                                   selected:
                                                       pack.id ==
                                                       _selectedPackId,
@@ -456,7 +463,7 @@ class _PreRunIgnitionScreenState extends State<PreRunIgnitionScreen>
 
                   // Honest 1-line sensor status above bottom thumb dock
                   Text(
-                    'Motion sensor ready · ${activePack.title}',
+                    s.motionSensorReadyWithPack(activePack.title),
                     textAlign: TextAlign.center,
                     style: StradioTypography.body(fontSize: 13),
                   ),
@@ -464,6 +471,7 @@ class _PreRunIgnitionScreenState extends State<PreRunIgnitionScreen>
 
                   // Primary Ignition Pill (56dp Midnight pill: swipe OR tap to start)
                   _SwipeToStartPill(
+                    label: s.swipeToStart,
                     progress: _swipeProgress,
                     onProgressChanged: (v) =>
                         setState(() => _swipeProgress = v),
@@ -482,19 +490,21 @@ class _PreRunIgnitionScreenState extends State<PreRunIgnitionScreen>
 class _SoundPackTile extends StatelessWidget {
   const _SoundPackTile({
     required this.pack,
+    required this.strings,
     required this.selected,
     required this.onTap,
   });
 
   final StradioSoundPack pack;
+  final StradioStrings strings;
   final bool selected;
   final VoidCallback onTap;
 
   String _modeSummary() => switch (pack.backgroundMode) {
-    BackgroundLayerMode.joggingZoneOnly => 'Kick + jog loop',
-    BackgroundLayerMode.dualStemBarAligned => 'Dual-stem 140 BPM',
-    BackgroundLayerMode.continuousTempoScaled => 'Tempo-scaled loop',
-    BackgroundLayerMode.silent => 'Step SFX only',
+    BackgroundLayerMode.joggingZoneOnly => strings.modeKickJogLoop,
+    BackgroundLayerMode.dualStemBarAligned => strings.modeDualStem,
+    BackgroundLayerMode.continuousTempoScaled => strings.modeTempoScaled,
+    BackgroundLayerMode.silent => strings.modeStepSfxOnly,
   };
 
   @override
@@ -562,11 +572,13 @@ class _SoundPackTile extends StatelessWidget {
 
 class _SwipeToStartPill extends StatelessWidget {
   const _SwipeToStartPill({
+    required this.label,
     required this.progress,
     required this.onProgressChanged,
     required this.onTriggerStart,
   });
 
+  final String label;
   final double progress;
   final ValueChanged<double> onProgressChanged;
   final VoidCallback onTriggerStart;
@@ -609,7 +621,7 @@ class _SwipeToStartPill extends StatelessWidget {
                 alignment: Alignment.center,
                 children: [
                   Text(
-                    'Swipe to start',
+                    label,
                     style: StradioTypography.buttonLabel(
                       color: StradioColors.textOnDark,
                     ),

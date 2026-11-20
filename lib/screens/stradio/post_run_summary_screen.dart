@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../../evaluation/run_metrics_calculator.dart';
+import '../../l10n/stradio_strings.dart';
 import '../../models/experiment_models.dart';
 import '../../models/sound_pack.dart';
 import '../../services/posthog_service.dart';
@@ -32,6 +33,7 @@ class PostRunSummaryScreen extends StatefulWidget {
     required this.store,
     required this.postHogService,
     this.soundPackId = SoundPackId.breakbeatFvnky,
+    this.language = AppLanguage.en,
     this.alreadySaved = false,
   });
 
@@ -41,6 +43,7 @@ class PostRunSummaryScreen extends StatefulWidget {
   final RecordingStore store;
   final PostHogTelemetryService postHogService;
   final SoundPackId soundPackId;
+  final AppLanguage language;
   final bool alreadySaved;
 
   @override
@@ -105,6 +108,7 @@ class _PostRunSummaryScreenState extends State<PostRunSummaryScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final s = StradioStrings.of(widget.language);
     final m = widget.metrics;
     final pack = StradioSoundPack.byId(widget.soundPackId);
     final hasCadence = m.averageCadenceSpm > 0;
@@ -113,10 +117,10 @@ class _PostRunSummaryScreenState extends State<PostRunSummaryScreen> {
     final minSpm = buckets.isEmpty ? null : buckets.reduce(math.min).round();
     final maxSpm = buckets.isEmpty ? null : buckets.reduce(math.max).round();
     final resonanceLabel = !hasCadence
-        ? 'No steps recorded'
+        ? s.noStepsRecorded
         : (m.averageCadenceSpm >= 130
-              ? 'Stride Resonance Lock'
-              : 'Steady Walking Flow');
+              ? s.strideResonanceLock
+              : s.steadyWalkingFlow);
 
     return Scaffold(
       backgroundColor: StradioColors.warmIvory,
@@ -142,20 +146,18 @@ class _PostRunSummaryScreenState extends State<PostRunSummaryScreen> {
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Text(
-                                    'Cadence',
+                                    s.cadenceTitle,
                                     style: StradioTypography.titlePrimary(),
                                   ),
                                   Text(
-                                    'Flow',
+                                    s.flowTitle,
                                     style: StradioTypography.titleMuted(),
                                   ),
                                 ],
                               ),
                             ),
                             Text(
-                              hasCadence
-                                  ? 'Avg. ${m.averageCadenceSpm.round()} spm'
-                                  : 'Avg. -- spm',
+                              s.avgSpmLabel(avgSpmText),
                               style: StradioTypography.pillBadge(
                                 color: StradioColors.textSecondary,
                               ),
@@ -241,21 +243,21 @@ class _PostRunSummaryScreenState extends State<PostRunSummaryScreen> {
                           children: [
                             Expanded(
                               child: _SummaryMetricPill(
-                                label: 'Distance',
+                                label: s.distanceLabel,
                                 value: '${m.distanceKm.toStringAsFixed(2)} km',
                               ),
                             ),
                             const SizedBox(width: 8),
                             Expanded(
                               child: _SummaryMetricPill(
-                                label: 'Duration',
+                                label: s.durationLabel,
                                 value: m.formattedDuration,
                               ),
                             ),
                             const SizedBox(width: 8),
                             Expanded(
                               child: _SummaryMetricPill(
-                                label: 'Pace',
+                                label: s.paceLabel,
                                 value: _formatPace(m),
                               ),
                             ),
@@ -268,7 +270,7 @@ class _PostRunSummaryScreenState extends State<PostRunSummaryScreen> {
                           children: [
                             _LegendChip(
                               key: const Key('summary_filter_active'),
-                              label: 'Active',
+                              label: s.activeFilterLabel,
                               dotColor: StradioColors.sonicCoral,
                               selected: _filter == _StemFilter.active,
                               onTap: () => setState(() {
@@ -280,7 +282,7 @@ class _PostRunSummaryScreenState extends State<PostRunSummaryScreen> {
                             const SizedBox(width: 8),
                             _LegendChip(
                               key: const Key('summary_filter_walking'),
-                              label: 'Walking',
+                              label: s.walkingFilterLabel,
                               dotColor: StradioColors.rhythmViolet,
                               selected: _filter == _StemFilter.walking,
                               onTap: () => setState(() {
@@ -291,7 +293,7 @@ class _PostRunSummaryScreenState extends State<PostRunSummaryScreen> {
                             ),
                             const Spacer(),
                             Text(
-                              '${_formatSteps(m.totalSteps)} steps',
+                              s.stepsCountLabel(_formatSteps(m.totalSteps)),
                               style: StradioTypography.pillBadge(
                                 color: StradioColors.textSecondary,
                               ),
@@ -306,7 +308,7 @@ class _PostRunSummaryScreenState extends State<PostRunSummaryScreen> {
                           child: buckets.isEmpty
                               ? Center(
                                   child: Text(
-                                    'Complete a few steps to chart cadence rhythm.',
+                                    s.emptyCadenceChartHint,
                                     style: StradioTypography.body(fontSize: 13),
                                   ),
                                 )
@@ -320,15 +322,11 @@ class _PostRunSummaryScreenState extends State<PostRunSummaryScreen> {
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
                             Text(
-                              minSpm != null
-                                  ? 'min. $minSpm spm'
-                                  : 'min. -- spm',
+                              s.minSpmLabel(minSpm?.toString() ?? '--'),
                               style: StradioTypography.metricLabel(),
                             ),
                             Text(
-                              maxSpm != null
-                                  ? 'max. $maxSpm spm'
-                                  : 'max. -- spm',
+                              s.maxSpmLabel(maxSpm?.toString() ?? '--'),
                               style: StradioTypography.metricLabel(),
                             ),
                           ],
@@ -365,7 +363,9 @@ class _PostRunSummaryScreenState extends State<PostRunSummaryScreen> {
                                 ),
                               ),
                               Text(
-                                '${m.rhythmScorePercent.round()}% sync',
+                                s.syncPercentLabel(
+                                  m.rhythmScorePercent.round(),
+                                ),
                                 style: StradioTypography.metricLabel(
                                   color: StradioColors.textSecondary,
                                 ),
@@ -394,12 +394,13 @@ class _PostRunSummaryScreenState extends State<PostRunSummaryScreen> {
                                 builder: (_) => ShareStudioScreen(
                                   metrics: m,
                                   soundPack: pack,
+                                  language: widget.language,
                                 ),
                               ),
                             );
                           },
                           icon: const Icon(Icons.ios_share_rounded, size: 18),
-                          label: const Text('Export IG Story'),
+                          label: Text(s.exportIgStoryAction),
                         ),
                       ),
                       const SizedBox(height: 10),
@@ -409,7 +410,7 @@ class _PostRunSummaryScreenState extends State<PostRunSummaryScreen> {
                           key: const Key('start_new_run_button'),
                           onPressed: _saving ? null : _saveAndStartNewRun,
                           child: Text(
-                            _saving ? 'Saving run...' : 'Start new run',
+                            _saving ? s.savingRunAction : s.startNewRunAction,
                           ),
                         ),
                       ),

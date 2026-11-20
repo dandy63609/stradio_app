@@ -1,247 +1,326 @@
 import 'stradio_strings.dart';
 
-/// Bahasa Indonesia translation implementation.
+/// Bahasa Indonesia (`id`) string bundle for STRADIO Daylight 3-Surface MVP.
 class StradioStringsId extends StradioStrings {
   const StradioStringsId();
 
-  // --- Navigation (Floating Island 5-Slot) ---
   @override
-  String get navHome => 'Beranda';
-  @override
-  String get navLibrary => 'Koleksi';
-  @override
-  String get navRun => 'Lari';
-  @override
-  String get navActivity => 'Aktivitas';
-  @override
-  String get navSettings => 'Setelan';
-
-  // --- Onboarding Step 1: Welcome & Privacy ---
-  @override
-  String get onboardingWelcomeTitle => 'Temukan Ritme Langkahmu';
-  @override
-  String get onboardingWelcomeSubtitle =>
-      'Sinkronkan langkah jalan dan larimu dengan tempo musik yang responsif.';
-  @override
-  String get onboardingPrivacyBadge => 'Privasi Lokal 100%';
-  @override
-  String get onboardingPrivacyBody =>
-      'Profil dan riwayat olahragamu tersimpan aman di HP ini. Tanpa akun dan tanpa login.';
-  @override
-  String get onboardingLanguageLabel => 'Pilih Bahasa Aplikasi';
-  @override
-  String get onboardingContinueButton => 'Lanjut';
-
-  // --- Onboarding Step 2: Quick Personalization ---
-  @override
-  String get onboardingProfileTitle => 'Personalisasi Singkat';
-  @override
-  String get onboardingProfileSubtitle =>
-      'Sesuaikan sapaan dan estimasi jarak langkahmu. Bisa diubah kapan saja di Setelan.';
-  @override
-  String get nicknameLabel => 'Nama Panggilan';
-  @override
-  String get nicknameHint => 'Misal: Raka (opsional)';
-  @override
-  String get skipNicknameButton => 'Lewati (Pakai "Runner")';
-  @override
-  String get heightLabel => 'Tinggi Badan (cm, opsional)';
-  @override
-  String get heightHint => 'Contoh: 170';
-  @override
-  String get heightHelper =>
-      'Digunakan untuk menghitung panjang langkah dan jarak tempuh secara lebih akurat.';
-  @override
-  String get dailyGoalSectionTitle => 'Target Langkah Harian';
-  @override
-  String get openGoalOptionLabel => 'Open Goal (Tanpa Target)';
-  @override
-  String get customGoalHint => 'Target langkah sendiri';
-  @override
-  String get telemetryToggleTitle => 'Statistik Performa Anonim';
-  @override
-  String get telemetryToggleSubtitle =>
-      'Bagikan statistik latihan & akurasi langkah secara anonim untuk bantu pengembangan Stradio. Nama dan file sensor tetap privat.';
-  @override
-  String get onboardingStartButton => 'Mulai Gunakan Stradio';
-  @override
-  String get onboardingBackButton => 'Kembali';
-
-  // --- Home Screen ---
-  @override
-  String get homeGreetingPrefix => 'Halo lagi,';
-  @override
-  String homeTimeGreeting(int hour) {
-    if (hour >= 5 && hour < 12) return 'Selamat pagi,';
-    if (hour >= 12 && hour < 17) return 'Selamat siang,';
-    if (hour >= 17 && hour < 21) return 'Selamat sore,';
-    return 'Lari malam,';
-  }
+  String get closeLabel => 'Tutup';
 
   @override
-  String get homeDailyGoalTitle => 'Progres Hari Ini';
-  @override
-  String get homeOpenGoalBadge => 'Mode Bebas Hari Ini';
-  @override
-  String homeStepsOfTarget(String current, String target) =>
-      '$current / $target langkah';
-  @override
-  String get homeGoalReachedBanner =>
-      'Target harian tercapai. Lanjut terus atau istirahat kapan saja.';
-  @override
-  String get metricSteps => 'LANGKAH';
-  @override
-  String get metricDistance => 'JARAK';
-  @override
-  String get metricActiveTime => 'WAKTU AKTIF';
-  @override
-  String get activeSoundscapeLabel => 'Tema Tempo Aktif';
-  @override
-  String get changeSoundscapeAction => 'Ubah';
-  @override
-  String get quickStartTitle => 'Mulai Cepat';
-  @override
-  String get recentSessionTitle => 'Sesi Terakhir';
-  @override
-  String get emptyHomeHistoryTitle => 'Siap untuk langkah pertamamu?';
-  @override
-  String get emptyHomeHistoryBody =>
-      'Pilih salah satu tempo Mulai Cepat di atas atau tekan tombol Lari di tengah bawah.';
+  String get backLabel => 'Kembali';
 
-  // --- Pre-Run Goal Selector Sheet ---
   @override
-  String get preRunSheetTitle => 'Pilih Mode Target Sesi';
-  @override
-  String get preRunContinueDailyTitle => 'Lanjutkan Target Harian';
-  @override
-  String preRunRemainingStepsSubtitle(String remaining) =>
-      'Sisa $remaining langkah lagi untuk mencapai target hari ini.';
-  @override
-  String get preRunDailyAlreadyMetSubtitle =>
-      'Target hari ini sudah tercapai. Tambah langkah ekstra hari ini.';
-  @override
-  String get preRunOpenGoalTitle => 'Open Goal (Lari Bebas)';
-  @override
-  String get preRunOpenGoalSubtitle =>
-      'Bergerak bebas tanpa batas target langkah.';
+  String get cancelAction => 'Batal';
 
-  // --- Library & Audio Placeholder ---
   @override
-  String get libraryHeaderSubtitle =>
-      'Selaraskan kadensi langkahmu dengan tema tempo yang responsif.';
-  @override
-  String get libraryFilterAll => 'Semua';
-  @override
-  String get libraryFilterFavorites => 'Favorit';
-  @override
-  String get libraryEmptyFavoritesTitle => 'Belum ada tema favorit';
-  @override
-  String get libraryEmptyFavoritesBody =>
-      'Ketuk ikon hati pada tema tempo mana saja untuk menyimpannya di sini.';
-  @override
-  String get libraryRunWithThemeAction => 'Lari dengan Tempo Ini';
-  @override
-  String get libraryPreviewingBadge => 'Pratinjau Tempo';
-  @override
-  String get audioComingSoonNotice =>
-      'Integrasi file audio segera hadir. Tempo ini sudah aktif untuk sesi larimu.';
-  @override
-  String get emptyActivityBody =>
-      'Belum ada sesi tersimpan. Tekan Lari di bawah untuk mulai langkah pertamamu.';
+  String get saveLabel => 'Simpan';
 
-  // --- Activity Journal ---
   @override
-  String get activityWeeklyTitle => 'Tren Langkah';
-  @override
-  String get activityRangeWeek => '1Mgg';
-  @override
-  String get activityRangeMonth => '1Bln';
-  @override
-  String get activityRangeQuarter => '3Bln';
-  @override
-  String get activityRangeAll => 'Semua';
-  @override
-  String get activityChartBarLabel => 'Batang';
-  @override
-  String get activityChartLineLabel => 'Garis';
-  @override
-  String get activityChartSplitLabel => 'Aktivitas';
-  @override
-  String get activityTooltipGoalLabel => 'Target harian';
-  @override
-  String get activityFilterAll => 'Semua';
-  @override
-  String get activityFilterWalking => 'Jalan';
-  @override
-  String get activityFilterJogging => 'Lari';
-  @override
-  String activitySessionsCount(int count) => '$count sesi';
-  @override
-  String get activityEmptyFilterBody =>
-      'Belum ada sesi untuk filter aktivitas ini.';
-  @override
-  String get activityStartFirstRunAction => 'Mulai Lari Pertama';
+  String get clearAction => 'Hapus';
 
-  // --- Active Run & Soundscape Picker ---
   @override
-  String get tempoPickerTitle => 'Pilih Tempo Lari';
-  @override
-  String get tempoPickerSubtitle =>
-      'Pilih tema BPM target untuk diselaraskan dengan langkahmu.';
-  @override
-  String get placementHandLabel => 'Tangan';
-  @override
-  String get placementPocketLabel => 'Saku';
+  String get earphonesBadge => 'Disarankan';
 
-  // --- Settings & Profile ---
   @override
-  String get settingsProfileSectionTitle => 'Profil Pelari & Target Harian';
-  @override
-  String get settingsEditProfileAction => 'Ubah Profil & Target';
-  @override
-  String get settingsSaveProfileAction => 'Simpan Perubahan';
-  @override
-  String get settingsAppearanceTitle => 'Mode Tema';
-  @override
-  String get settingsAppearanceSubtitle =>
-      'Beralih antara Terang Gading dan Gelap Karbon';
-  @override
-  String get settingsBatteryGuideTitle => 'Panduan Saku & Layar Mati';
-  @override
-  String get settingsBatteryGuideSubtitle =>
-      'Atur penggunaan baterai ke Tanpa Pembatasan agar Android tidak menjeda deteksi langkah saat HP di dalam saku.';
-  @override
-  String get settingsClearHistoryAction => 'Hapus Riwayat Latihan';
-  @override
-  String get settingsClearHistoryConfirmTitle => 'Hapus semua riwayat latihan?';
-  @override
-  String get settingsClearHistoryConfirmBody =>
-      'Tindakan ini menghapus permanen seluruh sesi tersimpan dan mereset progres hari ini di perangkat ini.';
-  @override
-  String get settingsClearHistoryClearedToast => 'Riwayat latihan dihapus.';
-  @override
-  String get settingsCancelAction => 'Batal';
-  @override
-  String get settingsDeleteAction => 'Hapus Semua';
+  String get earphonesTitle => 'Gunakan Earphone untuk Pengalaman Penuh';
 
-  // --- Developer Mode ---
   @override
-  String get settingsDevToolsTitle => 'Alat Pengembang & Riset';
+  String get earphonesBody =>
+      'Agar pengalaman lari lebih maksimal, gunakan earphone atau headphone supaya soundscape adaptif dan umpan balik langkah terdengar jelas.';
+
   @override
-  String get settingsDevToolsSubtitle =>
-      'Perekaman sampel mentah 100 Hz, scoreboard 4 algoritma, dan ekspor dataset CSV aktif.';
+  String get earphonesPrimaryAction => 'Saya Pakai Earphone';
+
   @override
-  String get settingsOpenSensorLabsAction => 'Buka Sensor Labs & Diagnostik';
+  String get earphonesLaterAction => 'Nanti saja';
+
   @override
-  String get settingsExportCsvAction => 'Ekspor Dataset Riset (CSV)';
+  String get soundPacksHeading => 'PAKET SUARA';
+
   @override
-  String get settingsOpenLegacyShellAction => 'Buka Shell Eksperimen E1-E8';
+  String get swipeToStart => 'Geser untuk mulai';
+
   @override
-  String get devModeEnabledToast => 'Mode Pengembang diaktifkan.';
+  String motionSensorReadyWithPack(String packTitle) =>
+      'Sensor gerak siap · $packTitle';
+
   @override
-  String get devModeDisabledToast => 'Mode Pengembang dinonaktifkan.';
+  String get modeKickJogLoop => 'Kick + loop lari';
+
   @override
-  String devModeTapsRemaining(int remaining) =>
-      '$remaining ketukan lagi untuk membuka Mode Pengembang.';
+  String get modeDualStem => 'Dual-stem 140 BPM';
+
+  @override
+  String get modeTempoScaled => 'Loop ikut tempo';
+
+  @override
+  String get modeStepSfxOnly => 'Hanya SFX langkah';
+
+  @override
+  String get strideTitle => 'Langkah';
+
+  @override
+  String get rhythmTitle => 'Ritme';
+
+  @override
+  String get stepsLabel => 'Langkah';
+
+  @override
+  String get cadenceLabel => 'Kadensi';
+
+  @override
+  String get takeStepHint => 'Mulai melangkah untuk memicu audio';
+
+  @override
+  String get holdToEndHint => 'Tahan 1,5 dtk untuk selesai';
+
+  @override
+  String get activeStrideLabel => 'Lari Aktif';
+
+  @override
+  String get walkingGrooveLabel => 'Ritme Jalan';
+
+  @override
+  String get pausedLabel => 'Dijeda';
+
+  @override
+  String get calibratingLabel => 'Kalibrasi';
+
+  @override
+  String get standbyLabel => 'Siaga';
+
+  @override
+  String get calibratingSensorMessage => 'Mengkalibrasi sensor gerak...';
+
+  @override
+  String get sensorUnavailableShort => 'Sensor gerak tidak tersedia.';
+
+  @override
+  String get simulateStrideAction => 'Simulasi langkah (+1)';
+
+  @override
+  String get soundPackSheetTitle => 'Paket Suara';
+
+  @override
+  String get soundPackSheetSubtitle =>
+      'Ganti langsung tanpa memutus sesi lari';
+
+  @override
+  String get recoverRunTitle => 'Pulihkan sesi belum selesai?';
+
+  @override
+  String recoverRunBody(int sampleCount, int durationSeconds) =>
+      'Ditemukan sesi belum tersimpan dengan $sampleCount sampel sensor ($durationSeconds dtk).';
+
+  @override
+  String get discardAction => 'Buang';
+
+  @override
+  String get reviewAndSaveAction => 'Tinjau & Simpan';
+
+  @override
+  String get cadenceTitle => 'Kadensi';
+
+  @override
+  String get flowTitle => 'Aliran';
+
+  @override
+  String avgSpmLabel(String value) => 'Rata-rata $value spm';
+
+  @override
+  String get distanceLabel => 'Jarak';
+
+  @override
+  String get durationLabel => 'Durasi';
+
+  @override
+  String get paceLabel => 'Pace';
+
+  @override
+  String get activeFilterLabel => 'Lari';
+
+  @override
+  String get walkingFilterLabel => 'Jalan';
+
+  @override
+  String stepsCountLabel(String formattedSteps) => '$formattedSteps langkah';
+
+  @override
+  String get noStepsRecorded => 'Belum ada langkah';
+
+  @override
+  String get strideResonanceLock => 'Ritme Langkah Terkunci';
+
+  @override
+  String get steadyWalkingFlow => 'Aliran Jalan Stabil';
+
+  @override
+  String get readyToStride => 'Siap melangkah';
+
+  @override
+  String get emptyCadenceChartHint =>
+      'Lakukan beberapa langkah untuk memetakan ritme kadensi.';
+
+  @override
+  String minSpmLabel(String value) => 'min. $value spm';
+
+  @override
+  String maxSpmLabel(String value) => 'maks. $value spm';
+
+  @override
+  String syncPercentLabel(int percent) => '$percent% sinkron';
+
+  @override
+  String get exportIgStoryAction => 'Ekspor IG Story';
+
+  @override
+  String get startNewRunAction => 'Mulai lari baru';
+
+  @override
+  String get savingRunAction => 'Menyimpan sesi...';
+
+  @override
+  String get transparentStickerTab => 'Stiker Transparan';
+
+  @override
+  String get photoGlassTab => 'Foto Kaca';
+
+  @override
+  String get addRunPhotoTitle => 'Tambah Foto Lari';
+
+  @override
+  String get addRunPhotoSubtitle =>
+      'Warna kaca otomatis menyesuaikan palet fotomu.';
+
+  @override
+  String get chooseFromGallery => 'Pilih dari Galeri';
+
+  @override
+  String get takePhotoWithCamera => 'Ambil Foto dengan Kamera';
+
+  @override
+  String get dragCardHint => 'Geser kartu untuk mengatur posisi di atas foto';
+
+  @override
+  String get doubleTapResetHint => 'Ketuk dua kali kartu untuk reset ke tengah';
+
+  @override
+  String get samplingPaletteHint => 'Menyesuaikan palet warna foto...';
+
+  @override
+  String get renderingPng => 'Merender PNG...';
+
+  @override
+  String get shareStoryAction => 'Bagikan Story 9:16';
+
+  @override
+  String get shareStickerAction => 'Bagikan Stiker';
+
+  @override
+  String get savedToGalleryMessage => 'Tersimpan di album Stradio di Galeri.';
+
+  @override
+  String get storyReadyMessage => 'PNG Story 9:16 siap dibagikan.';
+
+  @override
+  String get stickerReadyMessage => 'Stiker PNG transparan siap dibagikan.';
+
+  @override
+  String get noCadenceSamplesYet => 'Belum ada sampel kadensi';
+
+  @override
+  String get cadenceLockTitle => 'Kunci Kadensi';
+
+  @override
+  String get noLockZoneYet => 'Belum ada zona kunci';
+
+  @override
+  String lockZoneRange(int minSpm, int maxSpm) =>
+      'Zona Kunci $minSpm-$maxSpm spm';
+
+  @override
+  String get backdropNone => 'Polos';
+
+  @override
+  String get backdropAdd => '+ Tambah';
+
+  @override
+  String get sensorActiveTitle => 'Sensor gerak aktif';
+
+  @override
+  String get sensorActiveBody =>
+      'Menerima akselerasi 3-sumbu mentah (A1 Adaptive Midpoint + Gravity).';
+
+  @override
+  String get sensorReadyTitle => 'Sensor gerak siap';
+
+  @override
+  String get sensorReadyBody =>
+      'Akselerometer 100 Hz siap. Noise gate menjaga langkah tetap nol saat diam.';
+
+  @override
+  String get sensorCalibratingTitle => 'Mengkalibrasi sensor gerak...';
+
+  @override
+  String get sensorCalibratingBody =>
+      'Menunggu sampel awal akselerometer untuk membentuk titik tengah dinamis.';
+
+  @override
+  String get sensorUnavailableTitle => 'Sensor gerak tidak tersedia';
+
+  @override
+  String get sensorUnavailableBody =>
+      'Stream akselerometer gagal dimulai. Periksa izin gerak atau uji dengan simulasi langkah.';
+
+  @override
+  String get samplingRateLabel => 'Laju sampel';
+
+  @override
+  String get samplesLabel => 'Sampel';
+
+  @override
+  String get droppedLabel => 'Terlewat';
+
+  @override
+  String get pocketModeTip =>
+      'Tips mode saku: atur optimasi baterai Stradio ke Tanpa Batas (Unrestricted) di pengaturan Android agar audio langkah tetap jalan saat layar terkunci.';
+
+  @override
+  String get reconnectSensorAction => 'Sambungkan ulang sensor';
+
+  @override
+  String get settingsTitle => 'Pengaturan';
+
+  @override
+  String get analyticsOptInTitle => 'Analitik Anonim (Opt-in)';
+
+  @override
+  String get analyticsOptInSubtitle =>
+      'Nonaktif secara default (UU PDP). IP klien tidak pernah disimpan.';
+
+  @override
+  String get languageLabel => 'Bahasa';
+
+  @override
+  String get heightFieldLabel => 'Tinggi badan (cm, opsional)';
+
+  @override
+  String get heightErrorRange => 'Masukkan tinggi antara 100 dan 240 cm';
+
+  @override
+  String get earphoneGuideAction => 'Panduan Perangkat Audio';
+
+  @override
+  String get clearHistoryAction => 'Hapus Riwayat Lari';
+
+  @override
+  String get clearHistoryDialogTitle => 'Hapus riwayat lari?';
+
+  @override
+  String get clearHistoryDialogBody =>
+      'Semua sesi lari lokal yang tersimpan di perangkat ini akan dihapus permanen.';
+
+  @override
+  String get historyClearedMessage => 'Riwayat lari dihapus.';
 }
-

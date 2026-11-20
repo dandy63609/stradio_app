@@ -75,6 +75,7 @@ class _DaylightSettingsSheetState extends State<DaylightSettingsSheet> {
   }
 
   void _saveHeight() {
+    final s = StradioStrings.of(_profile.language);
     final raw = _heightController.text.trim();
     if (raw.isEmpty) {
       setState(() => _heightError = null);
@@ -83,11 +84,7 @@ class _DaylightSettingsSheetState extends State<DaylightSettingsSheet> {
     }
     final parsed = double.tryParse(raw);
     if (parsed == null || parsed < 100 || parsed > 240) {
-      setState(
-        () => _heightError = _profile.language == AppLanguage.id
-            ? 'Masukkan tinggi antara 100 dan 240 cm'
-            : 'Enter height between 100 and 240 cm',
-      );
+      setState(() => _heightError = s.heightErrorRange);
       return;
     }
     setState(() => _heightError = null);
@@ -95,25 +92,23 @@ class _DaylightSettingsSheetState extends State<DaylightSettingsSheet> {
   }
 
   Future<void> _confirmAndClearHistory() async {
-    final isId = _profile.language == AppLanguage.id;
+    final s = StradioStrings.of(_profile.language);
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
         backgroundColor: StradioColors.surfaceCard,
         title: Text(
-          isId ? 'Hapus riwayat lari?' : 'Clear workout history?',
+          s.clearHistoryDialogTitle,
           style: StradioTypography.headingSmall(),
         ),
         content: Text(
-          isId
-              ? 'Semua sesi lokal yang tersimpan di perangkat ini akan dihapus permanen.'
-              : 'All locally saved run sessions on this device will be permanently removed.',
+          s.clearHistoryDialogBody,
           style: StradioTypography.body(),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: Text(isId ? 'Batal' : 'Cancel'),
+            child: Text(s.cancelAction),
           ),
           FilledButton(
             key: const Key('confirm_clear_history_button'),
@@ -121,7 +116,7 @@ class _DaylightSettingsSheetState extends State<DaylightSettingsSheet> {
             style: FilledButton.styleFrom(
               backgroundColor: StradioColors.textAccentDeep,
             ),
-            child: Text(isId ? 'Hapus' : 'Clear'),
+            child: Text(s.clearAction),
           ),
         ],
       ),
@@ -132,11 +127,7 @@ class _DaylightSettingsSheetState extends State<DaylightSettingsSheet> {
       await widget.onClearHistory();
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            isId ? 'Riwayat lari dihapus.' : 'Workout history cleared.',
-          ),
-        ),
+        SnackBar(content: Text(s.historyClearedMessage)),
       );
     } finally {
       if (mounted) setState(() => _clearing = false);
@@ -145,7 +136,7 @@ class _DaylightSettingsSheetState extends State<DaylightSettingsSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final isId = _profile.language == AppLanguage.id;
+    final s = StradioStrings.of(_profile.language);
     final bottomInset = MediaQuery.viewInsetsOf(context).bottom;
 
     return SafeArea(
@@ -179,14 +170,14 @@ class _DaylightSettingsSheetState extends State<DaylightSettingsSheet> {
                   children: [
                     Expanded(
                       child: Text(
-                        isId ? 'Pengaturan' : 'Settings',
+                        s.settingsTitle,
                         style: StradioTypography.headingSmall(fontSize: 20),
                       ),
                     ),
                     IconButton(
                       key: const Key('settings_sheet_close_button'),
                       onPressed: () => Navigator.of(context).pop(),
-                      tooltip: isId ? 'Tutup' : 'Close',
+                      tooltip: s.closeLabel,
                       icon: const Icon(Icons.close_rounded, size: 20),
                     ),
                   ],
@@ -211,16 +202,12 @@ class _DaylightSettingsSheetState extends State<DaylightSettingsSheet> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              isId
-                                  ? 'Analitik Anonim (Opt-in)'
-                                  : 'Anonymous Telemetry (Opt-in)',
+                              s.analyticsOptInTitle,
                               style: StradioTypography.pillBadge(),
                             ),
                             const SizedBox(height: 4),
                             Text(
-                              isId
-                                  ? 'Nonaktif secara default (UU PDP). Tanpa IP klien.'
-                                  : 'Off by default (UU PDP). Client IP is never stored.',
+                              s.analyticsOptInSubtitle,
                               style: StradioTypography.metricLabel(),
                             ),
                           ],
@@ -244,7 +231,7 @@ class _DaylightSettingsSheetState extends State<DaylightSettingsSheet> {
                   children: [
                     Expanded(
                       child: Text(
-                        isId ? 'Bahasa' : 'Language',
+                        s.languageLabel,
                         style: StradioTypography.pillBadge(),
                       ),
                     ),
@@ -280,9 +267,7 @@ class _DaylightSettingsSheetState extends State<DaylightSettingsSheet> {
                           LengthLimitingTextInputFormatter(3),
                         ],
                         decoration: InputDecoration(
-                          labelText: isId
-                              ? 'Tinggi badan (cm, opsional)'
-                              : 'Height (cm, optional)',
+                          labelText: s.heightFieldLabel,
                           hintText: '170',
                           errorText: _heightError,
                           filled: true,
@@ -302,7 +287,7 @@ class _DaylightSettingsSheetState extends State<DaylightSettingsSheet> {
                       child: OutlinedButton(
                         key: const Key('settings_save_height_button'),
                         onPressed: _saveHeight,
-                        child: Text(isId ? 'Simpan' : 'Save'),
+                        child: Text(s.saveLabel),
                       ),
                     ),
                   ],
@@ -319,11 +304,7 @@ class _DaylightSettingsSheetState extends State<DaylightSettingsSheet> {
                       widget.onShowEarphoneGuide();
                     },
                     icon: const Icon(Icons.headphones_rounded, size: 18),
-                    label: Text(
-                      isId
-                          ? 'Panduan Perangkat Audio'
-                          : 'Audio Device Recommendation',
-                    ),
+                    label: Text(s.earphoneGuideAction),
                   ),
                 ),
                 const SizedBox(height: 10),
@@ -338,9 +319,7 @@ class _DaylightSettingsSheetState extends State<DaylightSettingsSheet> {
                       foregroundColor: StradioColors.textAccentDeep,
                     ),
                     icon: const Icon(Icons.delete_outline_rounded, size: 18),
-                    label: Text(
-                      isId ? 'Hapus Riwayat Lari' : 'Clear Workout History',
-                    ),
+                    label: Text(s.clearHistoryAction),
                   ),
                 ),
               ],

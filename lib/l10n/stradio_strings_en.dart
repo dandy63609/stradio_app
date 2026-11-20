@@ -1,247 +1,326 @@
 import 'stradio_strings.dart';
 
-/// English translation implementation (default application language).
+/// English (`en`) string bundle for STRADIO Daylight 3-Surface MVP.
 class StradioStringsEn extends StradioStrings {
   const StradioStringsEn();
 
-  // --- Navigation (Floating Island 5-Slot) ---
   @override
-  String get navHome => 'Home';
-  @override
-  String get navLibrary => 'Library';
-  @override
-  String get navRun => 'Run';
-  @override
-  String get navActivity => 'Activity';
-  @override
-  String get navSettings => 'Settings';
-
-  // --- Onboarding Step 1: Welcome & Privacy ---
-  @override
-  String get onboardingWelcomeTitle => 'Find Your Stride Rhythm';
-  @override
-  String get onboardingWelcomeSubtitle =>
-      'Sync your walking and running steps with responsive musical tempo.';
-  @override
-  String get onboardingPrivacyBadge => '100% Local Privacy';
-  @override
-  String get onboardingPrivacyBody =>
-      'Your profile and workout history stay on this device. No account needed.';
-  @override
-  String get onboardingLanguageLabel => 'Choose App Language';
-  @override
-  String get onboardingContinueButton => 'Continue';
-
-  // --- Onboarding Step 2: Quick Personalization ---
-  @override
-  String get onboardingProfileTitle => 'Quick Personalization';
-  @override
-  String get onboardingProfileSubtitle =>
-      'Tailor your greeting and stride distance estimate. You can change this anytime in Settings.';
-  @override
-  String get nicknameLabel => 'Nickname';
-  @override
-  String get nicknameHint => 'E.g. Raka (optional)';
-  @override
-  String get skipNicknameButton => 'Skip (Use "Runner")';
-  @override
-  String get heightLabel => 'Height (cm, optional)';
-  @override
-  String get heightHint => 'Example: 170';
-  @override
-  String get heightHelper =>
-      'Used to estimate your stride length and distance more accurately.';
-  @override
-  String get dailyGoalSectionTitle => 'Daily Step Goal';
-  @override
-  String get openGoalOptionLabel => 'Open Goal (No Limit)';
-  @override
-  String get customGoalHint => 'Custom step target';
-  @override
-  String get telemetryToggleTitle => 'Anonymous Performance Stats';
-  @override
-  String get telemetryToggleSubtitle =>
-      'Share anonymous workout & step-accuracy stats to help improve Stradio. Name and raw sensor files stay private.';
-  @override
-  String get onboardingStartButton => 'Start Using Stradio';
-  @override
-  String get onboardingBackButton => 'Back';
-
-  // --- Home Screen ---
-  @override
-  String get homeGreetingPrefix => 'Hello again,';
-  @override
-  String homeTimeGreeting(int hour) {
-    if (hour >= 5 && hour < 12) return 'Good morning,';
-    if (hour >= 12 && hour < 17) return 'Good afternoon,';
-    if (hour >= 17 && hour < 21) return 'Good evening,';
-    return 'Night stride,';
-  }
+  String get closeLabel => 'Close';
 
   @override
-  String get homeDailyGoalTitle => 'Today\'s Progress';
-  @override
-  String get homeOpenGoalBadge => 'Open Goal Today';
-  @override
-  String homeStepsOfTarget(String current, String target) =>
-      '$current / $target steps';
-  @override
-  String get homeGoalReachedBanner =>
-      'Daily goal reached. Keep going or rest whenever you are ready.';
-  @override
-  String get metricSteps => 'STEPS';
-  @override
-  String get metricDistance => 'DISTANCE';
-  @override
-  String get metricActiveTime => 'ACTIVE TIME';
-  @override
-  String get activeSoundscapeLabel => 'Active Tempo Theme';
-  @override
-  String get changeSoundscapeAction => 'Change';
-  @override
-  String get quickStartTitle => 'Quick Start';
-  @override
-  String get recentSessionTitle => 'Recent Session';
-  @override
-  String get emptyHomeHistoryTitle => 'Ready for your first stride?';
-  @override
-  String get emptyHomeHistoryBody =>
-      'Pick a Quick Start tempo above or tap the center Run button below.';
+  String get backLabel => 'Back';
 
-  // --- Pre-Run Goal Selector Sheet ---
   @override
-  String get preRunSheetTitle => 'Choose Session Goal Mode';
-  @override
-  String get preRunContinueDailyTitle => 'Continue Daily Target';
-  @override
-  String preRunRemainingStepsSubtitle(String remaining) =>
-      '$remaining steps left to reach today\'s goal.';
-  @override
-  String get preRunDailyAlreadyMetSubtitle =>
-      'Today\'s target is already met. Add bonus steps to your day.';
-  @override
-  String get preRunOpenGoalTitle => 'Open Goal (Free Run)';
-  @override
-  String get preRunOpenGoalSubtitle => 'Move freely with no step limit.';
+  String get cancelAction => 'Cancel';
 
-  // --- Library & Audio Placeholder ---
   @override
-  String get libraryHeaderSubtitle =>
-      'Match your stride cadence with a responsive tempo theme.';
-  @override
-  String get libraryFilterAll => 'All';
-  @override
-  String get libraryFilterFavorites => 'Favorites';
-  @override
-  String get libraryEmptyFavoritesTitle => 'No favorite themes yet';
-  @override
-  String get libraryEmptyFavoritesBody =>
-      'Tap the heart icon on any tempo theme to save it here for quick access.';
-  @override
-  String get libraryRunWithThemeAction => 'Run This Tempo';
-  @override
-  String get libraryPreviewingBadge => 'Previewing Tempo';
-  @override
-  String get audioComingSoonNotice =>
-      'Audio track integration is coming soon. This tempo is active for your next run.';
-  @override
-  String get emptyActivityBody =>
-      'No runs recorded yet. Tap Run below to capture your first steps.';
+  String get saveLabel => 'Save';
 
-  // --- Activity Journal ---
   @override
-  String get activityWeeklyTitle => 'Step Trend';
-  @override
-  String get activityRangeWeek => '1W';
-  @override
-  String get activityRangeMonth => '1M';
-  @override
-  String get activityRangeQuarter => '3M';
-  @override
-  String get activityRangeAll => 'All';
-  @override
-  String get activityChartBarLabel => 'Bar';
-  @override
-  String get activityChartLineLabel => 'Line';
-  @override
-  String get activityChartSplitLabel => 'Split';
-  @override
-  String get activityTooltipGoalLabel => 'Daily goal';
-  @override
-  String get activityFilterAll => 'All';
-  @override
-  String get activityFilterWalking => 'Walking';
-  @override
-  String get activityFilterJogging => 'Jogging';
-  @override
-  String activitySessionsCount(int count) =>
-      count == 1 ? '1 session' : '$count sessions';
-  @override
-  String get activityEmptyFilterBody =>
-      'No sessions match this activity filter.';
-  @override
-  String get activityStartFirstRunAction => 'Start First Run';
+  String get clearAction => 'Clear';
 
-  // --- Active Run & Soundscape Picker ---
   @override
-  String get tempoPickerTitle => 'Choose Running Tempo';
-  @override
-  String get tempoPickerSubtitle =>
-      'Pick a target BPM soundscape to sync with your stride.';
-  @override
-  String get placementHandLabel => 'Hand';
-  @override
-  String get placementPocketLabel => 'Pocket';
+  String get earphonesBadge => 'Recommended';
 
-  // --- Settings & Profile ---
   @override
-  String get settingsProfileSectionTitle => 'Runner Profile & Daily Goal';
-  @override
-  String get settingsEditProfileAction => 'Edit Profile & Goal';
-  @override
-  String get settingsSaveProfileAction => 'Save Changes';
-  @override
-  String get settingsAppearanceTitle => 'Theme Mode';
-  @override
-  String get settingsAppearanceSubtitle =>
-      'Switch between Warm Ivory Light and Carbon Dark';
-  @override
-  String get settingsBatteryGuideTitle => 'Pocket & Screen-Off Guide';
-  @override
-  String get settingsBatteryGuideSubtitle =>
-      'Set battery usage to Unrestricted so Android does not pause step detection while your phone is in your pocket.';
-  @override
-  String get settingsClearHistoryAction => 'Clear Workout History';
-  @override
-  String get settingsClearHistoryConfirmTitle => 'Clear all workout history?';
-  @override
-  String get settingsClearHistoryConfirmBody =>
-      'This permanently deletes all saved runs and resets today\'s progress on this device.';
-  @override
-  String get settingsClearHistoryClearedToast => 'Workout history cleared.';
-  @override
-  String get settingsCancelAction => 'Cancel';
-  @override
-  String get settingsDeleteAction => 'Delete All';
+  String get earphonesTitle => 'Use Earphones for Full Immersion';
 
-  // --- Developer Mode ---
   @override
-  String get settingsDevToolsTitle => 'Developer & Research Tools';
+  String get earphonesBody =>
+      'For a better experience, please use your earphones or headphones so you can clearly hear adaptive tempo soundscapes and stride feedback.';
+
   @override
-  String get settingsDevToolsSubtitle =>
-      '100 Hz raw sample recording, 4-algorithm scoreboard, and CSV dataset export are active.';
+  String get earphonesPrimaryAction => "I'm Wearing Earphones";
+
   @override
-  String get settingsOpenSensorLabsAction => 'Open Sensor Labs & Diagnostics';
+  String get earphonesLaterAction => 'Maybe later';
+
   @override
-  String get settingsExportCsvAction => 'Export Research Dataset (CSV)';
+  String get soundPacksHeading => 'SOUND PACKS';
+
   @override
-  String get settingsOpenLegacyShellAction => 'Open E1-E8 Research Shell';
+  String get swipeToStart => 'Swipe to start';
+
   @override
-  String get devModeEnabledToast => 'Developer Mode enabled.';
+  String motionSensorReadyWithPack(String packTitle) =>
+      'Motion sensor ready · $packTitle';
+
   @override
-  String get devModeDisabledToast => 'Developer Mode disabled.';
+  String get modeKickJogLoop => 'Kick + jog loop';
+
   @override
-  String devModeTapsRemaining(int remaining) =>
-      '$remaining taps left to enable Developer Mode.';
+  String get modeDualStem => 'Dual-stem 140 BPM';
+
+  @override
+  String get modeTempoScaled => 'Tempo-scaled loop';
+
+  @override
+  String get modeStepSfxOnly => 'Step SFX only';
+
+  @override
+  String get strideTitle => 'Stride';
+
+  @override
+  String get rhythmTitle => 'Rhythm';
+
+  @override
+  String get stepsLabel => 'Steps';
+
+  @override
+  String get cadenceLabel => 'Cadence';
+
+  @override
+  String get takeStepHint => 'Take a step to trigger audio';
+
+  @override
+  String get holdToEndHint => 'Hold 1.5s to end';
+
+  @override
+  String get activeStrideLabel => 'Active Stride';
+
+  @override
+  String get walkingGrooveLabel => 'Walking groove';
+
+  @override
+  String get pausedLabel => 'Paused';
+
+  @override
+  String get calibratingLabel => 'Calibrating';
+
+  @override
+  String get standbyLabel => 'Standby';
+
+  @override
+  String get calibratingSensorMessage => 'Calibrating motion sensor...';
+
+  @override
+  String get sensorUnavailableShort => 'Motion sensor unavailable.';
+
+  @override
+  String get simulateStrideAction => 'Simulate stride (+1)';
+
+  @override
+  String get soundPackSheetTitle => 'Sound Pack';
+
+  @override
+  String get soundPackSheetSubtitle =>
+      'Switch live without interrupting your run';
+
+  @override
+  String get recoverRunTitle => 'Recover unfinished run?';
+
+  @override
+  String recoverRunBody(int sampleCount, int durationSeconds) =>
+      'Found an unsaved session with $sampleCount sensor samples (${durationSeconds}s).';
+
+  @override
+  String get discardAction => 'Discard';
+
+  @override
+  String get reviewAndSaveAction => 'Review & Save';
+
+  @override
+  String get cadenceTitle => 'Cadence';
+
+  @override
+  String get flowTitle => 'Flow';
+
+  @override
+  String avgSpmLabel(String value) => 'Avg. $value spm';
+
+  @override
+  String get distanceLabel => 'Distance';
+
+  @override
+  String get durationLabel => 'Duration';
+
+  @override
+  String get paceLabel => 'Pace';
+
+  @override
+  String get activeFilterLabel => 'Active';
+
+  @override
+  String get walkingFilterLabel => 'Walking';
+
+  @override
+  String stepsCountLabel(String formattedSteps) => '$formattedSteps steps';
+
+  @override
+  String get noStepsRecorded => 'No steps recorded';
+
+  @override
+  String get strideResonanceLock => 'Stride Resonance Lock';
+
+  @override
+  String get steadyWalkingFlow => 'Steady Walking Flow';
+
+  @override
+  String get readyToStride => 'Ready to stride';
+
+  @override
+  String get emptyCadenceChartHint =>
+      'Complete a few steps to chart cadence rhythm.';
+
+  @override
+  String minSpmLabel(String value) => 'min. $value spm';
+
+  @override
+  String maxSpmLabel(String value) => 'max. $value spm';
+
+  @override
+  String syncPercentLabel(int percent) => '$percent% sync';
+
+  @override
+  String get exportIgStoryAction => 'Export IG Story';
+
+  @override
+  String get startNewRunAction => 'Start new run';
+
+  @override
+  String get savingRunAction => 'Saving run...';
+
+  @override
+  String get transparentStickerTab => 'Transparent Sticker';
+
+  @override
+  String get photoGlassTab => 'Photo Glass';
+
+  @override
+  String get addRunPhotoTitle => 'Add Run Photo';
+
+  @override
+  String get addRunPhotoSubtitle =>
+      'Glass tint adapts automatically to your photo palette.';
+
+  @override
+  String get chooseFromGallery => 'Choose from Gallery';
+
+  @override
+  String get takePhotoWithCamera => 'Take Photo with Camera';
+
+  @override
+  String get dragCardHint => 'Drag card to reposition over photo';
+
+  @override
+  String get doubleTapResetHint => 'Double-tap card to reset center';
+
+  @override
+  String get samplingPaletteHint => 'Sampling photo palette...';
+
+  @override
+  String get renderingPng => 'Rendering PNG...';
+
+  @override
+  String get shareStoryAction => 'Share 9:16 Story';
+
+  @override
+  String get shareStickerAction => 'Share Sticker';
+
+  @override
+  String get savedToGalleryMessage => 'Saved to Stradio album in Gallery.';
+
+  @override
+  String get storyReadyMessage => '9:16 Story PNG ready to share.';
+
+  @override
+  String get stickerReadyMessage => 'Transparent sticker PNG ready to share.';
+
+  @override
+  String get noCadenceSamplesYet => 'No cadence samples yet';
+
+  @override
+  String get cadenceLockTitle => 'Cadence Lock';
+
+  @override
+  String get noLockZoneYet => 'No lock zone yet';
+
+  @override
+  String lockZoneRange(int minSpm, int maxSpm) =>
+      '$minSpm-$maxSpm spm Lock Zone';
+
+  @override
+  String get backdropNone => 'None';
+
+  @override
+  String get backdropAdd => '+ Add';
+
+  @override
+  String get sensorActiveTitle => 'Motion sensor active';
+
+  @override
+  String get sensorActiveBody =>
+      'Streaming raw 3-axis acceleration (A1 Adaptive Midpoint + Gravity).';
+
+  @override
+  String get sensorReadyTitle => 'Motion sensor ready';
+
+  @override
+  String get sensorReadyBody =>
+      '100 Hz accelerometer ready. Stationary noise gate keeps idle steps at zero.';
+
+  @override
+  String get sensorCalibratingTitle => 'Calibrating motion sensor...';
+
+  @override
+  String get sensorCalibratingBody =>
+      'Waiting for initial accelerometer samples to establish dynamic midpoint.';
+
+  @override
+  String get sensorUnavailableTitle => 'Motion sensor unavailable';
+
+  @override
+  String get sensorUnavailableBody =>
+      'Accelerometer stream could not start. Check motion permissions or test with simulated steps.';
+
+  @override
+  String get samplingRateLabel => 'Sampling rate';
+
+  @override
+  String get samplesLabel => 'Samples';
+
+  @override
+  String get droppedLabel => 'Dropped';
+
+  @override
+  String get pocketModeTip =>
+      'Pocket mode tip: keep Stradio battery optimization set to Unrestricted in Android settings so step audio continues with the screen locked.';
+
+  @override
+  String get reconnectSensorAction => 'Reconnect motion sensor';
+
+  @override
+  String get settingsTitle => 'Settings';
+
+  @override
+  String get analyticsOptInTitle => 'Anonymous Telemetry (Opt-in)';
+
+  @override
+  String get analyticsOptInSubtitle =>
+      'Off by default (UU PDP). Client IP is never stored.';
+
+  @override
+  String get languageLabel => 'Language';
+
+  @override
+  String get heightFieldLabel => 'Height (cm, optional)';
+
+  @override
+  String get heightErrorRange => 'Enter height between 100 and 240 cm';
+
+  @override
+  String get earphoneGuideAction => 'Audio Device Recommendation';
+
+  @override
+  String get clearHistoryAction => 'Clear Workout History';
+
+  @override
+  String get clearHistoryDialogTitle => 'Clear workout history?';
+
+  @override
+  String get clearHistoryDialogBody =>
+      'All locally saved run sessions on this device will be permanently removed.';
+
+  @override
+  String get historyClearedMessage => 'Workout history cleared.';
 }
-
