@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/experiment_models.dart';
+import '../models/sound_pack.dart';
 
 /// Centralized local persistence service using [SharedPreferences] for user preferences,
 /// telemetry credentials, target steps, and activity configs.
@@ -19,6 +20,8 @@ class StradioPreferencesService {
   static const _keyPrimaryAlgorithm = 'stradio_primary_algorithm';
   static const _keyDarkMode = 'stradio_dark_mode';
   static const _keyUserProfileJson = 'stradio_user_profile_v1';
+  static const _keyHasSeenAudioRecommendation = 'has_seen_audio_recommendation';
+  static const _keyActiveSoundPack = 'stradio_active_sound_pack';
 
   static SharedPreferences? _prefs;
 
@@ -125,6 +128,31 @@ class StradioPreferencesService {
     final p = _prefs ?? await SharedPreferences.getInstance();
     _prefs = p;
     await p.setString(_keyUserProfileJson, jsonEncode(profile.toMap()));
+  }
+
+  /// Whether the first-launch audio device recommendation modal was dismissed.
+  static bool hasSeenAudioRecommendation() {
+    return _prefs?.getBool(_keyHasSeenAudioRecommendation) ?? false;
+  }
+
+  /// Persists dismissal of the first-launch audio device recommendation modal.
+  static Future<void> setHasSeenAudioRecommendation(bool value) async {
+    final p = _prefs ?? await SharedPreferences.getInstance();
+    _prefs = p;
+    await p.setBool(_keyHasSeenAudioRecommendation, value);
+  }
+
+  /// Loads the runner's last selected [SoundPackId], defaulting to `BREAKBEAT_FVNKY`.
+  static SoundPackId loadActiveSoundPackId() {
+    final code = _prefs?.getString(_keyActiveSoundPack);
+    return StradioSoundPack.byCode(code).id;
+  }
+
+  /// Persists the active [SoundPackId].
+  static Future<void> saveActiveSoundPackId(SoundPackId id) async {
+    final p = _prefs ?? await SharedPreferences.getInstance();
+    _prefs = p;
+    await p.setString(_keyActiveSoundPack, StradioSoundPack.byId(id).code);
   }
 }
 

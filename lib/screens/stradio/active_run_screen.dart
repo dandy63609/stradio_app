@@ -1,78 +1,71 @@
 import 'dart:async';
-import 'dart:collection';
 import 'dart:math' as math;
-import 'dart:ui' show ImageFilter;
 
 import 'package:flutter/material.dart';
-import 'package:flutter/scheduler.dart';
+import 'package:flutter/services.dart';
 
 import '../../algorithms/step_detector.dart';
 import '../../evaluation/run_metrics_calculator.dart';
-import '../../l10n/stradio_strings.dart';
 import '../../models/experiment_models.dart';
 import '../../models/sound_pack.dart';
 import '../../services/audio_engine_service.dart';
-import '../../services/export_service.dart';
 import '../../services/foreground_notification_service.dart';
 import '../../services/posthog_service.dart';
 import '../../services/preferences_service.dart';
 import '../../services/recording_repository.dart';
 import '../../services/recording_service.dart';
 import '../../theme/stradio_theme.dart';
+import '../../widgets/liquid_glass_lens.dart';
+import '../../widgets/sensor_calibration_sheet.dart';
+import '../../widgets/sonic_ribbon_painter.dart';
 import 'post_run_summary_screen.dart';
-import 'root_navigation_shell.dart';
 
 enum _RunStreamState { connecting, running, paused, sensorError }
+
 enum _RecoveryAction { reviewAndSave, discard }
 
-/// Screen 2: STRADIO Active Run & Reactive Music Screen (Point 7 Revamp).
+/// Surface 2: Active Run Instrument (`docs/DESIGN.md` & `docs/EXPERIENCE.md`).
 ///
-/// Implements the "Unified Stride Deck" architecture:
-/// - Zero-Scroll single-viewport layout on mobile, tablet, and desktop.
-/// - 100% Borderless cards using Deep Organic Squircle radii (28px Hero,
-///   20px Squircle Deck, 999px Stadium Pills) and diffused 2-stage shadows.
-/// - Editorial Header ("Find Your Stride") with runner profile, live status,
-///   Light/Dark theme toggle, and Sensor Labs access.
-/// - Vertical Rhythm Equalizer Bars visualizer (Reference 2) reactive to
-///   real-time 100 Hz foot-strike accelerometer magnitudes.
-/// - Unified Stride Goal & 3-Column Metrics Deck (Steps, Cadence SPM, Time).
-/// - Thumb-Zone Bottom Control Deck with circular Pause/Resume and Stadium Finish CTA.
+/// Combines the real-time 100 Hz A1 step-detection pipeline, decoupled 2-layer
+/// [StradioAudioEngine], Pocket Mode [ForegroundNotificationService], and
+/// crash-recovery session cache behind the Daylight Instrument UI:
+/// - Dual-tone stacked header (`Stride` / `Rhythm`) + sensor calibration button
+/// - 256px Circular Acoustic Dial + central 136px [LiquidGlassLens] (glass 1 of 2)
+/// - 2 borderless tabular metrics (`Steps`, `Cadence`) directly on Warm Ivory
+/// - Recessed [LiquidGlassLens] bottom dock (glass 2 of 2) with 6-pack hot-swap,
+///   Midnight pause/resume pill, and `Hold 1.5s to end` progress ring.
 class ActiveRunScreen extends StatefulWidget {
   const ActiveRunScreen({
     super.key,
     this.store,
     this.recordingService,
-    this.exportService,
     this.postHogService,
     this.foregroundService,
     this.audioEngine,
+    this.initialSoundPackId = SoundPackId.breakbeatFvnky,
     this.initialLabSettings = const StradioLabSettings(),
-    this.onToggleThemeMode,
-    this.isConsumerMode = false,
-    this.developerModeEnabled = true,
     this.userHeightCm,
-    this.soundscapeTitle = 'Neon Stride',
+    this.autoStart = false,
   });
 
   final RecordingStore? store;
   final RecordingService? recordingService;
-  final ExportService? exportService;
   final PostHogTelemetryService? postHogService;
   final ForegroundNotificationService? foregroundService;
   final StradioAudioEngine? audioEngine;
+  final SoundPackId initialSoundPackId;
   final StradioLabSettings initialLabSettings;
-  final VoidCallback? onToggleThemeMode;
-  final bool isConsumerMode;
-  final bool developerModeEnabled;
   final double? userHeightCm;
-  final String soundscapeTitle;
+  final bool autoStart;
 
   @override
   State<ActiveRunScreen> createState() => _ActiveRunScreenState();
 }
 
 class _ActiveRunScreenState extends State<ActiveRunScreen>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
+  static const Duration _holdToEndDuration = Duration(milliseconds: 1500);
+
   late final RecordingStore _store;
   late final RecordingService _recordingService;
   late final PostHogTelemetryService _postHogService;
@@ -80,41 +73,32 @@ class _ActiveRunScreenState extends State<ActiveRunScreen>
   late final StradioAudioEngine _audioEngine;
   late final bool _ownsAudioEngine;
   late StradioLabSettings _labSettings;
-  late String _soundscapeTitle;
+
+  late final AnimationController _ribbonController;
+  late final AnimationController _holdController;
 
   _RunStreamState _streamState = _RunStreamState.connecting;
   String _recordingId = 'REC_LIVE_001';
   String? _sensorErrorText;
+  String? _holdHintText;
+  bool _stepPulseActive = false;
+  bool _hasStartedRun = false;
+  bool _isFinishing = false;
+  int _lastHapticBucket = -1;
 
-  // 4 simultaneous real-time step detectors (A1, A2, B1, B2)
   late Map<AlgorithmVariant, StepDetector> _detectors;
   late Map<AlgorithmVariant, List<DetectionEvent>> _liveDetections;
-
   final List<SensorSample> _activeSamples = [];
-  final ListQueue<double> _recentMagnitudes = ListQueue<double>();
-  final ListQueue<double> _recentThresholds = ListQueue<double>();
-  late List<double> _smoothedBarHeights;
-  late List<double> _targetBarHeights;
-  final ValueNotifier<int> _waveformRepaintNotifier = ValueNotifier<int>(0);
-  late final Ticker _waveformTicker;
-  Timer? _stepFlashTimer;
-  final ValueNotifier<SensorHealthReport> _sensorHealthNotifier = ValueNotifier(
-    const SensorHealthReport(
-      sampleCount: 0,
-      requestedRateHz: 100.0,
-      effectiveRateHz: 0.0,
-      sampleDrops: 0,
-      latestTimestampNs: 0,
-    ),
-  );
-
   SensorSample? _latestSample;
-  DetectorOutput? _latestPrimaryOutput;
-  DateTime? _lastStepFlashAt;
 
   Timer? _elapsedTimer;
+  Timer? _stepPulseTimer;
+  Timer? _holdHintTimer;
   double _activeDurationSeconds = 0.0;
-  bool _hasStartedRun = false;
+
+  AlgorithmVariant get _primaryVariant => AlgorithmVariant.a1MidpointRaw;
+  List<DetectionEvent> get _primaryDetections =>
+      _liveDetections[_primaryVariant] ?? const [];
 
   @override
   void initState() {
@@ -125,225 +109,147 @@ class _ActiveRunScreenState extends State<ActiveRunScreen>
     _foregroundService =
         widget.foregroundService ?? FlutterForegroundNotificationService();
     _ownsAudioEngine = widget.audioEngine == null;
-    _audioEngine = widget.audioEngine ?? StradioAudioEngine();
+    _audioEngine =
+        widget.audioEngine ??
+        StradioAudioEngine(initialPack: widget.initialSoundPackId);
     _labSettings = widget.initialLabSettings;
-    _soundscapeTitle = widget.soundscapeTitle;
 
+    if (widget.audioEngine != null &&
+        _audioEngine.activePackId != widget.initialSoundPackId) {
+      unawaited(_audioEngine.switchPack(widget.initialSoundPackId));
+    }
     unawaited(_audioEngine.preloadActivePack());
 
-    _waveformTicker = createTicker(_onWaveformTick);
-    _foregroundService.addActionListener(_handleNotificationAction);
+    _ribbonController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 220),
+    );
+    _holdController = AnimationController(
+      vsync: this,
+      duration: _holdToEndDuration,
+    )..addListener(_onHoldTick);
 
+    _foregroundService.addActionListener(_handleNotificationAction);
     _resetDetectors();
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _checkUnfinishedSessionAndInitialize();
+      _initializeSession();
     });
   }
 
-  void _syncWaveformTicker() {
+  void _resetDetectors() {
+    _detectors = {
+      for (final variant in AlgorithmVariant.values)
+        variant: StepDetector(
+          algorithm: variant.thresholdAlgorithm,
+          useLinearAcceleration: variant.usesLinearAcceleration,
+        ),
+    };
+    _liveDetections = {
+      for (final variant in AlgorithmVariant.values) variant: [],
+    };
+  }
+
+  void _syncRibbonAnimation() {
     if (!mounted) return;
-    if (_streamState == _RunStreamState.running) {
-      if (!_waveformTicker.isActive) {
-        _waveformTicker.start();
-      }
-    } else {
-      if (_waveformTicker.isActive) {
-        _waveformTicker.stop();
-      }
+    if (MediaQuery.disableAnimationsOf(context) ||
+        _streamState != _RunStreamState.running) {
+      _ribbonController.stop();
     }
   }
 
-  void _onWaveformTick(Duration elapsed) {
-    if (!mounted || _streamState != _RunStreamState.running) {
-      if (_waveformTicker.isActive) _waveformTicker.stop();
-      return;
-    }
-    const barCount = 28;
-    const attackAlpha = 0.36;
-    const decayAlpha = 0.14;
-    var changed = false;
-
-    for (var i = 0; i < barCount; i++) {
-      final target = _targetBarHeights[i];
-      final current = _smoothedBarHeights[i];
-      final diff = target - current;
-      if (diff.abs() > 0.002) {
-        final alpha = diff >= 0 ? attackAlpha : decayAlpha;
-        _smoothedBarHeights[i] = current + diff * alpha;
-        changed = true;
-      } else if (current != target) {
-        _smoothedBarHeights[i] = target;
-        changed = true;
-      }
-    }
-
-    if (changed) {
-      _waveformRepaintNotifier.value++;
-    } else {
-      _waveformTicker.stop();
-    }
-  }
-
-  void _handleNotificationAction(String action) {
+  Future<void> _initializeSession() async {
     if (!mounted) return;
-    if (action == 'pause_resume') {
-      _togglePauseResume();
-    } else if (action == 'finish') {
-      _finishRun();
-    }
-  }
-
-  Future<void> _checkUnfinishedSessionAndInitialize() async {
+    final cached = await _store.loadActiveSessionCache();
     if (!mounted) return;
-    try {
-      final cached = await _store.loadActiveSessionCache();
-      if (cached != null && cached.samples.isNotEmpty && mounted) {
-        final action = await _promptCrashRecoveryDialog(cached);
+
+    if (cached != null && cached.samples.isNotEmpty) {
+      final action = await _showCrashRecoveryDialog(cached);
+      if (!mounted) return;
+      if (action == _RecoveryAction.reviewAndSave) {
+        await _openRecoveredSummary(cached);
         if (!mounted) return;
-        if (action == _RecoveryAction.reviewAndSave) {
-          await _recoverAndReviewSession(cached);
-          return;
-        } else if (action == _RecoveryAction.discard) {
-          await _store.clearActiveSessionCache();
-        }
+      } else {
+        await _store.clearActiveSessionCache();
       }
-    } catch (_) {
-      // Ignore cache recovery errors and start fresh session.
     }
+
+    await _startSensorStream();
     if (!mounted) return;
-    await _initializeRunSession();
+    if (widget.autoStart && _streamState != _RunStreamState.sensorError) {
+      await _startRunning();
+    }
   }
 
-  void _flushActiveSessionCache() {
-    if (_activeSamples.isEmpty) return;
-    final snapshot = ActiveSessionSnapshot(
-      recordingId: _recordingId,
-      createdAt: DateTime.now(),
-      config: _labSettings.toExperimentConfig(),
-      targetBpm: _labSettings.targetBpm,
-      activeDurationSeconds: _activeDurationSeconds,
-      samples: List<SensorSample>.from(_activeSamples),
-    );
-    unawaited(_store.saveActiveSessionCache(snapshot));
-  }
-
-  Future<_RecoveryAction?> _promptCrashRecoveryDialog(
+  Future<_RecoveryAction?> _showCrashRecoveryDialog(
     ActiveSessionSnapshot snapshot,
-  ) async {
-    final palette = StradioPalette.of(context);
-    final count = snapshot.samples.length;
-    final durSec = snapshot.activeDurationSeconds.round();
-    final durFormatted =
-        '${(durSec ~/ 60).toString().padLeft(2, '0')}:${(durSec % 60).toString().padLeft(2, '0')}';
-
+  ) {
+    final samplesCount = snapshot.samples.length;
     return showDialog<_RecoveryAction>(
       context: context,
       barrierDismissible: false,
-      builder: (ctx) {
-        return AlertDialog(
-          backgroundColor: palette.surface,
-          elevation: 0,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(StradioRadii.squircle),
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: StradioColors.surfaceCard,
+        title: Text(
+          'Recover unfinished run?',
+          style: StradioTypography.headingSmall(),
+        ),
+        content: Text(
+          'Found an unsaved session with $samplesCount sensor samples (${snapshot.activeDurationSeconds.round()}s).',
+          style: StradioTypography.body(),
+        ),
+        actions: [
+          TextButton(
+            key: const Key('recovery_discard_button'),
+            onPressed: () =>
+                Navigator.of(dialogContext).pop(_RecoveryAction.discard),
+            child: const Text('Discard'),
           ),
-          title: Text(
-            'Unfinished Run Detected',
-            style: StradioTypography.soraHeading(
-              fontSize: 18,
-              color: palette.textPrimary,
-              fontWeight: FontWeight.w700,
-            ),
+          FilledButton(
+            key: const Key('recovery_review_button'),
+            onPressed: () =>
+                Navigator.of(dialogContext).pop(_RecoveryAction.reviewAndSave),
+            child: const Text('Review & Save'),
           ),
-          content: Text(
-            'Stradio found an unsaved run session ($count sensor samples, $durFormatted duration). Would you like to review and save it to your workout history?',
-            style: StradioTypography.interBody(
-              fontSize: 14,
-              color: palette.textSecondary,
-            ),
-          ),
-          actionsPadding:
-              const EdgeInsets.only(left: 20, right: 20, bottom: 20),
-          actions: [
-            TextButton(
-              key: const Key('discard_recovered_session_button'),
-              onPressed: () => Navigator.of(ctx).pop(_RecoveryAction.discard),
-              style: TextButton.styleFrom(
-                foregroundColor: palette.textSecondary,
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              ),
-              child: const Text('Discard'),
-            ),
-            ElevatedButton(
-              key: const Key('review_recovered_session_button'),
-              onPressed: () =>
-                  Navigator.of(ctx).pop(_RecoveryAction.reviewAndSave),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: StradioColors.sonicCoral,
-                foregroundColor: Colors.white,
-                elevation: 0,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(StradioRadii.pill),
-                ),
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-              ),
-              child: const Text(
-                'Review & Save',
-                style: TextStyle(fontWeight: FontWeight.w700),
-              ),
-            ),
-          ],
-        );
-      },
+        ],
+      ),
     );
   }
 
-  Future<void> _recoverAndReviewSession(ActiveSessionSnapshot cached) async {
-    final immutableSamples = List<SensorSample>.unmodifiable(cached.samples);
-    final config = cached.config;
-    final replayBoth = StepDetector.replayBoth(
-      immutableSamples,
-      config.parameters,
+  Future<void> _openRecoveredSummary(ActiveSessionSnapshot snapshot) async {
+    final replay = StepDetector.replayAllFour(
+      snapshot.samples,
+      const AlgorithmParameters(),
     );
-    final replayAllFour = StepDetector.replayAllFour(
-      immutableSamples,
-      config.parameters,
-    );
-
-    final primaryVariant =
-        config.primaryLiveAlgorithm == ThresholdAlgorithm.adaptiveMidpoint
-            ? AlgorithmVariant.a1MidpointRaw
-            : AlgorithmVariant.b1MeanSdRaw;
-    final primaryDetections = replayAllFour[primaryVariant] ?? const [];
-
+    final primaryDetections =
+        replay[AlgorithmVariant.a1MidpointRaw] ?? const <DetectionEvent>[];
     final recording = SavedRecording(
-      recordingId: cached.recordingId,
-      createdAt: cached.createdAt,
-      config: config,
-      samples: immutableSamples,
+      recordingId: snapshot.recordingId,
+      createdAt: snapshot.createdAt,
+      config: snapshot.config,
+      samples: snapshot.samples,
       liveStepCount: primaryDetections.length,
-      replayDetections: replayBoth,
-      replayVariantDetections: replayAllFour,
+      replayDetections: {
+        ThresholdAlgorithm.adaptiveMidpoint: primaryDetections,
+        ThresholdAlgorithm.meanStd:
+            replay[AlgorithmVariant.b1MeanSdRaw] ?? const [],
+      },
+      replayVariantDetections: replay,
+      summaryDurationSeconds: snapshot.activeDurationSeconds,
+      targetBpm: snapshot.targetBpm,
     );
-
     final metrics = RunMetricsCalculator.computeSummary(
       detections: primaryDetections,
-      samples: immutableSamples,
-      activity: config.activity,
-      activeDurationSeconds: math.max(
-        cached.activeDurationSeconds,
-        recording.durationSeconds,
-      ),
-      targetBpm: cached.targetBpm,
+      samples: snapshot.samples,
+      activity: snapshot.config.activity,
+      activeDurationSeconds: snapshot.activeDurationSeconds,
+      targetBpm: snapshot.targetBpm,
+      heightCm: widget.userHeightCm,
+      overrideStepCount: primaryDetections.length,
     );
-
     final health = RunMetricsCalculator.analyzeSensorHealth(
-      samples: immutableSamples,
-      requestedRateHz: config.requestedSamplingRateHz,
+      samples: snapshot.samples,
     );
-
-    if (!mounted) return;
 
     await Navigator.of(context).push<bool>(
       MaterialPageRoute<bool>(
@@ -353,66 +259,13 @@ class _ActiveRunScreenState extends State<ActiveRunScreen>
           sensorHealth: health,
           store: _store,
           postHogService: _postHogService,
-          developerModeEnabled:
-              !widget.isConsumerMode || widget.developerModeEnabled,
+          soundPackId: _audioEngine.activePackId,
         ),
       ),
     );
-
-    await _store.clearActiveSessionCache();
-
-    if (!mounted) return;
-    _resetDetectors();
-    await _initializeRunSession();
   }
 
-  void _resetDetectors() {
-    const params = AlgorithmParameters();
-    _detectors = {
-      for (final variant in AlgorithmVariant.values)
-        variant: StepDetector(
-          algorithm: variant.thresholdAlgorithm,
-          parameters: params,
-          useLinearAcceleration: variant.usesLinearAcceleration,
-        ),
-    };
-    _liveDetections = {
-      for (final variant in AlgorithmVariant.values)
-        variant: <DetectionEvent>[],
-    };
-    _activeSamples.clear();
-    _recentMagnitudes.clear();
-    _recentThresholds.clear();
-    _smoothedBarHeights = List<double>.from(
-      _VerticalRhythmBarsPainter.restingEnvelope,
-    );
-    _targetBarHeights = List<double>.from(
-      _VerticalRhythmBarsPainter.restingEnvelope,
-    );
-    _waveformRepaintNotifier.value++;
-    _sensorHealthNotifier.value = const SensorHealthReport(
-      sampleCount: 0,
-      requestedRateHz: 100.0,
-      effectiveRateHz: 0.0,
-      sampleDrops: 0,
-      latestTimestampNs: 0,
-    );
-    _latestSample = null;
-    _latestPrimaryOutput = null;
-    _activeDurationSeconds = 0.0;
-    _hasStartedRun = false;
-  }
-
-  AlgorithmVariant get _primaryVariant =>
-      _labSettings.primaryAlgorithm == ThresholdAlgorithm.adaptiveMidpoint
-      ? AlgorithmVariant.a1MidpointRaw
-      : AlgorithmVariant.b1MeanSdRaw;
-
-  List<DetectionEvent> get _primaryDetections =>
-      _liveDetections[_primaryVariant] ?? const [];
-
-  Future<void> _initializeRunSession() async {
-    if (!mounted) return;
+  Future<void> _startSensorStream() async {
     setState(() {
       _streamState = _RunStreamState.connecting;
       _sensorErrorText = null;
@@ -420,67 +273,51 @@ class _ActiveRunScreenState extends State<ActiveRunScreen>
 
     try {
       _recordingId = await _store.nextId(DateTime.now());
-    } on Object {
-      final now = DateTime.now();
-      final day =
-          '${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}';
-      _recordingId = 'REC_${day}_001';
-    }
+      final available = await _recordingService.isAccelerometerAvailable(
+        timeout: const Duration(milliseconds: 800),
+      );
+      if (!mounted) return;
 
-    final available = await _recordingService.isAccelerometerAvailable(
-      timeout: const Duration(milliseconds: 1200),
-    );
-    if (!mounted) return;
+      if (!available) {
+        setState(() {
+          _streamState = _RunStreamState.sensorError;
+          _sensorErrorText =
+              'Motion sensor unavailable. Check permissions or use simulated steps.';
+        });
+        _syncRibbonAnimation();
+        return;
+      }
 
-    if (!available) {
-      setState(() {
-        _streamState = _RunStreamState.sensorError;
-        _sensorErrorText =
-            'Accelerometer stream did not respond within 1.2s. Check device sensor permissions or use Simulate Stride (+1) to test on an emulator.';
-      });
-      await _startSensorStream(preserveErrorState: true);
-      return;
-    }
-
-    await _startSensorStream();
-  }
-
-  Future<void> _startSensorStream({bool preserveErrorState = false}) async {
-    if (_recordingService.isRecording) {
-      await _recordingService.stop();
-    }
-    if (!mounted) return;
-
-    try {
+      if (_recordingService.isRecording) {
+        await _recordingService.stop();
+      }
       _recordingService.start(
         _recordingId,
         samplingRateHz: 100.0,
         onSample: _handleIncomingSample,
-        onError: (Object error) {
+        onError: (err) {
           if (!mounted) return;
           setState(() {
             _streamState = _RunStreamState.sensorError;
-            _sensorErrorText = 'Sensor stream error: $error';
+            _sensorErrorText = 'Accelerometer error: $err';
           });
-          _syncWaveformTicker();
+          _syncRibbonAnimation();
         },
       );
 
       if (!mounted) return;
       setState(() {
-        if (!preserveErrorState) {
-          _streamState = _RunStreamState.paused;
-          _sensorErrorText = null;
-        }
+        _streamState = _RunStreamState.paused;
+        _sensorErrorText = null;
       });
-      _syncWaveformTicker();
+      _syncRibbonAnimation();
     } on Object catch (error) {
       if (!mounted) return;
       setState(() {
         _streamState = _RunStreamState.sensorError;
-        _sensorErrorText = 'Could not start accelerometer stream: $error';
+        _sensorErrorText = 'Could not start motion sensor: $error';
       });
-      _syncWaveformTicker();
+      _syncRibbonAnimation();
     }
   }
 
@@ -488,35 +325,16 @@ class _ActiveRunScreenState extends State<ActiveRunScreen>
     _elapsedTimer?.cancel();
     _elapsedTimer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (!mounted || _streamState != _RunStreamState.running) return;
-      setState(() {
-        _activeDurationSeconds += 1.0;
-      });
-      if (_activeSamples.isNotEmpty) {
-        _sensorHealthNotifier.value = RunMetricsCalculator.analyzeSensorHealth(
-          samples: _activeSamples,
-          requestedRateHz: 100.0,
-        );
-      }
-      final liveSpm = _currentLiveCadenceSpm();
-      _audioEngine.updateCadence(liveSpm);
-      if (_foregroundService.isServiceActive) {
-        unawaited(
-          _foregroundService.updateWorkoutService(
-            steps: _primaryDetections.length,
-            targetSteps: _labSettings.targetSteps,
-            activeDurationSeconds: _activeDurationSeconds,
-            targetBpm: _labSettings.targetBpm,
-            algorithmName: _labSettings.primaryAlgorithm.displayName,
-            isRunning: true,
-            soundPackTitle: _audioEngine.activePack.title,
-          ),
-        );
-      }
+      setState(() => _activeDurationSeconds += 1.0);
+      _audioEngine.updateCadence(_currentLiveCadenceSpm());
+      _syncForegroundNotification(isRunning: true);
     });
   }
 
   double _currentLiveCadenceSpm() {
-    final nowNs = _latestSample?.timestampNs ??
+    if (_primaryDetections.length < 2) return 0.0;
+    final nowNs =
+        _latestSample?.timestampNs ??
         DateTime.now().microsecondsSinceEpoch * 1000;
     return RunMetricsCalculator.rollingCadenceSpm(
       detections: _primaryDetections,
@@ -524,12 +342,24 @@ class _ActiveRunScreenState extends State<ActiveRunScreen>
     );
   }
 
+  void _flushActiveSessionCache() {
+    if (_activeSamples.isEmpty) return;
+    final snapshot = ActiveSessionSnapshot(
+      recordingId: _recordingId,
+      createdAt: DateTime.now(),
+      config: _labSettings.toExperimentConfig(),
+      samples: List.of(_activeSamples),
+      activeDurationSeconds: _activeDurationSeconds,
+      targetBpm: _labSettings.targetBpm,
+    );
+    unawaited(_store.saveActiveSessionCache(snapshot));
+  }
+
   void _handleIncomingSample(SensorSample sample) {
     if (!mounted || _streamState != _RunStreamState.running) return;
 
     _activeSamples.add(sample);
     _latestSample = sample;
-
     if (_activeSamples.length % 100 == 0) {
       _flushActiveSessionCache();
     }
@@ -545,54 +375,29 @@ class _ActiveRunScreenState extends State<ActiveRunScreen>
       }
     }
 
-    if (primaryOut != null) {
-      _latestPrimaryOutput = primaryOut;
-      _recentMagnitudes.addLast(primaryOut.smoothedMps2);
-      _recentThresholds.addLast(primaryOut.thresholdMps2);
-      while (_recentMagnitudes.length > 72) {
-        _recentMagnitudes.removeFirst();
-      }
-      while (_recentThresholds.length > 72) {
-        _recentThresholds.removeFirst();
-      }
-      if (primaryOut.step != null) {
-        final liveSpm = RunMetricsCalculator.rollingCadenceSpm(
-          detections: _primaryDetections,
-          currentTimestampNs: sample.timestampNs,
-        );
-        unawaited(_audioEngine.onStepDetected(cadenceSpm: liveSpm));
-        _lastStepFlashAt = DateTime.now();
-        _stepFlashTimer?.cancel();
-        _stepFlashTimer = Timer(const Duration(milliseconds: 240), () {
-          if (mounted) setState(() {});
-        });
-        if (_foregroundService.isServiceActive) {
-          unawaited(
-            _foregroundService.updateWorkoutService(
-              steps: _primaryDetections.length,
-              targetSteps: _labSettings.targetSteps,
-              activeDurationSeconds: _activeDurationSeconds,
-              targetBpm: _labSettings.targetBpm,
-              algorithmName: _labSettings.primaryAlgorithm.displayName,
-              isRunning: true,
-              soundPackTitle: _audioEngine.activePack.title,
-            ),
-          );
-        }
-      }
-      if (primaryOut.step != null || sample.sampleIndex % 3 == 0) {
-        _updateTargetWaveformBars(
-          stepConfirmed: primaryOut.step != null,
-          isStationary: primaryOut.isStationary,
-        );
-      }
-    }
-
     if (primaryOut?.step != null) {
+      final liveSpm = _currentLiveCadenceSpm();
+      unawaited(_audioEngine.onStepDetected(cadenceSpm: liveSpm));
+      _triggerStepRefractionPulse();
+      _syncForegroundNotification(isRunning: true);
       setState(() {});
     }
   }
 
+  void _triggerStepRefractionPulse() {
+    _stepPulseActive = true;
+    if (mounted && !MediaQuery.disableAnimationsOf(context)) {
+      _ribbonController.forward(from: 0.0);
+    }
+    _stepPulseTimer?.cancel();
+    _stepPulseTimer = Timer(const Duration(milliseconds: 180), () {
+      if (mounted) {
+        setState(() => _stepPulseActive = false);
+      }
+    });
+  }
+
+  /// Explicit fallback for emulator/testing when hardware accelerometer is unavailable.
   void _simulateSingleStride() {
     final baseTs = _activeSamples.isEmpty
         ? DateTime.now().microsecondsSinceEpoch * 1000
@@ -627,226 +432,216 @@ class _ActiveRunScreenState extends State<ActiveRunScreen>
       0.1,
     ];
 
-    final previousState = _streamState;
+    final prevState = _streamState;
     _streamState = _RunStreamState.running;
+    if (!_audioEngine.isSessionActive) {
+      unawaited(_audioEngine.startSession());
+    }
 
     for (var i = 0; i < rawAzWave.length; i++) {
-      final sample = SensorSample(
-        recordingId: _recordingId,
-        sampleIndex: _activeSamples.length,
-        timestampNs: baseTs + i * 25000000,
-        axMps2: 0.3,
-        ayMps2: 1.2,
-        azMps2: rawAzWave[i],
-        uxMps2: 0.1,
-        uyMps2: 0.3,
-        uzMps2: linearUzWave[i],
+      _handleIncomingSample(
+        SensorSample(
+          recordingId: _recordingId,
+          sampleIndex: _activeSamples.length,
+          timestampNs: baseTs + i * 25000000,
+          axMps2: 0.3,
+          ayMps2: 1.2,
+          azMps2: rawAzWave[i],
+          uxMps2: 0.1,
+          uyMps2: 0.3,
+          uzMps2: linearUzWave[i],
+        ),
       );
-      _handleIncomingSample(sample);
     }
 
     if (_activeDurationSeconds < 1.0) {
       _activeDurationSeconds = 1.0;
-    } else {
-      _activeDurationSeconds += 0.5;
     }
-
-    if (previousState == _RunStreamState.paused ||
-        previousState == _RunStreamState.sensorError) {
-      _streamState = previousState;
+    if (prevState == _RunStreamState.sensorError) {
+      _streamState = _RunStreamState.sensorError;
     }
-    for (var i = 0; i < _smoothedBarHeights.length; i++) {
-      _smoothedBarHeights[i] = _targetBarHeights[i];
-    }
-    _waveformRepaintNotifier.value++;
-    _sensorHealthNotifier.value = RunMetricsCalculator.analyzeSensorHealth(
-      samples: _activeSamples,
-      requestedRateHz: 100.0,
-    );
     setState(() {});
   }
 
-  Future<void> _togglePauseResume() async {
-    if (_streamState == _RunStreamState.running) {
-      _flushActiveSessionCache();
-      setState(() {
-        _streamState = _RunStreamState.paused;
-      });
-      _syncWaveformTicker();
-      unawaited(_audioEngine.pauseSession());
+  Future<void> _startRunning() async {
+    if (!_recordingService.isRecording &&
+        _streamState != _RunStreamState.sensorError) {
+      await _startSensorStream();
+    }
+    final isFirstStart = !_hasStartedRun;
+    _hasStartedRun = true;
+    setState(() {
+      _streamState = _RunStreamState.running;
+      _sensorErrorText = null;
+    });
+    _syncRibbonAnimation();
+    _startElapsedTicker();
+
+    if (_audioEngine.isSessionActive) {
+      unawaited(_audioEngine.resumeSession());
+    } else {
+      unawaited(_audioEngine.startSession());
+    }
+
+    unawaited(_foregroundService.requestNotificationPermission());
+    unawaited(
+      _foregroundService.startWorkoutService(
+        steps: _primaryDetections.length,
+        targetSteps: _labSettings.targetSteps,
+        activeDurationSeconds: _activeDurationSeconds,
+        targetBpm: _labSettings.targetBpm,
+        algorithmName: _labSettings.primaryAlgorithm.displayName,
+        isRunning: true,
+        soundPackTitle: _audioEngine.activePack.title,
+      ),
+    );
+
+    if (isFirstStart) {
       unawaited(
-        _foregroundService.updateWorkoutService(
-          steps: _primaryDetections.length,
-          targetSteps: _labSettings.targetSteps,
-          activeDurationSeconds: _activeDurationSeconds,
+        _postHogService.captureRunStarted(
+          recordingId: _recordingId,
+          config: _labSettings.toExperimentConfig(),
           targetBpm: _labSettings.targetBpm,
-          algorithmName: _labSettings.primaryAlgorithm.displayName,
-          isRunning: false,
-          soundPackTitle: _audioEngine.activePack.title,
         ),
       );
+    } else {
       unawaited(
-        _postHogService.captureRunPaused(
+        _postHogService.captureRunResumed(
           recordingId: _recordingId,
           participantId: _labSettings.participantId,
           elapsedSeconds: _activeDurationSeconds,
           currentSteps: _primaryDetections.length,
         ),
       );
+    }
+  }
+
+  Future<void> _pauseRunning() async {
+    _flushActiveSessionCache();
+    setState(() => _streamState = _RunStreamState.paused);
+    _syncRibbonAnimation();
+    unawaited(_audioEngine.pauseSession());
+    _syncForegroundNotification(isRunning: false);
+    unawaited(
+      _postHogService.captureRunPaused(
+        recordingId: _recordingId,
+        participantId: _labSettings.participantId,
+        elapsedSeconds: _activeDurationSeconds,
+        currentSteps: _primaryDetections.length,
+      ),
+    );
+  }
+
+  Future<void> _togglePauseResume() async {
+    HapticFeedback.selectionClick();
+    if (_streamState == _RunStreamState.running) {
+      await _pauseRunning();
     } else {
-      if (!_recordingService.isRecording) {
-        await _startSensorStream();
-      }
-      final isFirstStart = !_hasStartedRun;
-      _hasStartedRun = true;
-      setState(() {
-        _streamState = _RunStreamState.running;
-        _sensorErrorText = null;
+      await _startRunning();
+    }
+  }
+
+  void _syncForegroundNotification({required bool isRunning}) {
+    if (!_foregroundService.isServiceActive) return;
+    unawaited(
+      _foregroundService.updateWorkoutService(
+        steps: _primaryDetections.length,
+        targetSteps: _labSettings.targetSteps,
+        activeDurationSeconds: _activeDurationSeconds,
+        targetBpm: _labSettings.targetBpm,
+        algorithmName: _labSettings.primaryAlgorithm.displayName,
+        isRunning: isRunning,
+        soundPackTitle: _audioEngine.activePack.title,
+      ),
+    );
+  }
+
+  void _handleNotificationAction(String actionId) {
+    if (!mounted) return;
+    if (actionId == 'pause_resume') {
+      unawaited(_togglePauseResume());
+    } else if (actionId == 'finish') {
+      unawaited(_finishRun());
+    }
+  }
+
+  void _onHoldTick() {
+    if (!mounted) return;
+    final bucket = (_holdController.value * 5).floor();
+    if (bucket > _lastHapticBucket && _holdController.isAnimating) {
+      _lastHapticBucket = bucket;
+      HapticFeedback.lightImpact();
+    }
+    if (_holdController.isCompleted && !_isFinishing) {
+      HapticFeedback.heavyImpact();
+      unawaited(_finishRun());
+    }
+  }
+
+  void _onHoldStart() {
+    if (_isFinishing) return;
+    _lastHapticBucket = -1;
+    _holdController.forward(from: 0.0);
+  }
+
+  void _onHoldCancelOrShortTap() {
+    if (_isFinishing) return;
+    final wasShort = _holdController.value < 0.95;
+    _holdController.reverse();
+    if (wasShort) {
+      setState(() => _holdHintText = 'Hold 1.5s to end');
+      _holdHintTimer?.cancel();
+      _holdHintTimer = Timer(const Duration(seconds: 2), () {
+        if (mounted) setState(() => _holdHintText = null);
       });
-      _syncWaveformTicker();
-      _startElapsedTicker();
-      if (_audioEngine.isSessionActive) {
-        unawaited(_audioEngine.resumeSession());
-      } else {
-        unawaited(_audioEngine.startSession());
-      }
-      unawaited(_foregroundService.requestNotificationPermission());
-      unawaited(
-        _foregroundService.startWorkoutService(
-          steps: _primaryDetections.length,
-          targetSteps: _labSettings.targetSteps,
-          activeDurationSeconds: _activeDurationSeconds,
-          targetBpm: _labSettings.targetBpm,
-          algorithmName: _labSettings.primaryAlgorithm.displayName,
-          isRunning: true,
-          soundPackTitle: _audioEngine.activePack.title,
-        ),
-      );
-      if (isFirstStart) {
-        unawaited(
-          _postHogService.captureRunStarted(
-            recordingId: _recordingId,
-            config: _labSettings.toExperimentConfig(),
-            targetBpm: _labSettings.targetBpm,
-          ),
-        );
-      } else {
-        unawaited(
-          _postHogService.captureRunResumed(
-            recordingId: _recordingId,
-            participantId: _labSettings.participantId,
-            elapsedSeconds: _activeDurationSeconds,
-            currentSteps: _primaryDetections.length,
-          ),
-        );
-      }
     }
   }
 
   Future<void> _finishRun() async {
+    if (_isFinishing) return;
+    _isFinishing = true;
     _elapsedTimer?.cancel();
-    if (_waveformTicker.isActive) {
-      _waveformTicker.stop();
-    }
+    _ribbonController.stop();
     unawaited(_recordingService.stop());
     unawaited(_audioEngine.stopSession());
     unawaited(_foregroundService.stopWorkoutService());
 
-    final palette = StradioPalette.of(context);
-
-    showDialog<void>(
-      context: context,
-      barrierDismissible: false,
-      barrierColor: Colors.black26,
-      builder: (_) => PopScope(
-        canPop: false,
-        child: Center(
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
-            decoration: BoxDecoration(
-              color: palette.surface,
-              borderRadius: BorderRadius.circular(StradioRadii.squircle),
-              boxShadow: palette.cardShadow,
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const SizedBox(
-                  width: 22,
-                  height: 22,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2.4,
-                    color: StradioColors.sonicCoral,
-                  ),
-                ),
-                const SizedBox(width: 16),
-                Text(
-                  'Processing Workout Data...',
-                  style: StradioTypography.interBody(
-                    fontSize: 14,
-                    color: palette.textPrimary,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
+    final samplesCopy = List<SensorSample>.of(_activeSamples);
+    final replay = StepDetector.replayAllFour(
+      samplesCopy,
+      const AlgorithmParameters(),
     );
-
-    await Future<void>.delayed(const Duration(milliseconds: 30));
-
-    final immutableSamples = List<SensorSample>.unmodifiable(_activeSamples);
-    final config = _labSettings.toExperimentConfig();
-    final replayBoth = StepDetector.replayBoth(
-      immutableSamples,
-      config.parameters,
-    );
-    final replayAllFour = StepDetector.replayAllFour(
-      immutableSamples,
-      config.parameters,
-    );
-
-    final fullRecording = SavedRecording(
+    final recording = SavedRecording(
       recordingId: _recordingId,
       createdAt: DateTime.now(),
-      config: config,
-      samples: immutableSamples,
+      config: _labSettings.toExperimentConfig(),
+      samples: samplesCopy,
       liveStepCount: _primaryDetections.length,
-      replayDetections: replayBoth,
-      replayVariantDetections: replayAllFour,
+      replayDetections: {
+        ThresholdAlgorithm.adaptiveMidpoint:
+            replay[AlgorithmVariant.a1MidpointRaw] ?? const [],
+        ThresholdAlgorithm.meanStd:
+            replay[AlgorithmVariant.b1MeanSdRaw] ?? const [],
+      },
+      replayVariantDetections: replay,
+      summaryDurationSeconds: _activeDurationSeconds,
       targetBpm: _labSettings.targetBpm,
     );
-
     final metrics = RunMetricsCalculator.computeSummary(
       detections: _primaryDetections,
-      samples: immutableSamples,
-      activity: config.activity,
-      activeDurationSeconds: math.max(
-        _activeDurationSeconds,
-        fullRecording.durationSeconds,
-      ),
+      samples: samplesCopy,
+      activity: _labSettings.activity,
+      activeDurationSeconds: _activeDurationSeconds,
       targetBpm: _labSettings.targetBpm,
       heightCm: widget.userHeightCm,
+      overrideStepCount: _primaryDetections.length,
     );
-
-    final recording = (widget.isConsumerMode && !widget.developerModeEnabled)
-        ? fullRecording.toSummaryOnly(
-            activeDurationSeconds: metrics.activeDurationSeconds,
-            cadenceBucketsSpm: metrics.cadenceBucketsSpm,
-            sessionTargetBpm: _labSettings.targetBpm,
-          )
-        : fullRecording;
-
     final health = RunMetricsCalculator.analyzeSensorHealth(
-      samples: immutableSamples,
-      requestedRateHz: config.requestedSamplingRateHz,
+      samples: samplesCopy,
     );
 
     if (!mounted) return;
-    Navigator.of(context, rootNavigator: true).pop();
-
-    final savedAndFinished = await Navigator.of(context).push<bool>(
+    final completed = await Navigator.of(context).push<bool>(
       MaterialPageRoute<bool>(
         builder: (_) => PostRunSummaryScreen(
           recording: recording,
@@ -854,83 +649,24 @@ class _ActiveRunScreenState extends State<ActiveRunScreen>
           sensorHealth: health,
           store: _store,
           postHogService: _postHogService,
-          developerModeEnabled:
-              !widget.isConsumerMode || widget.developerModeEnabled,
+          soundPackId: _audioEngine.activePackId,
         ),
       ),
     );
 
     if (!mounted) return;
-    if (savedAndFinished == true) {
-      unawaited(_store.clearActiveSessionCache());
-      if (widget.isConsumerMode && Navigator.of(context).canPop()) {
-        Navigator.of(context).pop();
-        return;
-      }
-      setState(() {
-        _labSettings = _labSettings.copyWith(
-          trialNumber: _labSettings.trialNumber + 1,
-        );
-        _resetDetectors();
-      });
-      await _initializeRunSession();
-    } else {
-      setState(() {
-        _streamState = _RunStreamState.paused;
-      });
-      if (!_recordingService.isRecording) {
-        await _startSensorStream();
-      }
+    if (completed == true && Navigator.of(context).canPop()) {
+      Navigator.of(context).pop();
+      return;
     }
-  }
 
-  void _updateTargetBpm(int bpm) {
-    setState(() {
-      _labSettings = _labSettings.copyWith(targetBpm: bpm);
-      if (widget.isConsumerMode) {
-        _soundscapeTitle = switch (bpm) {
-          110 => 'Chill Walk',
-          118 => 'Lo-Fi Pace',
-          145 => 'Tempo Jog',
-          165 => 'Neon Stride',
-          180 => 'Sprint Surge',
-          _ => _soundscapeTitle,
-        };
-      }
-    });
-    unawaited(StradioPreferencesService.saveLabSettings(_labSettings));
-    if (_foregroundService.isServiceActive) {
-      unawaited(
-        _foregroundService.updateWorkoutService(
-          steps: _primaryDetections.length,
-          targetSteps: _labSettings.targetSteps,
-          activeDurationSeconds: _activeDurationSeconds,
-          targetBpm: _labSettings.targetBpm,
-          algorithmName: _labSettings.primaryAlgorithm.displayName,
-          isRunning: _streamState == _RunStreamState.running,
-        ),
-      );
-    }
-  }
-
-  void _togglePlacement() {
-    final nextPlacement = _labSettings.phonePlacement == PhonePlacement.pocket
-        ? PhonePlacement.hand
-        : PhonePlacement.pocket;
-    final nextDetail = nextPlacement == PhonePlacement.pocket
-        ? 'Front pocket'
-        : 'Right hand';
-    setState(() {
-      _labSettings = _labSettings.copyWith(
-        phonePlacement: nextPlacement,
-        placementDetail: nextDetail,
-      );
-    });
-    unawaited(StradioPreferencesService.saveLabSettings(_labSettings));
+    // If user backed out of Summary without finishing, return ready to resume.
+    _isFinishing = false;
+    _holdController.reset();
+    await _startSensorStream();
   }
 
   Future<void> _showSoundPackPickerSheet() async {
-    final palette = StradioPalette.of(context);
     await showModalBottomSheet<void>(
       context: context,
       backgroundColor: Colors.transparent,
@@ -943,9 +679,9 @@ class _ActiveRunScreenState extends State<ActiveRunScreen>
               key: const Key('sound_pack_picker_sheet'),
               padding: const EdgeInsets.fromLTRB(20, 14, 20, 20),
               decoration: BoxDecoration(
-                color: palette.surface,
-                borderRadius: BorderRadius.circular(StradioRadii.hero),
-                boxShadow: palette.cardShadow,
+                color: StradioColors.surfaceCard,
+                borderRadius: BorderRadius.circular(StradioRadii.tray),
+                border: Border.all(color: StradioColors.borderSubtle),
               ),
               child: SingleChildScrollView(
                 child: Column(
@@ -957,66 +693,61 @@ class _ActiveRunScreenState extends State<ActiveRunScreen>
                         width: 40,
                         height: 4,
                         decoration: BoxDecoration(
-                          color: palette.textMuted.withValues(alpha: 0.4),
-                          borderRadius: BorderRadius.circular(StradioRadii.pill),
+                          color: StradioColors.borderSubtle,
+                          borderRadius: BorderRadius.circular(StradioRadii.full),
                         ),
                       ),
                     ),
                     const SizedBox(height: 14),
                     Text(
                       'Sound Pack',
-                      style: StradioTypography.soraHeading(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w800,
-                        color: palette.textPrimary,
-                      ),
+                      style: StradioTypography.headingSmall(fontSize: 18),
                     ),
                     const SizedBox(height: 4),
                     Text(
                       'Switch live without interrupting your run',
-                      style: StradioTypography.interBody(
-                        fontSize: 13,
-                        color: palette.textSecondary,
-                      ),
+                      style: StradioTypography.body(fontSize: 13),
                     ),
                     const SizedBox(height: 12),
                     for (final pack in StradioSoundPack.catalog) ...[
                       Material(
                         color: _audioEngine.activePackId == pack.id
-                            ? palette.accentCoral.withValues(alpha: 0.14)
-                            : palette.surfaceSubtle,
-                        borderRadius: BorderRadius.circular(
-                          StradioRadii.control,
-                        ),
+                            ? StradioColors.glowCoralSoft
+                            : StradioColors.warmIvory,
+                        borderRadius: BorderRadius.circular(StradioRadii.lg),
                         child: InkWell(
                           key: Key('sound_pack_option_${pack.code}'),
-                          borderRadius: BorderRadius.circular(
-                            StradioRadii.control,
-                          ),
+                          borderRadius: BorderRadius.circular(StradioRadii.lg),
                           onTap: () {
+                            HapticFeedback.selectionClick();
                             unawaited(_audioEngine.switchPack(pack.id));
+                            unawaited(
+                              StradioPreferencesService.saveActiveSoundPackId(
+                                pack.id,
+                              ),
+                            );
                             setState(() {});
-                            if (_foregroundService.isServiceActive) {
-                              unawaited(
-                                _foregroundService.updateWorkoutService(
-                                  steps: _primaryDetections.length,
-                                  targetSteps: _labSettings.targetSteps,
-                                  activeDurationSeconds: _activeDurationSeconds,
-                                  targetBpm: _labSettings.targetBpm,
-                                  algorithmName:
-                                      _labSettings.primaryAlgorithm.displayName,
-                                  isRunning:
-                                      _streamState == _RunStreamState.running,
-                                  soundPackTitle: pack.title,
-                                ),
-                              );
-                            }
+                            _syncForegroundNotification(
+                              isRunning:
+                                  _streamState == _RunStreamState.running,
+                            );
                             Navigator.of(sheetContext).pop();
                           },
-                          child: Padding(
+                          child: Container(
+                            constraints: const BoxConstraints(minHeight: 56),
                             padding: const EdgeInsets.symmetric(
                               horizontal: 14,
                               vertical: 12,
+                            ),
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(
+                                StradioRadii.lg,
+                              ),
+                              border: Border.all(
+                                color: _audioEngine.activePackId == pack.id
+                                    ? StradioColors.midnight
+                                    : StradioColors.borderSubtle,
+                              ),
                             ),
                             child: Row(
                               children: [
@@ -1024,8 +755,8 @@ class _ActiveRunScreenState extends State<ActiveRunScreen>
                                   Icons.headphones_rounded,
                                   size: 18,
                                   color: _audioEngine.activePackId == pack.id
-                                      ? palette.accentCoral
-                                      : palette.accentViolet,
+                                      ? StradioColors.textAccentDeep
+                                      : StradioColors.twilightPlum,
                                 ),
                                 const SizedBox(width: 12),
                                 Expanded(
@@ -1035,28 +766,21 @@ class _ActiveRunScreenState extends State<ActiveRunScreen>
                                     children: [
                                       Text(
                                         '${pack.title} · ${pack.artist}',
-                                        style: StradioTypography.soraHeading(
-                                          fontSize: 14,
-                                          fontWeight: FontWeight.w700,
-                                          color: palette.textPrimary,
-                                        ),
+                                        style: StradioTypography.pillBadge(),
                                       ),
                                       const SizedBox(height: 2),
                                       Text(
                                         pack.tagline,
-                                        style: StradioTypography.interBody(
-                                          fontSize: 12,
-                                          color: palette.textSecondary,
-                                        ),
+                                        style: StradioTypography.metricLabel(),
                                       ),
                                     ],
                                   ),
                                 ),
                                 if (_audioEngine.activePackId == pack.id)
-                                  Icon(
+                                  const Icon(
                                     Icons.check_circle_rounded,
                                     size: 18,
-                                    color: palette.accentCoral,
+                                    color: StradioColors.midnight,
                                   ),
                               ],
                             ),
@@ -1075,259 +799,51 @@ class _ActiveRunScreenState extends State<ActiveRunScreen>
     );
   }
 
-  Future<void> _showTempoPickerSheet() async {
-    final palette = StradioPalette.of(context);
-    final profile = StradioPreferencesService.loadUserProfile();
-    final strings = StradioStrings.of(profile.language);
-    final bottomInset = MediaQuery.paddingOf(context).bottom;
-
-    await showModalBottomSheet<void>(
-      context: context,
-      backgroundColor: Colors.transparent,
-      isScrollControlled: true,
-      builder: (sheetContext) {
-        return Padding(
-          padding: EdgeInsets.fromLTRB(16, 16, 16, 16 + bottomInset),
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(StradioRadii.hero),
-              boxShadow: palette.cardShadow,
-            ),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(StradioRadii.hero),
-              child: BackdropFilter(
-                filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
-                child: Container(
-                  key: const Key('tempo_picker_sheet'),
-                  padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    color: palette.surface.withValues(
-                      alpha: palette.isDark ? 0.86 : 0.90,
-                    ),
-                    borderRadius: BorderRadius.circular(StradioRadii.hero),
-                    border: Border.all(
-                      color: Colors.white.withValues(
-                        alpha: palette.isDark ? 0.08 : 0.55,
-                      ),
-                    ),
-                  ),
-                  child: SingleChildScrollView(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        Center(
-                          child: Container(
-                            width: 40,
-                            height: 4,
-                            decoration: BoxDecoration(
-                              color: palette.textMuted.withValues(alpha: 0.4),
-                              borderRadius: BorderRadius.circular(
-                                StradioRadii.pill,
-                              ),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 14),
-                        Text(
-                          strings.tempoPickerTitle,
-                          style: StradioTypography.soraHeading(
-                            fontSize: 18,
-                            fontWeight: FontWeight.w800,
-                            color: palette.textPrimary,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          strings.tempoPickerSubtitle,
-                          style: StradioTypography.interBody(
-                            fontSize: 13,
-                            color: palette.textSecondary,
-                          ),
-                        ),
-                        const SizedBox(height: 14),
-                        for (final theme
-                            in StradioSoundscapeTheme.catalog) ...[
-                          _buildTempoOptionTile(
-                            sheetContext: sheetContext,
-                            palette: palette,
-                            theme: theme,
-                            isSelected: _labSettings.targetBpm == theme.bpm,
-                          ),
-                          const SizedBox(height: 8),
-                        ],
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildTempoOptionTile({
-    required BuildContext sheetContext,
-    required StradioPalette palette,
-    required StradioSoundscapeTheme theme,
-    required bool isSelected,
-  }) {
-    final accent = switch (theme.category) {
-      'chill' => StradioColors.statusLive,
-      'fast' => palette.accentCoral,
-      _ => palette.accentViolet,
+  Future<void> _openSensorCalibrationSheet() async {
+    final pipelineState = switch (_streamState) {
+      _RunStreamState.running => SensorPipelineState.active,
+      _RunStreamState.paused => SensorPipelineState.ready,
+      _RunStreamState.connecting => SensorPipelineState.calibrating,
+      _RunStreamState.sensorError => SensorPipelineState.unavailable,
     };
-
-    return Material(
-      color: isSelected
-          ? palette.accentCoral.withValues(alpha: 0.14)
-          : palette.surfaceSubtle,
-      borderRadius: BorderRadius.circular(StradioRadii.card),
-      child: InkWell(
-        key: Key('tempo_option_${theme.bpm}'),
-        borderRadius: BorderRadius.circular(StradioRadii.card),
-        onTap: () {
-          Navigator.of(sheetContext).pop();
-          _updateTargetBpm(theme.bpm);
-        },
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(minHeight: 56),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-            child: Row(
-              children: [
-                Container(
-                  width: 40,
-                  height: 40,
-                  decoration: BoxDecoration(
-                    color: accent.withValues(alpha: 0.16),
-                    borderRadius: BorderRadius.circular(StradioRadii.control),
-                  ),
-                  child: Icon(theme.icon, size: 20, color: accent),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        theme.title,
-                        style: StradioTypography.soraHeading(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w700,
-                          color: palette.textPrimary,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        theme.cadenceRangeLabel,
-                        style: StradioTypography.interBody(
-                          fontSize: 12,
-                          color: palette.textSecondary,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 5,
-                  ),
-                  decoration: BoxDecoration(
-                    color: isSelected ? palette.accentCoral : palette.surface,
-                    borderRadius: BorderRadius.circular(StradioRadii.pill),
-                  ),
-                  child: Text(
-                    '${theme.bpm} BPM',
-                    style: StradioTypography.interLabel(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
-                      color: isSelected ? Colors.white : accent,
-                    ),
-                  ),
-                ),
-                if (isSelected) ...[
-                  const SizedBox(width: 8),
-                  Icon(
-                    Icons.check_circle_rounded,
-                    size: 20,
-                    color: palette.accentCoral,
-                  ),
-                ],
-              ],
-            ),
-          ),
-        ),
-      ),
+    final health = RunMetricsCalculator.analyzeSensorHealth(
+      samples: _activeSamples,
+      requestedRateHz: 100.0,
+    );
+    await SensorCalibrationSheet.show(
+      context,
+      state: pipelineState,
+      healthReport: health,
+      errorMessage: _sensorErrorText,
+      onRetrySensor: _startSensorStream,
+      onSimulateStride: _simulateSingleStride,
     );
   }
 
-  /// Computes target heights for the 28 vertical equalizer bars directly from
-  /// recent magnitude samples with zero intermediate list allocation, letting
-  /// `_waveformTicker` interpolate them at smooth 60 FPS inside a RepaintBoundary.
-  void _updateTargetWaveformBars({
-    required bool stepConfirmed,
-    required bool isStationary,
-  }) {
-    const barCount = 28;
-    final len = _recentMagnitudes.length;
-    if (len == 0) return;
+  String _formatDuration(double seconds) {
+    final s = seconds.round();
+    final mins = (s ~/ 60).toString().padLeft(2, '0');
+    final rem = (s % 60).toString().padLeft(2, '0');
+    return '$mins:$rem';
+  }
 
-    var minV = _recentMagnitudes.first;
-    var maxV = _recentMagnitudes.first;
-    for (final v in _recentMagnitudes) {
-      if (v < minV) minV = v;
-      if (v > maxV) maxV = v;
+  String _formatSteps(int value) {
+    final raw = value.toString();
+    final buf = StringBuffer();
+    for (var i = 0; i < raw.length; i++) {
+      if (i > 0 && (raw.length - i) % 3 == 0) buf.write(',');
+      buf.write(raw[i]);
     }
-    final rawSpan = maxV - minV;
-    final isActuallyStill = isStationary || len < 2 || rawSpan < 0.35;
-
-    if (isActuallyStill) {
-      for (var i = 0; i < barCount; i++) {
-        final envelopeWeight = _VerticalRhythmBarsPainter.restingEnvelope[i];
-        _targetBarHeights[i] = (envelopeWeight * 0.35).clamp(0.10, 0.35);
-      }
-    } else {
-      final span = math.max(5.0, rawSpan);
-      final boost = stepConfirmed ? 1.18 : 1.0;
-      var idx = 0;
-      var nextTargetBar = 0;
-
-      for (final sampleVal in _recentMagnitudes) {
-        while (nextTargetBar < barCount) {
-          final desiredIdx =
-              ((nextTargetBar / (barCount - 1)) * (len - 1)).round();
-          if (desiredIdx != idx) break;
-          final envelopeWeight =
-              _VerticalRhythmBarsPainter.restingEnvelope[nextTargetBar];
-          final dynamicRatio = ((sampleVal - minV) / span).clamp(0.12, 1.0);
-          _targetBarHeights[nextTargetBar] =
-              ((dynamicRatio * 0.72 + envelopeWeight * 0.28) * boost).clamp(
-                0.14,
-                0.98,
-              );
-          nextTargetBar++;
-        }
-        if (nextTargetBar >= barCount) break;
-        idx++;
-      }
-    }
-
-    if (_streamState == _RunStreamState.running && !_waveformTicker.isActive) {
-      _waveformTicker.start();
-    }
+    return buf.toString();
   }
 
   @override
   void dispose() {
     _elapsedTimer?.cancel();
-    _stepFlashTimer?.cancel();
-    _waveformTicker.dispose();
-    _waveformRepaintNotifier.dispose();
-    _sensorHealthNotifier.dispose();
+    _stepPulseTimer?.cancel();
+    _holdHintTimer?.cancel();
+    _ribbonController.dispose();
+    _holdController.dispose();
     _foregroundService.removeActionListener(_handleNotificationAction);
     unawaited(_foregroundService.stopWorkoutService());
     if (_ownsAudioEngine) {
@@ -1341,1380 +857,513 @@ class _ActiveRunScreenState extends State<ActiveRunScreen>
 
   @override
   Widget build(BuildContext context) {
-    final palette = StradioPalette.of(context);
-    final primarySteps = _primaryDetections.length;
-    final formattedSteps = formatStepCount(primarySteps);
-
-    final metrics = RunMetricsCalculator.computeSummary(
-      detections: _primaryDetections,
-      samples: _activeSamples,
-      activity: _labSettings.activity,
-      activeDurationSeconds: _activeDurationSeconds,
-      targetBpm: _labSettings.targetBpm,
-      heightCm: widget.userHeightCm,
-    );
-
-    final stepFlashActive =
-        _lastStepFlashAt != null &&
-        DateTime.now().difference(_lastStepFlashAt!) <
-            const Duration(milliseconds: 240);
-
-    final disableAnimations = MediaQuery.disableAnimationsOf(context);
+    final steps = _primaryDetections.length;
+    final liveSpm = _currentLiveCadenceSpm();
+    final hasCadence = liveSpm > 0;
     final isRunning = _streamState == _RunStreamState.running;
+    final isJogZone = liveSpm >= StradioAudioEngine.joggingEntrySpm;
+    final reducedMotion = MediaQuery.disableAnimationsOf(context);
+
+    final (pillLabel, dotColor) = switch (_streamState) {
+      _RunStreamState.running => (
+        isJogZone ? 'Active Stride' : 'Walking groove',
+        isJogZone ? StradioColors.sonicCoral : StradioColors.rhythmViolet,
+      ),
+      _RunStreamState.paused => ('Paused', StradioColors.statusPaused),
+      _RunStreamState.connecting => ('Calibrating', StradioColors.twilightPlum),
+      _RunStreamState.sensorError => ('Standby', StradioColors.textAccentDeep),
+    };
 
     return Scaffold(
-      backgroundColor: palette.canvas,
-      body: Stack(
-        children: [
-          // Calm ambient wash gently shifting hue between Standby & Running
-          Positioned(
-            top: -120,
-            left: -80,
-            right: -80,
-            height: 360,
-            child: IgnorePointer(
-              child: AnimatedContainer(
-                duration: disableAnimations
-                    ? Duration.zero
-                    : const Duration(milliseconds: 450),
-                curve: Curves.easeOutCubic,
-                decoration: BoxDecoration(
-                  gradient: RadialGradient(
-                    center: Alignment.topCenter,
-                    radius: 0.95,
-                    colors: [
-                      (isRunning ? palette.accentCoral : palette.accentViolet)
-                          .withValues(alpha: palette.isDark ? 0.13 : 0.09),
-                      palette.canvas.withValues(alpha: 0.0),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ),
-          SafeArea(
-            child: LayoutBuilder(
-          builder: (context, constraints) {
-            final isWide = constraints.maxWidth >= 900;
-            final isTablet = constraints.maxWidth >= 600;
-            final horizontalPad = isWide ? 40.0 : (isTablet ? 28.0 : 20.0);
-            final isCompactHeight = constraints.maxHeight < 760;
-
-            return Center(
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 960),
-                child: Column(
-                  children: [
-                    // 1. Editorial Top Bar (Profile + Status | Theme Toggle + Labs)
-                    Padding(
-                      padding: EdgeInsets.fromLTRB(
-                        horizontalPad,
-                        isCompactHeight ? 8 : 12,
-                        horizontalPad,
-                        4,
-                      ),
-                      child: _ActiveRunTopBar(
-                        streamState: _streamState,
-                        participantId: _labSettings.participantId,
-                        isDark: palette.isDark,
-                        showBackButton:
-                            widget.isConsumerMode &&
-                            Navigator.of(context).canPop(),
-                        onToggleTheme: widget.onToggleThemeMode,
-                      ),
-                    ),
-
-                    // 2. Main Content Area (Zero-Scroll Unified Stride Deck in normal mode)
-                    Expanded(
-                      child: SingleChildScrollView(
-                        padding: EdgeInsets.symmetric(
-                          horizontal: horizontalPad,
-                          vertical: isCompactHeight ? 6 : 10,
-                        ),
+      backgroundColor: StradioColors.warmIvory,
+      body: SafeArea(
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 480),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(24, 16, 24, 20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  // Top Bar: Dual-Tone Stacked Header (Stride / Rhythm) + 48dp Sensor Button
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
                         child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            // Editorial Greeting & Tempo Header (Point 7.1)
-                            _EditorialRunHeader(
-                              targetBpm: _labSettings.targetBpm,
-                              algorithmCode: _primaryVariant.code,
-                              soundscapeTitle: _soundscapeTitle,
-                              activeSoundPackTitle: _audioEngine.activePack.title,
-                              phonePlacement: _labSettings.phonePlacement,
-                              showAlgorithmBadge:
-                                  !widget.isConsumerMode ||
-                                  widget.developerModeEnabled,
-                              onOpenTempoPicker: _showTempoPickerSheet,
-                              onOpenSoundPackPicker: _showSoundPackPickerSheet,
-                              onTogglePlacement: _togglePlacement,
+                            Text(
+                              'Stride',
+                              style: StradioTypography.titlePrimary(),
                             ),
-                            SizedBox(height: isCompactHeight ? 10 : 14),
-
-                            // State Banners (Loading / Error / Standby fallback)
-                            if (_streamState == _RunStreamState.connecting)
-                              _StatusStateBanner(
-                                icon: Icons.sensors,
-                                accentColor: palette.accentViolet,
-                                message:
-                                    'Connecting to 100 Hz accelerometer stream...',
-                              )
-                            else if (_streamState ==
-                                    _RunStreamState.sensorError &&
-                                _sensorErrorText != null)
-                              _StatusStateBanner(
-                                icon: Icons.warning_amber_rounded,
-                                accentColor: StradioColors.statusError,
-                                message: _sensorErrorText!,
-                                actionLabel: 'Simulate Stride (+1)',
-                                onAction: _simulateSingleStride,
-                              ),
-
-                            // Developer Mode Live Overlay (Only when toggled ON in Sensor Labs)
-                            if (_labSettings.developerOverlayEnabled) ...[
-                              _DeveloperTelemetryOverlay(
-                                latestSample: _latestSample,
-                                latestOutput: _latestPrimaryOutput,
-                                liveCounts: {
-                                  for (final v in AlgorithmVariant.values)
-                                    v: _liveDetections[v]?.length ?? 0,
-                                },
-                                targetSteps: _labSettings.targetSteps,
-                                onSimulateStride: _simulateSingleStride,
-                              ),
-                              const SizedBox(height: 12),
-                            ],
-
-                            // 3. Hero Waveform Card (28px Deep Pebble, Vertical Rhythm Bars)
-                            _AudioStrideVisualizerCard(
-                              smoothedBarHeights: _smoothedBarHeights,
-                              waveformRepaint: _waveformRepaintNotifier,
-                              isRunning:
-                                  _streamState == _RunStreamState.running,
-                              isStationary:
-                                  _latestPrimaryOutput?.isStationary ?? true,
-                              stepFlashActive: stepFlashActive,
-                              targetBpm: _labSettings.targetBpm,
-                              cadenceSpm: metrics.liveCadenceSpm.round(),
-                              height: isTablet
-                                  ? 215
-                                  : (isCompactHeight ? 168 : 188),
-                              onCenterPlayTap: _togglePauseResume,
-                            ),
-                            SizedBox(height: isCompactHeight ? 12 : 16),
-
-                            // 4. Unified Stride Goal & 3-Column Metrics Deck (20px Squircle)
-                            _UnifiedStrideDeck(
-                              formattedSteps: formattedSteps,
-                              primarySteps: primarySteps,
-                              targetSteps: _labSettings.targetSteps,
-                              stepFlashActive: stepFlashActive,
-                              cadenceText:
-                                  '${metrics.liveCadenceSpm.round()} SPM',
-                              elapsedText: metrics.formattedDuration,
-                              speedText:
-                                  '${metrics.speedKmh.toStringAsFixed(1)} km/h',
-                              isCompact: isCompactHeight,
+                            Text(
+                              'Rhythm',
+                              style: StradioTypography.titleMuted(),
                             ),
                           ],
                         ),
                       ),
-                    ),
+                      Semantics(
+                        button: true,
+                        label: 'Motion sensor status and calibration',
+                        child: IconButton(
+                          key: const Key('active_run_sensor_button'),
+                          onPressed: _openSensorCalibrationSheet,
+                          tooltip: 'Sensor status',
+                          style: IconButton.styleFrom(
+                            backgroundColor: StradioColors.surfaceCard,
+                            minimumSize: const Size(48, 48),
+                            side: const BorderSide(
+                              color: StradioColors.borderSubtle,
+                            ),
+                            shape: const CircleBorder(),
+                          ),
+                          icon: Icon(
+                            Icons.sensors_rounded,
+                            size: 20,
+                            color: _streamState == _RunStreamState.sensorError
+                                ? StradioColors.textAccentDeep
+                                : StradioColors.textPrimary,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
 
-                    // 5. Thumb-Zone Bottom Control Deck (28px Hero + 999px Stadium)
-                    Padding(
-                      padding: EdgeInsets.fromLTRB(
-                        horizontalPad,
-                        6,
-                        horizontalPad,
-                        isCompactHeight ? 10 : 14,
-                      ),
-                      child: _BottomControlDeck(
-                        isRunning: _streamState == _RunStreamState.running,
-                        onTogglePauseResume: _togglePauseResume,
-                        onFinishRun: _finishRun,
-                      ),
+                  // Honest Loading / Error Inline Banner (R-27)
+                  if (_streamState == _RunStreamState.connecting) ...[
+                    const SizedBox(height: 10),
+                    _InlineStatusStrip(
+                      dotColor: StradioColors.twilightPlum,
+                      message: 'Calibrating motion sensor...',
+                    ),
+                  ] else if (_streamState == _RunStreamState.sensorError) ...[
+                    const SizedBox(height: 10),
+                    _InlineStatusStrip(
+                      dotColor: StradioColors.textAccentDeep,
+                      message:
+                          _sensorErrorText ?? 'Motion sensor unavailable.',
+                      actionLabel: 'Simulate stride (+1)',
+                      actionKey: const Key('simulate_stride_banner_button'),
+                      onAction: _simulateSingleStride,
                     ),
                   ],
-                ),
-              ),
-            );
-          },
-        ),
-      ),
-    ],
-  ),
-);
-  }
-}
 
-class _ActiveRunTopBar extends StatelessWidget {
-  const _ActiveRunTopBar({
-    required this.streamState,
-    required this.participantId,
-    required this.isDark,
-    this.showBackButton = false,
-    required this.onToggleTheme,
-  });
+                  // Central 256px Circular Acoustic Dial + 136px LiquidGlassLens (Glass 1 of 2)
+                  Expanded(
+                    child: LayoutBuilder(
+                      builder: (context, constraints) {
+                        final dialSize = math
+                            .min(constraints.maxWidth, constraints.maxHeight)
+                            .clamp(196.0, 264.0);
+                        final lensSize = dialSize * 0.53;
 
-  final _RunStreamState streamState;
-  final String participantId;
-  final bool isDark;
-  final bool showBackButton;
-  final VoidCallback? onToggleTheme;
+                        return Center(
+                          child: SizedBox(
+                            width: dialSize,
+                            height: dialSize,
+                            child: Stack(
+                              alignment: Alignment.center,
+                              children: [
+                                Container(
+                                  width: dialSize,
+                                  height: dialSize,
+                                  decoration: const BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    color: StradioColors.surfaceRecessed,
+                                  ),
+                                  clipBehavior: Clip.antiAlias,
+                                  child: AnimatedBuilder(
+                                    animation: _ribbonController,
+                                    builder: (_, _) {
+                                      final phase = reducedMotion
+                                          ? 0.4
+                                          : 0.4 +
+                                                steps * 0.65 +
+                                                _ribbonController.value * 0.9;
+                                      return CustomPaint(
+                                        painter: SonicRibbonPainter(
+                                          phase: phase,
+                                          amplitude: isRunning ? 0.80 : 0.42,
+                                          pulseBoost: _stepPulseActive
+                                              ? 1.0
+                                              : 0.0,
+                                          strokeWidth: 2.6,
+                                        ),
+                                      );
+                                    },
+                                  ),
+                                ),
 
-  @override
-  Widget build(BuildContext context) {
-    final palette = StradioPalette.of(context);
-    final (statusLabel, dotColor) = switch (streamState) {
-      _RunStreamState.running => ('RUNNING', StradioColors.statusLive),
-      _RunStreamState.paused => ('PAUSED', StradioColors.statusPaused),
-      _RunStreamState.connecting => ('CONNECTING', palette.accentViolet),
-      _RunStreamState.sensorError => ('STANDBY', StradioColors.statusPaused),
-    };
+                                // 4 Cardinal Acoustic Markers
+                                Positioned(
+                                  top: 14,
+                                  child: _CardinalMarker(
+                                    label: 'kick',
+                                    dotColor: StradioColors.sonicCoral,
+                                  ),
+                                ),
+                                Positioned(
+                                  bottom: 14,
+                                  child: _CardinalMarker(
+                                    label: 'bass',
+                                    dotColor: StradioColors.twilightPlum,
+                                  ),
+                                ),
+                                Positioned(
+                                  left: 14,
+                                  child: _CardinalMarker(
+                                    label: 'sync',
+                                    dotColor: StradioColors.midnight,
+                                    dotFirst: true,
+                                  ),
+                                ),
+                                Positioned(
+                                  right: 14,
+                                  child: _CardinalMarker(
+                                    label: 'stem',
+                                    dotColor: StradioColors.rhythmViolet,
+                                    dotFirst: true,
+                                  ),
+                                ),
 
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        // Left: Optional Back Button + Official Stradio Brand Logo + Dynamic Status Pill
-        Flexible(
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (showBackButton) ...[
-                IconButton(
-                  key: const Key('active_run_back_button'),
-                  onPressed: () => Navigator.of(context).maybePop(),
-                  tooltip: 'Back',
-                  style: IconButton.styleFrom(
-                    backgroundColor: palette.surface,
-                    minimumSize: const Size(44, 44),
-                    shape: const CircleBorder(),
+                                // Central 136px LiquidGlassLens reacting <30ms on footstrike
+                                AnimatedScale(
+                                  scale: (_stepPulseActive && !reducedMotion)
+                                      ? 1.05
+                                      : 1.0,
+                                  duration: const Duration(milliseconds: 140),
+                                  curve: Curves.easeOutCubic,
+                                  child: LiquidGlassLens(
+                                    key: const Key('active_run_glass_lens'),
+                                    shape: LiquidGlassShape.circle,
+                                    width: lensSize,
+                                    height: lensSize,
+                                    edgeIntensity: _stepPulseActive
+                                        ? 0.065
+                                        : 0.032,
+                                    rippleEffect: _stepPulseActive
+                                        ? 0.24
+                                        : 0.08,
+                                    child: Column(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.center,
+                                      children: [
+                                        Text(
+                                          hasCadence
+                                              ? '${liveSpm.round()}'
+                                              : '--',
+                                          style: StradioTypography.metricValue(
+                                            fontSize: 28,
+                                          ),
+                                        ),
+                                        Text(
+                                          'spm',
+                                          style:
+                                              StradioTypography.metricLabel(),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
+                    ),
                   ),
-                  icon: Icon(
-                    Icons.arrow_back_rounded,
-                    color: palette.textPrimary,
-                    size: 20,
+
+                  // 2 Borderless Metrics directly on Warm Ivory (Steps & Cadence)
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Steps',
+                            style: StradioTypography.metricLabel(),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            _formatSteps(steps),
+                            key: const Key('active_run_step_count'),
+                            style: StradioTypography.metricValue(),
+                          ),
+                        ],
+                      ),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          Text(
+                            'Cadence',
+                            style: StradioTypography.metricLabel(),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            hasCadence ? '${liveSpm.round()} spm' : '-- spm',
+                            key: const Key('active_run_cadence_value'),
+                            style: StradioTypography.metricValue(),
+                          ),
+                        ],
+                      ),
+                    ],
                   ),
-                ),
-                const SizedBox(width: 8),
-              ],
-              Image.asset(
-                'assets/images/stradio-logo.png',
-                key: const Key('stradio_header_logo'),
-                height: 28,
-                fit: BoxFit.contain,
-              ),
-              const SizedBox(width: 12),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 7,
-                ),
-                decoration: BoxDecoration(
-                  color: palette.surface,
-                  borderRadius: BorderRadius.circular(StradioRadii.pill),
-                  boxShadow: palette.cardShadow,
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      key: const Key('status_indicator_dot'),
-                      width: 8,
-                      height: 8,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: dotColor,
+                  const SizedBox(height: 8),
+
+                  // Calm 1-line helper for empty/0-step state or Hold-to-End hint
+                  SizedBox(
+                    height: 20,
+                    child: Center(
+                      child: Text(
+                        _holdHintText ??
+                            (steps == 0
+                                ? 'Take a step to trigger audio'
+                                : '${_formatDuration(_activeDurationSeconds)} · ${_audioEngine.activePack.title}'),
+                        key: const Key('active_run_helper_text'),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: StradioTypography.body(
+                          fontSize: 13,
+                          color: _holdHintText != null
+                              ? StradioColors.textAccentDeep
+                              : StradioColors.textSecondary,
+                        ),
                       ),
                     ),
-                    const SizedBox(width: 6),
-                    Text(
-                      statusLabel,
-                      overflow: TextOverflow.ellipsis,
-                      style: StradioTypography.interLabel(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w700,
-                        color: palette.textPrimary,
-                        letterSpacing: 0.8,
-                      ),
+                  ),
+                  const SizedBox(height: 12),
+
+                  // Bottom LiquidGlassLens Dock Cradle (Glass 2 of 2)
+                  LiquidGlassLens(
+                    key: const Key('active_run_bottom_dock'),
+                    shape: LiquidGlassShape.pill,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 8,
                     ),
-                  ],
-                ),
+                    child: Row(
+                      children: [
+                        // Left 48dp Circle: Zero-Interruption 6-Sound-Pack Swap
+                        Semantics(
+                          button: true,
+                          label: 'Switch sound pack',
+                          child: IconButton(
+                            key: const Key('sound_pack_selector_button'),
+                            onPressed: _showSoundPackPickerSheet,
+                            tooltip: 'Switch sound pack',
+                            style: IconButton.styleFrom(
+                              backgroundColor: StradioColors.surfaceCard,
+                              minimumSize: const Size(48, 48),
+                              side: const BorderSide(
+                                color: StradioColors.borderSubtle,
+                              ),
+                              shape: const CircleBorder(),
+                            ),
+                            icon: const Icon(
+                              Icons.headphones_rounded,
+                              size: 20,
+                              color: StradioColors.textPrimary,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+
+                        // Center Solid Midnight Pill: Active Status + Pause/Resume
+                        Expanded(
+                          child: Material(
+                            color: StradioColors.midnight,
+                            borderRadius: BorderRadius.circular(
+                              StradioRadii.full,
+                            ),
+                            child: InkWell(
+                              key: const Key('pause_resume_run_button'),
+                              borderRadius: BorderRadius.circular(
+                                StradioRadii.full,
+                              ),
+                              onTap: _togglePauseResume,
+                              child: SizedBox(
+                                height: 48,
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Container(
+                                      key: const Key('status_indicator_dot'),
+                                      width: 6,
+                                      height: 6,
+                                      decoration: BoxDecoration(
+                                        shape: BoxShape.circle,
+                                        color: dotColor,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Flexible(
+                                      child: Text(
+                                        pillLabel,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: StradioTypography.pillBadge(
+                                          color: StradioColors.textOnDark,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+
+                        // Right 48dp Circle: Hold 1.5s to End Session (Anti-Accidental Trigger)
+                        Semantics(
+                          button: true,
+                          label: 'Hold 1.5 seconds to end run',
+                          child: Listener(
+                            key: const Key('hold_to_end_run_button'),
+                            behavior: HitTestBehavior.opaque,
+                            onPointerDown: (_) => _onHoldStart(),
+                            onPointerUp: (_) => _onHoldCancelOrShortTap(),
+                            onPointerCancel: (_) => _onHoldCancelOrShortTap(),
+                            child: AnimatedBuilder(
+                              animation: _holdController,
+                              builder: (_, _) {
+                                return SizedBox(
+                                  width: 48,
+                                  height: 48,
+                                  child: Stack(
+                                    alignment: Alignment.center,
+                                    children: [
+                                      Container(
+                                        width: 48,
+                                        height: 48,
+                                        decoration: BoxDecoration(
+                                          shape: BoxShape.circle,
+                                          color: StradioColors.surfaceCard,
+                                          border: Border.all(
+                                            color: StradioColors.borderSubtle,
+                                          ),
+                                        ),
+                                      ),
+                                      if (_holdController.value > 0)
+                                        SizedBox(
+                                          width: 48,
+                                          height: 48,
+                                          child: CircularProgressIndicator(
+                                            value: _holdController.value,
+                                            strokeWidth: 3.0,
+                                            color: StradioColors.sonicCoral,
+                                            backgroundColor: Colors.transparent,
+                                          ),
+                                        ),
+                                      const Icon(
+                                        Icons.stop_rounded,
+                                        size: 20,
+                                        color: StradioColors.textPrimary,
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              },
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
         ),
-
-        // Right: Theme Mode Toggle (Light/Dark)
-        Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (onToggleTheme != null)
-              IconButton(
-                key: const Key('theme_mode_toggle_button'),
-                onPressed: onToggleTheme,
-                tooltip: isDark
-                    ? 'Switch to Warm Ivory Light Mode'
-                    : 'Switch to Deep Obsidian Dark Mode',
-                style: IconButton.styleFrom(
-                  backgroundColor: palette.surface,
-                  minimumSize: const Size(44, 44),
-                  shape: const CircleBorder(),
-                ),
-                icon: Icon(
-                  isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
-                  color: palette.textPrimary,
-                  size: 20,
-                ),
-              ),
-          ],
-        ),
-      ],
+      ),
     );
   }
 }
 
-class _EditorialRunHeader extends StatelessWidget {
-  const _EditorialRunHeader({
-    required this.targetBpm,
-    required this.algorithmCode,
-    required this.phonePlacement,
-    this.soundscapeTitle = 'Neon Stride',
-    this.activeSoundPackTitle = 'Breakbeat Fvnky',
-    this.showAlgorithmBadge = true,
-    required this.onOpenTempoPicker,
-    required this.onOpenSoundPackPicker,
-    required this.onTogglePlacement,
+class _CardinalMarker extends StatelessWidget {
+  const _CardinalMarker({
+    required this.label,
+    required this.dotColor,
+    this.dotFirst = false,
   });
 
-  final int targetBpm;
-  final String algorithmCode;
-  final PhonePlacement phonePlacement;
-  final String soundscapeTitle;
-  final String activeSoundPackTitle;
-  final bool showAlgorithmBadge;
-  final VoidCallback onOpenTempoPicker;
-  final VoidCallback onOpenSoundPackPicker;
-  final VoidCallback onTogglePlacement;
+  final String label;
+  final Color dotColor;
+  final bool dotFirst;
 
   @override
   Widget build(BuildContext context) {
-    final palette = StradioPalette.of(context);
-    final language = StradioPreferencesService.loadUserProfile().language;
-    final strings = StradioStrings.of(language);
-    final isPocket = phonePlacement == PhonePlacement.pocket;
+    final dot = Container(
+      width: 5,
+      height: 5,
+      decoration: BoxDecoration(shape: BoxShape.circle, color: dotColor),
+    );
+    final text = Text(label, style: StradioTypography.metricLabel());
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Expanded(
-              child: RichText(
-                text: TextSpan(
-                  style: StradioTypography.soraHeading(
-                    fontSize: 24,
-                    fontWeight: FontWeight.w800,
-                    color: palette.textPrimary,
-                    letterSpacing: -0.5,
-                  ),
-                  children: [
-                    const TextSpan(text: 'Run the '),
-                    TextSpan(
-                      text: 'Vibe',
-                      style: TextStyle(color: palette.accentCoral),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(width: 8),
-
-            // Custom Frosted Tempo & Soundscape Picker Trigger Pill
-            Material(
-              color: palette.surface,
-              borderRadius: BorderRadius.circular(StradioRadii.pill),
-              child: InkWell(
-                key: const Key('tempo_bpm_selector_button'),
-                borderRadius: BorderRadius.circular(StradioRadii.pill),
-                onTap: onOpenTempoPicker,
-                child: Container(
-                  key: const Key('utility_bpm_selector_button'),
-                  constraints: const BoxConstraints(minHeight: 40),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 14,
-                    vertical: 8,
-                  ),
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(StradioRadii.pill),
-                    boxShadow: palette.cardShadow,
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        Icons.graphic_eq_rounded,
-                        size: 16,
-                        color: palette.accentViolet,
-                      ),
-                      const SizedBox(width: 6),
-                      Text(
-                        '$targetBpm BPM',
-                        style: StradioTypography.interLabel(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w700,
-                          color: palette.textPrimary,
-                          letterSpacing: 0.3,
-                        ),
-                      ),
-                      const SizedBox(width: 4),
-                      Icon(
-                        Icons.keyboard_arrow_down_rounded,
-                        size: 16,
-                        color: palette.textSecondary,
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 6),
-        Wrap(
-          crossAxisAlignment: WrapCrossAlignment.center,
-          spacing: 8,
-          runSpacing: 6,
-          children: [
-            Text(
-              '$soundscapeTitle · Adaptive Stride',
-              key: const Key('soundscape_title_text'),
-              overflow: TextOverflow.ellipsis,
-              style: StradioTypography.interLabel(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: palette.textSecondary,
-                letterSpacing: 0.2,
-              ),
-            ),
-            // Live Zero-Interruption Sound Pack Switcher Pill
-            Material(
-              color: palette.surfaceSubtle,
-              borderRadius: BorderRadius.circular(StradioRadii.pill),
-              child: InkWell(
-                key: const Key('sound_pack_selector_button'),
-                borderRadius: BorderRadius.circular(StradioRadii.pill),
-                onTap: onOpenSoundPackPicker,
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 5,
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        Icons.headphones_rounded,
-                        size: 13,
-                        color: palette.accentCoral,
-                      ),
-                      const SizedBox(width: 5),
-                      Text(
-                        activeSoundPackTitle,
-                        style: StradioTypography.interLabel(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w700,
-                          color: palette.textPrimary,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-            // Optional Lightweight Hand / Pocket Placement Pill
-            Material(
-              color: palette.surfaceSubtle,
-              borderRadius: BorderRadius.circular(StradioRadii.pill),
-              child: InkWell(
-                key: const Key('utility_placement_selector_button'),
-                borderRadius: BorderRadius.circular(StradioRadii.pill),
-                onTap: onTogglePlacement,
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 5,
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        isPocket
-                            ? Icons.smartphone_rounded
-                            : Icons.pan_tool_alt_rounded,
-                        size: 13,
-                        color: palette.accentCoral,
-                      ),
-                      const SizedBox(width: 5),
-                      Text(
-                        isPocket
-                            ? strings.placementPocketLabel
-                            : strings.placementHandLabel,
-                        style: StradioTypography.interLabel(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w700,
-                          color: palette.textPrimary,
-                          letterSpacing: 0.2,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-            if (showAlgorithmBadge)
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 8,
-                  vertical: 4,
-                ),
-                decoration: BoxDecoration(
-                  color: palette.surfaceSubtle,
-                  borderRadius: BorderRadius.circular(StradioRadii.pill),
-                ),
-                child: Text(
-                  '$algorithmCode Midpoint',
-                  style: StradioTypography.interLabel(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w600,
-                    color: palette.textSecondary,
-                    letterSpacing: 0.2,
-                  ),
-                ),
-              ),
-          ],
-        ),
-      ],
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: dotFirst
+          ? [dot, const SizedBox(width: 4), text]
+          : [text, const SizedBox(width: 4), dot],
     );
   }
 }
 
-class _StatusStateBanner extends StatelessWidget {
-  const _StatusStateBanner({
-    required this.icon,
-    required this.accentColor,
+class _InlineStatusStrip extends StatelessWidget {
+  const _InlineStatusStrip({
+    required this.dotColor,
     required this.message,
     this.actionLabel,
+    this.actionKey,
     this.onAction,
   });
 
-  final IconData icon;
-  final Color accentColor;
+  final Color dotColor;
   final String message;
   final String? actionLabel;
+  final Key? actionKey;
   final VoidCallback? onAction;
 
   @override
   Widget build(BuildContext context) {
-    final palette = StradioPalette.of(context);
-
     return Container(
-      margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(
-        color: palette.surface,
-        borderRadius: BorderRadius.circular(StradioRadii.squircle),
-        boxShadow: palette.cardShadow,
+        color: StradioColors.surfaceCard,
+        borderRadius: BorderRadius.circular(StradioRadii.lg),
+        border: Border.all(color: StradioColors.borderSubtle),
       ),
       child: Row(
         children: [
-          Icon(icon, color: accentColor, size: 20),
-          const SizedBox(width: 10),
+          Container(
+            width: 6,
+            height: 6,
+            decoration: BoxDecoration(shape: BoxShape.circle, color: dotColor),
+          ),
+          const SizedBox(width: 8),
           Expanded(
             child: Text(
               message,
-              style: StradioTypography.interBody(
+              style: StradioTypography.body(
                 fontSize: 12,
-                color: palette.textPrimary,
+                color: StradioColors.textPrimary,
               ),
             ),
           ),
-          if (actionLabel != null && onAction != null) ...[
-            const SizedBox(width: 8),
+          if (actionLabel != null && onAction != null)
             TextButton(
-              key: const Key('simulate_stride_banner_button'),
+              key: actionKey,
               onPressed: onAction,
+              style: TextButton.styleFrom(
+                foregroundColor: StradioColors.textAccentDeep,
+                minimumSize: const Size(44, 44),
+              ),
               child: Text(actionLabel!),
             ),
-          ],
         ],
-      ),
-    );
-  }
-}
-
-/// Hero Waveform Card (28px Deep Pebble Squircle, 100% Borderless).
-///
-/// Renders vertical stadium-capped rhythm equalizer bars (Reference 2) reactive
-/// to real-time 100 Hz foot-strike accelerometer magnitudes.
-class _AudioStrideVisualizerCard extends StatelessWidget {
-  const _AudioStrideVisualizerCard({
-    required this.smoothedBarHeights,
-    required this.waveformRepaint,
-    required this.isRunning,
-    required this.isStationary,
-    required this.stepFlashActive,
-    required this.targetBpm,
-    required this.cadenceSpm,
-    required this.height,
-    this.onCenterPlayTap,
-  });
-
-  final List<double> smoothedBarHeights;
-  final Listenable waveformRepaint;
-  final bool isRunning;
-  final bool isStationary;
-  final bool stepFlashActive;
-  final int targetBpm;
-  final int cadenceSpm;
-  final double height;
-  final VoidCallback? onCenterPlayTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final palette = StradioPalette.of(context);
-    final reduceMotion = MediaQuery.disableAnimationsOf(context);
-
-    return Semantics(
-      label:
-          'Audio-stride reactive waveform visualizer, ${isRunning ? "active" : "paused"}',
-      child: Container(
-        height: height,
-        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
-        decoration: BoxDecoration(
-          color: palette.surface,
-          borderRadius: BorderRadius.circular(StradioRadii.hero),
-          boxShadow: [
-            ...palette.cardShadow,
-            if (stepFlashActive)
-              BoxShadow(
-                color: StradioColors.sonicCoral.withValues(alpha: 0.18),
-                blurRadius: 24,
-                offset: const Offset(0, 6),
-              ),
-          ],
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            // Card Top Header
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Expanded(
-                  child: Text(
-                    'AUDIO-STRIDE WAVEFORM',
-                    overflow: TextOverflow.ellipsis,
-                    style: StradioTypography.interLabel(
-                      fontSize: 10,
-                      color: palette.textSecondary,
-                      letterSpacing: 0.9,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  '$targetBpm BPM TARGET',
-                  style: StradioTypography.interLabel(
-                    fontSize: 10,
-                    color: isRunning
-                        ? palette.accentViolet
-                        : palette.textSecondary,
-                    letterSpacing: 0.6,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-
-            // Vertical Rhythm Equalizer Bars + Standby Center Trigger
-            Expanded(
-              child: Stack(
-                alignment: Alignment.center,
-                children: [
-                  Positioned.fill(
-                    child: RepaintBoundary(
-                      child: CustomPaint(
-                        painter: _VerticalRhythmBarsPainter(
-                          smoothedBarHeights: smoothedBarHeights,
-                          repaint: waveformRepaint,
-                          isRunning: isRunning,
-                          isStationary: isStationary,
-                          stepFlashActive: stepFlashActive && !reduceMotion,
-                          primaryColor: palette.accentCoral,
-                          secondaryColor: palette.accentViolet,
-                          restingColor: palette.textMuted.withValues(alpha: 0.25),
-                        ),
-                      ),
-                    ),
-                  ),
-
-                  // Center Rhythm Core Emblem (Non-button: pulses with tempo & foot-strike impact)
-                  Semantics(
-                    label: 'Rhythm Core Status Indicator',
-                    child: Container(
-                      key: const Key('hero_rhythm_core_emblem'),
-                      width: 48,
-                      height: 48,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: palette.surface.withValues(alpha: 0.92),
-                        boxShadow: [
-                          BoxShadow(
-                            color: (stepFlashActive
-                                    ? palette.accentCoral
-                                    : palette.accentViolet)
-                                .withValues(alpha: stepFlashActive ? 0.38 : 0.22),
-                            blurRadius: stepFlashActive ? 20 : 14,
-                            offset: const Offset(0, 3),
-                          ),
-                        ],
-                      ),
-                      child: Center(
-                        child: Icon(
-                          Icons.graphic_eq_rounded,
-                          size: 24,
-                          color: stepFlashActive
-                              ? palette.accentCoral
-                              : (isRunning
-                                  ? palette.accentViolet
-                                  : palette.textSecondary),
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 8),
-
-            // Card Footer: Cadence Sync & Reactive State
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Expanded(
-                  child: Text(
-                    'Cadence Sync: $cadenceSpm SPM',
-                    overflow: TextOverflow.ellipsis,
-                    style: StradioTypography.interLabel(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                      color: palette.textSecondary,
-                      letterSpacing: 0.2,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Flexible(
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Container(
-                        width: 6,
-                        height: 6,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: isRunning
-                              ? StradioColors.sonicCoral
-                              : palette.textMuted,
-                        ),
-                      ),
-                      const SizedBox(width: 5),
-                      Flexible(
-                        child: Text(
-                          isRunning ? 'Live Reactive' : 'Standby Preview',
-                          overflow: TextOverflow.ellipsis,
-                          style: StradioTypography.interLabel(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600,
-                            color: isRunning
-                                ? palette.accentCoral
-                                : palette.textSecondary,
-                            letterSpacing: 0.2,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-/// Tactile vertical rhythm equalizer bars (Reference 2 aesthetic).
-///
-/// Renders 28 stadium-capped vertical bars whose amplitudes are driven by real
-/// accelerometer magnitude samples when moving, or rest in a composed symmetric
-/// envelope when paused/stationary.
-class _VerticalRhythmBarsPainter extends CustomPainter {
-  const _VerticalRhythmBarsPainter({
-    required this.smoothedBarHeights,
-    required Listenable repaint,
-    required this.isRunning,
-    required this.isStationary,
-    required this.stepFlashActive,
-    required this.primaryColor,
-    required this.secondaryColor,
-    required this.restingColor,
-  }) : super(repaint: repaint);
-
-  final List<double> smoothedBarHeights;
-  final bool isRunning;
-  final bool isStationary;
-  final bool stepFlashActive;
-  final Color primaryColor;
-  final Color secondaryColor;
-  final Color restingColor;
-
-  // Symmetric Reference-2-inspired resting equalizer envelope (normalized 0.14..0.72)
-  static const List<double> restingEnvelope = [
-    0.16,
-    0.24,
-    0.34,
-    0.22,
-    0.46,
-    0.60,
-    0.38,
-    0.54,
-    0.70,
-    0.48,
-    0.64,
-    0.76,
-    0.58,
-    0.42,
-    0.42,
-    0.58,
-    0.76,
-    0.64,
-    0.48,
-    0.70,
-    0.54,
-    0.38,
-    0.60,
-    0.46,
-    0.22,
-    0.34,
-    0.24,
-    0.16,
-  ];
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final barCount = restingEnvelope.length;
-    final midY = size.height / 2;
-    final maxHalfHeight = size.height * 0.44;
-
-    final spacing = size.width / barCount;
-    final strokeWidth = (spacing * 0.46).clamp(3.0, 6.5);
-
-    // Pre-allocate paints and colors once per frame (zero heap churn per bar)
-    final trackPaint = Paint()
-      ..color = restingColor
-      ..strokeWidth = strokeWidth
-      ..strokeCap = StrokeCap.round;
-
-    final baseOuterColor = Color.lerp(primaryColor, secondaryColor, 0.65)!;
-    final innerColor = isRunning
-        ? primaryColor
-        : primaryColor.withValues(alpha: 0.72);
-    final outerColor = isRunning
-        ? baseOuterColor
-        : baseOuterColor.withValues(alpha: 0.72);
-
-    final activePaint = Paint()
-      ..strokeWidth = strokeWidth
-      ..strokeCap = StrokeCap.round;
-
-    final centerIndex = (barCount - 1) / 2;
-    final halfSpan = barCount / 2;
-
-    for (var i = 0; i < barCount; i++) {
-      final x = (i + 0.5) * spacing;
-      final envelopeWeight = restingEnvelope[i];
-
-      final normalizedHeight = !isRunning
-          ? envelopeWeight
-          : (i < smoothedBarHeights.length
-                ? smoothedBarHeights[i]
-                : envelopeWeight * 0.35);
-
-      final halfBar = math.max(4.0, normalizedHeight * maxHalfHeight);
-      final distanceFromCenter = ((i - centerIndex).abs()) / halfSpan;
-
-      // Background subtle track bar
-      final trackHalf = math.max(halfBar + 4.0, envelopeWeight * maxHalfHeight);
-      canvas.drawLine(
-        Offset(x, midY - trackHalf),
-        Offset(x, midY + trackHalf),
-        trackPaint,
-      );
-
-      // Foreground active rhythm bar with spring inertia
-      activePaint.color = distanceFromCenter < 0.55 ? innerColor : outerColor;
-      canvas.drawLine(
-        Offset(x, midY - halfBar),
-        Offset(x, midY + halfBar),
-        activePaint,
-      );
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant _VerticalRhythmBarsPainter oldDelegate) =>
-      oldDelegate.smoothedBarHeights != smoothedBarHeights ||
-      oldDelegate.isRunning != isRunning ||
-      oldDelegate.isStationary != isStationary ||
-      oldDelegate.stepFlashActive != stepFlashActive ||
-      oldDelegate.primaryColor != primaryColor;
-}
-
-/// Unified Stride Goal & 3-Column Metrics Deck (20px Squircle, 100% Borderless).
-///
-/// Combines the session goal progress bar (`84 / 100`) and the 3 primary runner
-/// readouts (`STEPS`, `CADENCE`, `TIME ELAPSED`) into one cohesive, zero-scroll card.
-class _UnifiedStrideDeck extends StatelessWidget {
-  const _UnifiedStrideDeck({
-    required this.formattedSteps,
-    required this.primarySteps,
-    required this.targetSteps,
-    required this.stepFlashActive,
-    required this.cadenceText,
-    required this.elapsedText,
-    required this.speedText,
-    required this.isCompact,
-  });
-
-  final String formattedSteps;
-  final int primarySteps;
-  final int targetSteps;
-  final bool stepFlashActive;
-  final String cadenceText;
-  final String elapsedText;
-  final String speedText;
-  final bool isCompact;
-
-  @override
-  Widget build(BuildContext context) {
-    final palette = StradioPalette.of(context);
-    final safeTarget = targetSteps > 0 ? targetSteps : 100;
-    final progress = (primarySteps / safeTarget).clamp(0.0, 1.0);
-    final percentage = (progress * 100).round();
-
-    return Container(
-      padding: EdgeInsets.symmetric(
-        horizontal: 20,
-        vertical: isCompact ? 14 : 18,
-      ),
-      decoration: BoxDecoration(
-        color: palette.surface,
-        borderRadius: BorderRadius.circular(StradioRadii.squircle),
-        boxShadow: palette.cardShadow,
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          // Top Row: Stride Goal Header + Progress Counter
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Expanded(
-                child: Text(
-                  'STRIDE GOAL',
-                  overflow: TextOverflow.ellipsis,
-                  style: StradioTypography.interLabel(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
-                    color: palette.textSecondary,
-                    letterSpacing: 0.9,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Flexible(
-                child: Text(
-                  '$primarySteps / $safeTarget ($percentage%)',
-                  overflow: TextOverflow.ellipsis,
-                  style: StradioTypography.interLabel(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                    color: palette.textPrimary,
-                    letterSpacing: 0.2,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-
-          // Stadium Progress Bar
-          ClipRRect(
-            borderRadius: BorderRadius.circular(StradioRadii.pill),
-            child: LinearProgressIndicator(
-              value: progress,
-              minHeight: 7,
-              backgroundColor: palette.surfaceSubtle,
-              valueColor: AlwaysStoppedAnimation<Color>(palette.accentCoral),
-            ),
-          ),
-          SizedBox(height: isCompact ? 14 : 18),
-
-          // 3-Column Primary Runner Metrics (Steps | Cadence | Time)
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              // Column 1: Hero Step Count
-              Expanded(
-                flex: 5,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      formattedSteps,
-                      key: const Key('active_run_step_count'),
-                      style: StradioTypography.soraMetric(
-                        fontSize: isCompact ? 42 : 48,
-                        fontWeight: FontWeight.w800,
-                        color: stepFlashActive
-                            ? palette.accentCoral
-                            : palette.textPrimary,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      'STEPS',
-                      style: StradioTypography.soraHeading(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
-                        color: palette.textSecondary,
-                        letterSpacing: 2.0,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-
-              // Column 2: Cadence SPM
-              Expanded(
-                flex: 4,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    Text(
-                      cadenceText,
-                      key: const Key('metric_cadence_value'),
-                      textAlign: TextAlign.center,
-                      style: StradioTypography.soraMetric(
-                        fontSize: 19,
-                        fontWeight: FontWeight.w700,
-                        color: palette.textPrimary,
-                        letterSpacing: -0.3,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'CADENCE',
-                      style: StradioTypography.interLabel(
-                        fontSize: 10,
-                        color: palette.textSecondary,
-                        letterSpacing: 0.8,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-
-              // Column 3: Elapsed Time & Est. Speed
-              Expanded(
-                flex: 4,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Text(
-                      elapsedText,
-                      key: const Key('metric_elapsed_value'),
-                      textAlign: TextAlign.right,
-                      style: StradioTypography.soraMetric(
-                        fontSize: 19,
-                        fontWeight: FontWeight.w700,
-                        color: palette.textPrimary,
-                        letterSpacing: -0.3,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'TIME · $speedText',
-                      key: const Key('metric_speed_value'),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: StradioTypography.interLabel(
-                        fontSize: 10,
-                        color: palette.textSecondary,
-                        letterSpacing: 0.4,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _DeveloperTelemetryOverlay extends StatelessWidget {
-  const _DeveloperTelemetryOverlay({
-    required this.latestSample,
-    required this.latestOutput,
-    required this.liveCounts,
-    required this.targetSteps,
-    required this.onSimulateStride,
-  });
-
-  final SensorSample? latestSample;
-  final DetectorOutput? latestOutput;
-  final Map<AlgorithmVariant, int> liveCounts;
-  final int targetSteps;
-  final VoidCallback onSimulateStride;
-
-  @override
-  Widget build(BuildContext context) {
-    final palette = StradioPalette.of(context);
-    final s = latestSample;
-    final out = latestOutput;
-
-    return Container(
-      key: const Key('developer_telemetry_overlay'),
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: palette.surface,
-        borderRadius: BorderRadius.circular(StradioRadii.squircle),
-        boxShadow: palette.cardShadow,
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(
-                Icons.terminal_rounded,
-                size: 16,
-                color: palette.accentViolet,
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  'LIVE 100HZ TELEMETRY & 4-ALGORITHM MATRIX',
-                  style: StradioTypography.interLabel(
-                    fontSize: 11,
-                    color: palette.accentViolet,
-                    letterSpacing: 0.8,
-                  ),
-                ),
-              ),
-              TextButton.icon(
-                key: const Key('overlay_simulate_stride_button'),
-                onPressed: onSimulateStride,
-                style: TextButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 6,
-                  ),
-                  minimumSize: const Size(44, 36),
-                ),
-                icon: Icon(
-                  Icons.directions_run,
-                  size: 15,
-                  color: palette.accentCoral,
-                ),
-                label: Text(
-                  '+1 Stride',
-                  style: StradioTypography.interLabel(
-                    fontSize: 11,
-                    color: palette.accentCoral,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Text(
-            s == null
-                ? 'Raw (+G): ax 0.00  ay 0.00  az 9.81 m/s²  |  m(t) 9.81  T(t) ${out?.thresholdMps2.toStringAsFixed(2) ?? "9.81"}'
-                : 'Raw (+G): ax ${s.axMps2.toStringAsFixed(2)}  ay ${s.ayMps2.toStringAsFixed(2)}  az ${s.azMps2.toStringAsFixed(2)}  |  m(t) ${out?.smoothedMps2.toStringAsFixed(2) ?? s.magnitudeMps2.toStringAsFixed(2)}  T(t) ${out?.thresholdMps2.toStringAsFixed(2) ?? "--"}',
-            style: StradioTypography.interLabel(
-              fontSize: 11,
-              color: palette.textPrimary,
-              letterSpacing: 0.1,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            s == null
-                ? 'Linear (-G): ux 0.00  uy 0.00  uz 0.00 m/s²  |  Target Benchmark: $targetSteps steps'
-                : 'Linear (-G): ux ${s.uxMps2.toStringAsFixed(2)}  uy ${s.uyMps2.toStringAsFixed(2)}  uz ${s.uzMps2.toStringAsFixed(2)}  |  Target: $targetSteps',
-            style: StradioTypography.interLabel(
-              fontSize: 11,
-              color: palette.textSecondary,
-              letterSpacing: 0.1,
-            ),
-          ),
-          const SizedBox(height: 10),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              for (final variant in AlgorithmVariant.values)
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 6,
-                  ),
-                  decoration: BoxDecoration(
-                    color: palette.surfaceSubtle,
-                    borderRadius: BorderRadius.circular(StradioRadii.tag),
-                  ),
-                  child: Text(
-                    '${variant.code}: ${liveCounts[variant] ?? 0} steps',
-                    key: Key('live_variant_count_${variant.code}'),
-                    style: StradioTypography.interLabel(
-                      fontSize: 12,
-                      color: palette.textPrimary,
-                      letterSpacing: 0.2,
-                    ),
-                  ),
-                ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// Thumb-Zone Bottom Control Deck (28px Hero container + 999px Stadium Finish CTA).
-class _BottomControlDeck extends StatelessWidget {
-  const _BottomControlDeck({
-    required this.isRunning,
-    required this.onTogglePauseResume,
-    required this.onFinishRun,
-  });
-
-  final bool isRunning;
-  final VoidCallback onTogglePauseResume;
-  final VoidCallback onFinishRun;
-
-  @override
-  Widget build(BuildContext context) {
-    final palette = StradioPalette.of(context);
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-      decoration: BoxDecoration(
-        color: palette.surface,
-        borderRadius: BorderRadius.circular(StradioRadii.hero),
-        boxShadow: palette.cardShadow,
-      ),
-      child: Row(
-        children: [
-          // Circular Pause / Resume CTA in vibrant Sonic Coral
-          Semantics(
-            button: true,
-            label: isRunning ? 'Pause Run' : 'Resume Run',
-            child: Container(
-              width: 56,
-              height: 56,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: StradioColors.sonicCoral,
-                boxShadow: [
-                  BoxShadow(
-                    color: StradioColors.sonicCoral.withValues(alpha: 0.32),
-                    blurRadius: 16,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
-              ),
-              child: IconButton(
-                key: const Key('pause_resume_run_button'),
-                onPressed: onTogglePauseResume,
-                tooltip: isRunning ? 'Pause Run' : 'Resume Run',
-                icon: Icon(
-                  isRunning ? Icons.pause_rounded : Icons.play_arrow_rounded,
-                  color: Colors.white,
-                  size: 28,
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(width: 14),
-
-          // Stadium "Finish Run" Accessible Button
-          Expanded(
-            child: _FinishRunButton(
-              onFinishRun: onFinishRun,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _FinishRunButton extends StatelessWidget {
-  const _FinishRunButton({
-    required this.onFinishRun,
-  });
-
-  final VoidCallback onFinishRun;
-
-  @override
-  Widget build(BuildContext context) {
-    final palette = StradioPalette.of(context);
-
-    return Semantics(
-      button: true,
-      label: 'Finish Run',
-      child: Material(
-        color: palette.surfaceSubtle,
-        shape: const StadiumBorder(),
-        child: InkWell(
-          key: const Key('finish_run_button'),
-          onTap: onFinishRun,
-          customBorder: const StadiumBorder(),
-          child: SizedBox(
-            height: 56,
-            child: Center(
-              child: Text(
-                'Finish Run',
-                style: StradioTypography.soraHeading(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w700,
-                  color: palette.textPrimary,
-                  letterSpacing: 0.4,
-                ),
-              ),
-            ),
-          ),
-        ),
       ),
     );
   }
