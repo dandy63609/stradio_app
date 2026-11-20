@@ -2,8 +2,6 @@ import 'dart:async';
 
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/foundation.dart';
-import 'package:flutter/services.dart';
-import 'package:soundpool/soundpool.dart';
 
 import '../models/sound_pack.dart';
 
@@ -169,38 +167,54 @@ class AudioplayersLoopBackend implements AudioLoopBackend {
   }
 }
 
-/// Production Layer 2 backend powered by native Android `Soundpool`.
-class SoundpoolSfxBackend implements StepSfxBackend {
-  SoundpoolSfxBackend({this.maxStreams = 4});
+/// Production Layer 2 backend powered by `audioplayers` in `PlayerMode.lowLatency`
+/// (uses native Android `SoundPool` under the hood without the discontinued `soundpool` plugin).
+class AudioplayersSfxBackend implements StepSfxBackend {
+  AudioplayersSfxBackend();
 
-  final int maxStreams;
-  Soundpool? _pool;
-  final Map<String, int> _soundIds = {};
+  final Map<String, AudioPlayer> _players = {};
+  final Map<String, double> _lastRates = {};
 
-  Soundpool _ensurePool() {
-    return _pool ??= Soundpool.fromOptions(
-      options: SoundpoolOptions(
-        streamType: StreamType.music,
-        maxStreams: maxStreams,
+  String _normalizeAssetPath(String assetPath) =>
+      assetPath.startsWith('assets/')
+          ? assetPath.substring('assets/'.length)
+          : assetPath;
+
+  Future<AudioPlayer> _ensurePreloadedPlayer(String assetPath) async {
+    final existing = _players[assetPath];
+    if (existing != null) return existing;
+
+    final player = AudioPlayer();
+    await player.setPlayerMode(PlayerMode.lowLatency);
+    await player.setReleaseMode(ReleaseMode.stop);
+    await player.setAudioContext(
+      AudioContext(
+        android: const AudioContextAndroid(
+          isSpeakerphoneOn: false,
+          stayAwake: false,
+          contentType: AndroidContentType.sonification,
+          usageType: AndroidUsageType.game,
+          audioFocus: AndroidAudioFocus.none,
+        ),
+        iOS: AudioContextIOS(
+          category: AVAudioSessionCategory.playback,
+          options: const {AVAudioSessionOptions.mixWithOthers},
+        ),
       ),
     );
+    await player.setSourceAsset(_normalizeAssetPath(assetPath));
+    _players[assetPath] = player;
+    return player;
   }
 
   @override
   Future<void> preload(List<String> assetPaths) async {
-    if (assetPaths.isEmpty) return;
-    try {
-      final pool = _ensurePool();
-      for (final path in assetPaths) {
-        if (_soundIds.containsKey(path)) continue;
-        final data = await rootBundle.load(path);
-        final id = await pool.load(data);
-        if (id >= 0) {
-          _soundIds[path] = id;
-        }
+    for (final path in assetPaths) {
+      try {
+        await _ensurePreloadedPlayer(path);
+      } on Object catch (error) {
+        debugPrint('AudioplayersSfxBackend.preload error ($path): $error');
       }
-    } on Object catch (error) {
-      debugPrint('SoundpoolSfxBackend.preload error: $error');
     }
   }
 
@@ -211,34 +225,30 @@ class SoundpoolSfxBackend implements StepSfxBackend {
     double volume = 1.0,
   }) async {
     try {
-      final pool = _ensurePool();
-      var soundId = _soundIds[assetPath];
-      if (soundId == null) {
-        final data = await rootBundle.load(assetPath);
-        soundId = await pool.load(data);
-        if (soundId >= 0) {
-          _soundIds[assetPath] = soundId;
-        } else {
-          return;
-        }
+      final player = await _ensurePreloadedPlayer(assetPath);
+      await player.setVolume(volume.clamp(0.0, 1.0));
+      final prevRate = _lastRates[assetPath] ?? 1.0;
+      if ((rate - prevRate).abs() > 0.001) {
+        await player.setPlaybackRate(rate);
+        _lastRates[assetPath] = rate;
       }
-      await pool.setVolume(soundId: soundId, volume: volume.clamp(0.0, 1.0));
-      await pool.play(soundId, rate: rate);
+      await player.play(AssetSource(_normalizeAssetPath(assetPath)));
     } on Object catch (error) {
-      debugPrint('SoundpoolSfxBackend.play error ($assetPath): $error');
+      debugPrint('AudioplayersSfxBackend.play error ($assetPath): $error');
     }
   }
 
   @override
   Future<void> dispose() async {
-    final pool = _pool;
-    _pool = null;
-    _soundIds.clear();
-    if (pool == null) return;
-    try {
-      pool.dispose();
-    } on Object catch (error) {
-      debugPrint('SoundpoolSfxBackend.dispose error: $error');
+    final players = List<AudioPlayer>.of(_players.values);
+    _players.clear();
+    _lastRates.clear();
+    for (final player in players) {
+      try {
+        await player.dispose();
+      } on Object catch (error) {
+        debugPrint('AudioplayersSfxBackend.dispose error: $error');
+      }
     }
   }
 }
@@ -304,7 +314,7 @@ class StradioAudioEngine {
        _secondaryLoop =
            secondaryLoopBackend ??
            AudioplayersLoopBackend(requestAudioFocus: false),
-       _sfx = sfxBackend ?? SoundpoolSfxBackend(),
+       _sfx = sfxBackend ?? AudioplayersSfxBackend(),
        _activePack = StradioSoundPack.byId(initialPack),
        _clockMs = clockMs ?? (() => DateTime.now().millisecondsSinceEpoch);
 

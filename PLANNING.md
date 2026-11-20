@@ -42,8 +42,8 @@ Dokumen ini merangkum rencana tindak lanjut (**follow-up refactor**) setelah mig
 **Target Branch:** `feat/audio-engine`
 
 1. **Arsitektur Audio 2 Layer (`docs/PRD-MVP.md` FR-3)**
-   - [x] **Layer 1 (Background Loop):** Implementasi via `audioplayers` (`AudioplayersLoopBackend`) dengan *gapless looping*, fade-in/fade-out 800 ms, dan hysteresis lockout (`>= 130 SPM` masuk Jogging Zone, `< 120 SPM` selama 3 detik keluar).
-   - [x] **Layer 2 (Step SFX):** Implementasi via `soundpool` (`SoundpoolSfxBackend`, native Android `SoundPool`) + fallback `namespace` AGP 8+ di `android/build.gradle.kts`.
+   - [x] **Layer 1 (Background Loop):** Implementasi via `audioplayers` (`AudioplayersLoopBackend`, `PlayerMode.mediaPlayer`) dengan *gapless looping*, fade-in/fade-out 800 ms, dan hysteresis lockout (`>= 130 SPM` masuk Jogging Zone, `< 120 SPM` selama 3 detik keluar).
+   - [x] **Layer 2 (Step SFX):** Implementasi via `audioplayers` (`AudioplayersSfxBackend`, `PlayerMode.lowLatency` — memakai native Android `SoundPool` di balik layar). *Catatan teknis:* menggantikan package `soundpool` (`2.4.1`) yang berstatus `discontinued` di pub.dev agar kompatibel penuh dengan AGP 8+ tanpa menurunkan kualitas/latensi audio.
 2. **Orkestrasi 6 Sound Pack (`README.md` & `docs/PRD-MVP.md` FR-4)**
    - [x] `BREAKBEAT_FVNKY`: `Full_Fade_NoKick_BG.mp3` (>= 130 SPM) + `drums_1_step.mp3` per langkah.
    - [x] `LARI_NGACIR`: Dual-stem sinkron 140 BPM (`lari_ngacir_layer1_walk.mp3` + `lari_ngacir_layer2_jog.mp3` bar-aligned fade-in, Step SFX off).
