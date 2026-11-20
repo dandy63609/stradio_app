@@ -1,0 +1,540 @@
+import 'dart:io';
+import 'dart:math' as math;
+
+import 'package:flutter_test/flutter_test.dart';
+import 'package:smartphone_step_detection_experiment/algorithms/step_detector.dart';
+import 'package:smartphone_step_detection_experiment/evaluation/step_count_evaluation.dart';
+import 'package:smartphone_step_detection_experiment/models/experiment_models.dart';
+import 'package:smartphone_step_detection_experiment/services/csv_export.dart';
+import 'package:smartphone_step_detection_experiment/services/recording_repository.dart';
+
+void main() {
+  group('Sensor Models & Magnitude', () {
+    test('calculates 3D Euclidean magnitude norm for raw and linear streams', () {
+      const sample = SensorSample(
+        recordingId: 'REC_20261027_001',
+        sampleIndex: 0,
+        timestampNs: 0,
+        axMps2: 2.0,
+        ayMps2: 3.0,
+        azMps2: 6.0,
+        uxMps2: 1.0,
+        uyMps2: 2.0,
+        uzMps2: 2.0,
+      );
+      // Raw: sqrt(4 + 9 + 36) = sqrt(49) = 7.0
+      expect(sample.magnitudeMps2, closeTo(7.0, 1e-6));
+      // Linear: sqrt(1 + 4 + 4) = sqrt(9) = 3.0
+      expect(sample.userMagnitudeMps2, closeTo(3.0, 1e-6));
+      expect(sample.hasLinearReading, isTrue);
+    });
+
+    test('validates experiment configuration', () {
+      const valid = ExperimentConfig(
+        participantId: 'P01',
+        activity: Activity.walking,
+        phonePlacement: PhonePlacement.hand,
+        placementDetail: 'right hand',
+        trialNumber: 1,
+        targetSteps: 100,
+      );
+      expect(valid.validate(), isEmpty);
+
+      const invalid = ExperimentConfig(
+        participantId: 'bad_id',
+        activity: Activity.walking,
+        phonePlacement: PhonePlacement.hand,
+        placementDetail: '',
+        trialNumber: 0,
+        targetSteps: 0,
+        parameters: AlgorithmParameters(k: -1),
+      );
+      final errors = invalid.validate();
+      expect(errors, contains('Participant ID must look like P01.'));
+      expect(errors, contains('Placement detail is required.'));
+      expect(errors, contains('Trial number must be positive.'));
+      expect(errors, contains('Target steps must be positive.'));
+      expect(errors, contains('k must not be negative.'));
+    });
+  });
+
+  group('Rolling Window Statistics', () {
+    test('computes adaptive midpoint threshold', () {
+      final window = [10.0, 12.0, 16.0, 8.0, 14.0];
+      // min = 8.0, max = 16.0 -> (8 + 16) / 2 = 12.0
+      expect(midpointThreshold(window), closeTo(12.0, 1e-6));
+    });
+
+    test('computes adaptive mean plus standard deviation threshold', () {
+      // Data: 2, 4, 4, 4, 5, 5, 7, 9
+      // Mean = 40 / 8 = 5.0
+      // Variance = (9 + 1 + 1 + 1 + 0 + 0 + 4 + 16) / 8 = 32 / 8 = 4.0
+      // SD = 2.0
+      // For k = 1.5, T = 5.0 + 1.5 * 2.0 = 8.0
+      final window = [2.0, 4.0, 4.0, 4.0, 5.0, 5.0, 7.0, 9.0];
+      expect(meanStdThreshold(window, 1.5), closeTo(8.0, 1e-6));
+    });
+  });
+
+  group('Peak Detection State Machine & Lockout', () {
+    test('enforces minimum step interval lockout (refractory period)', () {
+      final detector = StepDetector(
+        algorithm: ThresholdAlgorithm.adaptiveMidpoint,
+        parameters: const AlgorithmParameters(
+          smoothingSamples: 1,
+          windowDurationMs: 1000,
+          minimumStepIntervalMs: 250, // 250 ms lockout
+        ),
+      );
+
+      // Create a peak at t = 100 ms
+      // and another candidate peak at t = 200 ms (only 100 ms later -> within refractory lockout)
+      final samples = [
+        // baseline
+        _sample(0, 0, 9.8),
+        _sample(1, 50, 10.0),
+        _sample(2, 100, 15.0), // peak 1
+        _sample(3, 150, 9.0),  // valley confirms peak 1
+        _sample(4, 200, 14.0), // candidate peak within 250ms of peak 1
+        _sample(5, 230, 9.0),
+        // peak at t = 400 ms (> 250 ms after peak 1)
+        _sample(6, 400, 14.0), // peak 2
+        _sample(7, 450, 9.0),
+      ];
+
+      final detections = <DetectionEvent>[];
+      for (final s in samples) {
+        final out = detector.addSample(s);
+        if (out.step != null) detections.add(out.step!);
+      }
+
+      // Candidate at 200ms must be rejected by refractory period.
+      expect(detections.length, 2);
+      expect(detections[0].peakTimestampNs, 100 * 1000000);
+      expect(detections[1].peakTimestampNs, 400 * 1000000);
+    });
+
+    test('valley confirmation prevents double-triggering without signal dip', () {
+      final detector = StepDetector(
+        algorithm: ThresholdAlgorithm.adaptiveMidpoint,
+        parameters: const AlgorithmParameters(
+          smoothingSamples: 1,
+          windowDurationMs: 2000,
+          minimumStepIntervalMs: 100,
+        ),
+      );
+
+      // Two peaks high above threshold without the signal dipping below threshold in-between
+      final samples = [
+        _sample(0, 0, 9.0),
+        _sample(1, 100, 15.0), // Peak 1
+        _sample(2, 200, 13.0), // Stays well above threshold (~11.0), not a true valley
+        _sample(3, 400, 16.0), // Second peak candidate, but detector not re-armed
+        _sample(4, 500, 12.0),
+        _sample(5, 600, 8.0),  // Dips below threshold -> now re-arms
+        _sample(6, 800, 15.0), // Peak 2 accepted
+        _sample(7, 900, 8.0),
+      ];
+
+      final detections = <DetectionEvent>[];
+      for (final s in samples) {
+        final out = detector.addSample(s);
+        if (out.step != null) detections.add(out.step!);
+      }
+
+      expect(detections.length, 2);
+      expect(detections[0].peakTimestampNs, 100 * 1000000);
+      expect(detections[1].peakTimestampNs, 800 * 1000000);
+    });
+
+    test('stationary phone on table with MEMS noise produces 0 false steps across all 4 variants (A1, A2, B1, B2)', () {
+      // Simulate 30 seconds at 100 Hz (3000 samples) of a phone resting on a table
+      // with continuous MEMS thermal fluctuations (+/- 0.08 m/s^2 around 9.81 m/s^2).
+      final samples = <SensorSample>[];
+      for (var i = 0; i < 3000; i++) {
+        final tNs = i * 10 * 1000000; // 10 ms per sample
+        final noise = 0.06 * math.sin(i * 0.45) + 0.02 * math.cos(i * 1.13);
+        samples.add(
+          SensorSample(
+            recordingId: 'STATIONARY_TABLE',
+            sampleIndex: i,
+            timestampNs: tNs,
+            axMps2: 0.02 * math.sin(i * 0.3),
+            ayMps2: 0.02 * math.cos(i * 0.5),
+            azMps2: 9.81 + noise,
+            uxMps2: 0.02 * math.sin(i * 0.3),
+            uyMps2: 0.02 * math.cos(i * 0.5),
+            uzMps2: noise,
+          ),
+        );
+      }
+
+      const params = AlgorithmParameters();
+      final allFour = StepDetector.replayAllFour(samples, params);
+
+      expect(allFour[AlgorithmVariant.a1MidpointRaw], isEmpty);
+      expect(allFour[AlgorithmVariant.a2MidpointLinear], isEmpty);
+      expect(allFour[AlgorithmVariant.b1MeanSdRaw], isEmpty);
+      expect(allFour[AlgorithmVariant.b2MeanSdLinear], isEmpty);
+    });
+  });
+
+  group('Ground Truth, Scoreboard Status & Error Metrics (§10)', () {
+    test('computes error, accuracy, and Scoreboard status out of 100 steps', () {
+      const accurateResult = StepCountResult(
+        recordingId: 'REC_20261027_001',
+        trialNumber: 1,
+        activity: Activity.walking,
+        phonePlacement: PhonePlacement.hand,
+        algorithm: ThresholdAlgorithm.adaptiveMidpoint,
+        variant: AlgorithmVariant.a1MidpointRaw,
+        groundTruthSteps: 100,
+        predictedSteps: 98,
+      );
+
+      expect(accurateResult.absoluteErrorSteps, 2);
+      expect(accurateResult.signedErrorSteps, -2);
+      expect(accurateResult.marginOfErrorPercent, closeTo(2.0, 1e-4));
+      expect(accurateResult.accuracyPercent, closeTo(98.0, 1e-4));
+      expect(accurateResult.condition, 'E1');
+      expect(accurateResult.status, DetectionStatus.accurate);
+      expect(accurateResult.status.label, 'Akurat');
+
+      const underResult = StepCountResult(
+        recordingId: 'REC_20261027_001',
+        trialNumber: 1,
+        activity: Activity.walking,
+        phonePlacement: PhonePlacement.hand,
+        algorithm: ThresholdAlgorithm.adaptiveMidpoint,
+        variant: AlgorithmVariant.a2MidpointLinear,
+        groundTruthSteps: 100,
+        predictedSteps: 94,
+      );
+      expect(underResult.status, DetectionStatus.undercounting);
+      expect(underResult.status.label, 'Undercounting');
+
+      const overResult = StepCountResult(
+        recordingId: 'REC_20261027_001',
+        trialNumber: 1,
+        activity: Activity.walking,
+        phonePlacement: PhonePlacement.hand,
+        algorithm: ThresholdAlgorithm.meanStd,
+        variant: AlgorithmVariant.b2MeanSdLinear,
+        groundTruthSteps: 100,
+        predictedSteps: 106,
+      );
+      expect(overResult.status, DetectionStatus.overcounting);
+      expect(overResult.status.label, 'Overcounting');
+    });
+
+    test('clamps accuracy to zero if error exceeds 100%', () {
+      const result = StepCountResult(
+        recordingId: 'REC_20261027_001',
+        trialNumber: 1,
+        activity: Activity.jogging,
+        phonePlacement: PhonePlacement.pocket,
+        algorithm: ThresholdAlgorithm.meanStd,
+        groundTruthSteps: 100,
+        predictedSteps: 220, // 120 steps error -> 120% margin of error
+      );
+
+      expect(result.absoluteErrorSteps, 120);
+      expect(result.marginOfErrorPercent, closeTo(120.0, 1e-4));
+      expect(result.accuracyPercent, 0.0);
+      expect(result.condition, 'E8');
+    });
+  });
+
+  group('CSV Export Exact Schemas (§11)', () {
+    test('sensor_data.csv matches exact 9-column schema and sensor_linear_data.csv includes linear stream', () {
+      const config = ExperimentConfig(
+        participantId: 'P01',
+        activity: Activity.walking,
+        phonePlacement: PhonePlacement.hand,
+        placementDetail: 'right hand',
+        trialNumber: 1,
+      );
+      final recording = SavedRecording(
+        recordingId: 'REC_20261027_001',
+        createdAt: DateTime(2026, 10, 27),
+        config: config,
+        samples: [
+          const SensorSample(
+            recordingId: 'REC_20261027_001',
+            sampleIndex: 0,
+            timestampNs: 1000000,
+            axMps2: 0.12,
+            ayMps2: 9.81,
+            azMps2: 1.45,
+            uxMps2: 0.12,
+            uyMps2: 0.01,
+            uzMps2: 1.45,
+          ),
+        ],
+        liveStepCount: 0,
+        replayDetections: const {},
+      );
+
+      final csv = sensorDataCsv([recording]);
+      final lines = csv.trim().split('\n');
+
+      expect(
+        lines[0],
+        'recording_id,sample_index,timestamp_ns,activity,phone_placement,'
+        'ax_mps2,ay_mps2,az_mps2,magnitude_mps2',
+      );
+      expect(
+        lines[1],
+        'REC_20261027_001,0,1000000,walking,hand,0.12,9.81,1.45,9.917',
+      );
+
+      final dualCsv = sensorDualStreamCsv([recording]);
+      final dualLines = dualCsv.trim().split('\n');
+      expect(
+        dualLines[0],
+        'recording_id,sample_index,timestamp_ns,activity,phone_placement,'
+        'ax_mps2,ay_mps2,az_mps2,magnitude_mps2,'
+        'ux_mps2,uy_mps2,uz_mps2,user_magnitude_mps2',
+      );
+    });
+
+    test('evaluation_summary.csv matches exact 9-column schema for 2 and 4 variants', () {
+      const result = StepCountResult(
+        recordingId: 'REC_20261027_001',
+        trialNumber: 1,
+        activity: Activity.walking,
+        phonePlacement: PhonePlacement.hand,
+        algorithm: ThresholdAlgorithm.adaptiveMidpoint,
+        groundTruthSteps: 100,
+        predictedSteps: 98,
+      );
+
+      final csv = evaluationSummaryCsv([result]);
+      final lines = csv.trim().split('\n');
+
+      expect(
+        lines[0],
+        'recording_id,trial_number,activity,phone_placement,algorithm,'
+        'ground_truth_steps,predicted_steps,absolute_error_steps,'
+        'percentage_margin_of_error',
+      );
+      expect(
+        lines[1],
+        'REC_20261027_001,1,walking,hand,adaptive_midpoint,100,98,2,2.00',
+      );
+    });
+  });
+
+  group('Synthetic 100-Peak Signal Fixture across All 4 Variants (§14)', () {
+    test('deterministically detects exactly 100 steps in live and 4-way offline replay (A1, A2, B1, B2)', () {
+      const stepPeriodMs = 500;
+      const totalSteps = 100;
+      final samples = <SensorSample>[];
+
+      var sampleIdx = 0;
+      for (var s = 0; s < totalSteps; s++) {
+        for (var i = 0; i < 50; i++) {
+          final tMs = s * stepPeriodMs + i * 10;
+          final tNs = tMs * 1000000;
+          // Raised-cosine pulse: 0 at i=0, max=1.0 at i=25, 0 at i=50
+          final phase = (i / 50.0) * 2 * math.pi;
+          final pulse = (1.0 - math.cos(phase)) / 2.0;
+          final dynamicZ = 4.0 * pulse;
+          final az = 9.8 + dynamicZ; // Raw with gravity = 9.8..13.8 m/s^2
+
+          samples.add(
+            SensorSample(
+              recordingId: 'SYNTH_100',
+              sampleIndex: sampleIdx++,
+              timestampNs: tNs,
+              axMps2: 0.0,
+              ayMps2: 0.0,
+              azMps2: az,
+              uxMps2: 0.0,
+              uyMps2: 0.0,
+              uzMps2: dynamicZ, // Linear without gravity = 0.0..4.0 m/s^2
+            ),
+          );
+        }
+      }
+
+      // Add a brief resting tail
+      for (var i = 0; i < 20; i++) {
+        final tMs = totalSteps * stepPeriodMs + i * 10;
+        samples.add(
+          SensorSample(
+            recordingId: 'SYNTH_100',
+            sampleIndex: sampleIdx++,
+            timestampNs: tMs * 1000000,
+            axMps2: 0.0,
+            ayMps2: 0.0,
+            azMps2: 9.8,
+            uxMps2: 0.0,
+            uyMps2: 0.0,
+            uzMps2: 0.0,
+          ),
+        );
+      }
+
+      const params = AlgorithmParameters(
+        smoothingSamples: 3,
+        windowDurationMs: 1000,
+        minimumStepIntervalMs: 250,
+        k: 1.0,
+      );
+
+      // 1. Live streaming detection
+      final liveDetector = StepDetector(
+        algorithm: ThresholdAlgorithm.adaptiveMidpoint,
+        parameters: params,
+      );
+      final liveDetections = <DetectionEvent>[];
+      for (final sample in samples) {
+        final out = liveDetector.addSample(sample);
+        if (out.step != null) liveDetections.add(out.step!);
+      }
+
+      // 2. 4-Way Simultaneous Offline Replay (A1, A2, B1, B2)
+      final allFour = StepDetector.replayAllFour(samples, params);
+
+      expect(
+        liveDetections.length,
+        totalSteps,
+        reason: 'Live detector must count exactly 100 steps',
+      );
+      expect(
+        allFour[AlgorithmVariant.a1MidpointRaw]!.length,
+        totalSteps,
+        reason: 'A1 (Midpoint Raw +G) must count 100 steps',
+      );
+      expect(
+        allFour[AlgorithmVariant.a2MidpointLinear]!.length,
+        totalSteps,
+        reason: 'A2 (Midpoint Linear -G) must count 100 steps',
+      );
+      expect(
+        allFour[AlgorithmVariant.b1MeanSdRaw]!.length,
+        totalSteps,
+        reason: 'B1 (Mean+SD Raw +G) must count 100 steps',
+      );
+      expect(
+        allFour[AlgorithmVariant.b2MeanSdLinear]!.length,
+        totalSteps,
+        reason: 'B2 (Mean+SD Linear -G) must count 100 steps',
+      );
+
+      // Verify integrity: live outputs match A1 offline replay exactly
+      final replayA1 = allFour[AlgorithmVariant.a1MidpointRaw]!;
+      for (var i = 0; i < totalSteps; i++) {
+        expect(
+          liveDetections[i].peakTimestampNs,
+          replayA1[i].peakTimestampNs,
+        );
+      }
+    });
+  });
+
+  group('Recording Store & ID Generation', () {
+    test('generates sequential REC_YYYYMMDD_NNN format IDs', () {
+      final date = DateTime(2026, 10, 27);
+      expect(nextRecordingId([], date), 'REC_20261027_001');
+
+      final existing = [
+        'REC_20261027_001',
+        'REC_20261027_002',
+        'REC_20261026_099', // from previous day
+      ];
+      expect(nextRecordingId(existing, date), 'REC_20261027_003');
+    });
+
+    test('FileRecordingStore saves and clears all recordings cleanly', () async {
+      final tempDir = await Directory.systemTemp.createTemp('store_test_');
+      try {
+        final store = FileRecordingStore(directory: () async => tempDir);
+        expect(await store.list(), isEmpty);
+
+        const config = ExperimentConfig(
+          participantId: 'P01',
+          activity: Activity.walking,
+          phonePlacement: PhonePlacement.hand,
+          placementDetail: 'right hand',
+          trialNumber: 1,
+          primaryLiveAlgorithm: ThresholdAlgorithm.adaptiveMidpoint,
+        );
+        final rec = SavedRecording(
+          recordingId: 'REC_20261027_001',
+          createdAt: DateTime(2026, 10, 27),
+          config: config,
+          samples: const [],
+          liveStepCount: 0,
+          replayDetections: const {},
+        );
+
+        await store.save(rec);
+        final listAfterSave = await store.list();
+        expect(listAfterSave.length, 1);
+        expect(listAfterSave.first.recordingId, 'REC_20261027_001');
+
+        await store.clearAll();
+        expect(await store.list(), isEmpty);
+      } finally {
+        if (await tempDir.exists()) {
+          await tempDir.delete(recursive: true);
+        }
+      }
+    });
+
+    test('FileRecordingStore caches active session and recovers cleanly', () async {
+      final tempDir = await Directory.systemTemp.createTemp('stradio_cache_test_');
+      try {
+        final store = FileRecordingStore(directory: () async => tempDir);
+        expect(await store.loadActiveSessionCache(), isNull);
+
+        final sample = _sample(0, 0, 9.81);
+        final snapshot = ActiveSessionSnapshot(
+          recordingId: 'REC_RECOVERY_001',
+          createdAt: DateTime(2026, 11, 8, 20, 0),
+          config: const ExperimentConfig(
+            participantId: 'P01',
+            activity: Activity.walking,
+            phonePlacement: PhonePlacement.hand,
+            placementDetail: 'right hand',
+            trialNumber: 1,
+            primaryLiveAlgorithm: ThresholdAlgorithm.adaptiveMidpoint,
+          ),
+          targetBpm: 120,
+          activeDurationSeconds: 15.5,
+          samples: [sample],
+        );
+
+        await store.saveActiveSessionCache(snapshot);
+
+        final loaded = await store.loadActiveSessionCache();
+        expect(loaded, isNotNull);
+        expect(loaded!.recordingId, 'REC_RECOVERY_001');
+        expect(loaded.targetBpm, 120);
+        expect(loaded.activeDurationSeconds, 15.5);
+        expect(loaded.samples.length, 1);
+        expect(loaded.samples.first.azMps2, 9.81);
+
+        await store.clearActiveSessionCache();
+        expect(await store.loadActiveSessionCache(), isNull);
+      } finally {
+        if (await tempDir.exists()) {
+          await tempDir.delete(recursive: true);
+        }
+      }
+    });
+  });
+}
+
+SensorSample _sample(int index, int ms, double magnitude) {
+  return SensorSample(
+    recordingId: 'test',
+    sampleIndex: index,
+    timestampNs: ms * 1000000,
+    axMps2: 0,
+    ayMps2: 0,
+    azMps2: magnitude,
+  );
+}

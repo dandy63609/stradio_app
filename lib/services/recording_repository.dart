@@ -1,0 +1,322 @@
+import 'dart:convert';
+import 'dart:io';
+
+import 'package:path_provider/path_provider.dart';
+
+import '../models/experiment_models.dart';
+
+/// Builds the next `REC_YYYYMMDD_NNN` ID for [date], continuing from the
+/// IDs already used that day.
+String nextRecordingId(Iterable<String> existingIds, DateTime date) {
+  final day =
+      '${date.year.toString().padLeft(4, '0')}'
+      '${date.month.toString().padLeft(2, '0')}'
+      '${date.day.toString().padLeft(2, '0')}';
+  final pattern = RegExp('^REC_${day}_(\\d{3,})\$');
+  var highest = 0;
+  for (final id in existingIds) {
+    final match = pattern.firstMatch(id);
+    if (match != null) {
+      final n = int.parse(match.group(1)!);
+      if (n > highest) highest = n;
+    }
+  }
+  return 'REC_${day}_${(highest + 1).toString().padLeft(3, '0')}';
+}
+
+String recordingToJson(
+  SavedRecording recording, {
+  bool? includeRawSamples,
+}) {
+  final keepRaw = includeRawSamples ?? recording.includeRawSamples;
+  return jsonEncode({
+    'recording_id': recording.recordingId,
+    'created_at': recording.createdAt.toIso8601String(),
+    'config': recording.config.toMap(),
+    'live_step_count': recording.liveStepCount,
+    'summary_duration_seconds':
+        recording.summaryDurationSeconds ?? recording.durationSeconds,
+    'summary_cadence_buckets_spm': recording.summaryCadenceBucketsSpm,
+    if (recording.targetBpm != null) 'target_bpm': recording.targetBpm,
+    'include_raw_samples': keepRaw,
+    'replay_detections': keepRaw
+        ? {
+            for (final entry in recording.replayDetections.entries)
+              entry.key.value: [for (final e in entry.value) e.toMap()],
+          }
+        : const <String, Object>{},
+    'replay_variant_detections': keepRaw
+        ? {
+            for (final entry in recording.replayVariantDetections.entries)
+              entry.key.value: [for (final e in entry.value) e.toMap()],
+          }
+        : const <String, Object>{},
+    'samples': keepRaw
+        ? [for (final s in recording.samples) s.toMap()]
+        : const <Object>[],
+  });
+}
+
+SavedRecording recordingFromJson(String source) {
+  final root = jsonDecode(source);
+  if (root is! Map<String, dynamic>) {
+    throw const FormatException('Recording JSON must be an object.');
+  }
+  final id = root['recording_id']?.toString() ?? '';
+  if (id.isEmpty) throw const FormatException('Recording ID is missing.');
+  final config = root['config'];
+  if (config is! Map<String, dynamic>) {
+    throw const FormatException('Recording config is missing.');
+  }
+  final replay = <ThresholdAlgorithm, List<DetectionEvent>>{};
+  final rawReplay = root['replay_detections'];
+  if (rawReplay is Map<String, dynamic>) {
+    for (final entry in rawReplay.entries) {
+      replay[ThresholdAlgorithmLabel.parse(entry.key)] = [
+        for (final row in entry.value as List)
+          DetectionEvent.fromMap(row as Map<String, dynamic>),
+      ];
+    }
+  }
+  final variantReplay = <AlgorithmVariant, List<DetectionEvent>>{};
+  final rawVariantReplay = root['replay_variant_detections'];
+  if (rawVariantReplay is Map<String, dynamic>) {
+    for (final entry in rawVariantReplay.entries) {
+      variantReplay[AlgorithmVariantLabel.parse(entry.key)] = [
+        for (final row in entry.value as List)
+          DetectionEvent.fromMap(row as Map<String, dynamic>),
+      ];
+    }
+  }
+  final rawBuckets = root['summary_cadence_buckets_spm'];
+  final buckets = rawBuckets is List
+      ? [for (final v in rawBuckets) (v as num).toDouble()]
+      : const <double>[];
+  final parsedSamples = [
+    for (final row in (root['samples'] as List? ?? const []))
+      SensorSample.fromMap(id, row as Map<String, dynamic>),
+  ];
+  final includeRaw =
+      root['include_raw_samples'] as bool? ?? parsedSamples.isNotEmpty;
+
+  return SavedRecording(
+    recordingId: id,
+    createdAt:
+        DateTime.tryParse(root['created_at']?.toString() ?? '') ??
+        DateTime.fromMillisecondsSinceEpoch(0),
+    config: ExperimentConfig.fromMap(config),
+    liveStepCount: (root['live_step_count'] as num?)?.toInt() ?? 0,
+    replayDetections: replay,
+    replayVariantDetections: variantReplay,
+    summaryDurationSeconds:
+        (root['summary_duration_seconds'] as num?)?.toDouble(),
+    summaryCadenceBucketsSpm: buckets,
+    targetBpm: (root['target_bpm'] as num?)?.toInt(),
+    includeRawSamples: includeRaw,
+    samples: parsedSamples,
+  );
+}
+
+/// Snapshot of an in-progress run session cached to local storage
+/// to protect data from unexpected app closure or crash (Sprint 3).
+class ActiveSessionSnapshot {
+  const ActiveSessionSnapshot({
+    required this.recordingId,
+    required this.createdAt,
+    required this.config,
+    required this.targetBpm,
+    required this.activeDurationSeconds,
+    required this.samples,
+  });
+
+  final String recordingId;
+  final DateTime createdAt;
+  final ExperimentConfig config;
+  final int targetBpm;
+  final double activeDurationSeconds;
+  final List<SensorSample> samples;
+
+  Map<String, dynamic> toMap() => {
+    'recording_id': recordingId,
+    'created_at': createdAt.toIso8601String(),
+    'config': config.toMap(),
+    'target_bpm': targetBpm,
+    'active_duration_seconds': activeDurationSeconds,
+    'samples': [for (final s in samples) s.toMap()],
+  };
+
+  factory ActiveSessionSnapshot.fromMap(Map<String, dynamic> map) {
+    final id = map['recording_id']?.toString() ?? '';
+    final createdAt =
+        DateTime.tryParse(map['created_at']?.toString() ?? '') ??
+        DateTime.now();
+    final configMap = map['config'];
+    final config = configMap is Map<String, dynamic>
+        ? ExperimentConfig.fromMap(configMap)
+        : const ExperimentConfig(
+            participantId: 'P01',
+            activity: Activity.walking,
+            phonePlacement: PhonePlacement.hand,
+            placementDetail: 'Right hand',
+            trialNumber: 1,
+            primaryLiveAlgorithm: ThresholdAlgorithm.adaptiveMidpoint,
+            targetSteps: 100,
+          );
+    final targetBpm = (map['target_bpm'] as num?)?.toInt() ?? 118;
+    final activeDurationSeconds =
+        (map['active_duration_seconds'] as num?)?.toDouble() ?? 0.0;
+    final rawSamples = map['samples'] as List? ?? const [];
+    final samples = [
+      for (final row in rawSamples)
+        if (row is Map<String, dynamic>) SensorSample.fromMap(id, row),
+    ];
+    return ActiveSessionSnapshot(
+      recordingId: id,
+      createdAt: createdAt,
+      config: config,
+      targetBpm: targetBpm,
+      activeDurationSeconds: activeDurationSeconds,
+      samples: samples,
+    );
+  }
+}
+
+/// Local persistence for recordings.
+abstract class RecordingStore {
+  Future<List<SavedRecording>> list();
+
+  /// Saves a new recording. Fails if the ID already exists, so raw data is
+  /// never overwritten.
+  Future<void> save(SavedRecording recording);
+
+  Future<String> nextId(DateTime date);
+
+  /// Clears all stored recordings, allowing researchers or users to reset
+  /// storage and start fresh.
+  Future<void> clearAll();
+
+  /// Saves an in-progress active run session cache to protect against crashes
+  /// or unexpected app termination (Sprint 3 Option A).
+  Future<void> saveActiveSessionCache(ActiveSessionSnapshot snapshot);
+
+  /// Loads the active session cache if one exists from an uncompleted run.
+  Future<ActiveSessionSnapshot?> loadActiveSessionCache();
+
+  /// Clears the active session cache once a run has been completed or discarded.
+  Future<void> clearActiveSessionCache();
+}
+
+/// Stores each recording as a JSON file in the app documents folder.
+class FileRecordingStore implements RecordingStore {
+  FileRecordingStore({Future<Directory> Function()? directory})
+    : _directory = directory ?? _defaultDirectory;
+
+  final Future<Directory> Function() _directory;
+
+  static Future<Directory> _defaultDirectory() async {
+    final base = await getApplicationDocumentsDirectory();
+    return Directory('${base.path}/step_recordings');
+  }
+
+  @override
+  Future<List<SavedRecording>> list() async {
+    final directory = await _directory();
+    if (!await directory.exists()) return const [];
+    final recordings = <SavedRecording>[];
+    await for (final entity in directory.list()) {
+      if (entity is! File || !entity.path.endsWith('.json')) continue;
+      try {
+        recordings.add(recordingFromJson(await entity.readAsString()));
+      } on Object {
+        // Skip unreadable files; they are left untouched on disk.
+      }
+    }
+    recordings.sort((a, b) => b.recordingId.compareTo(a.recordingId));
+    return recordings;
+  }
+
+  @override
+  Future<void> save(SavedRecording recording) async {
+    final directory = await _directory();
+    await directory.create(recursive: true);
+    final file = File('${directory.path}/${recording.recordingId}.json');
+    if (await file.exists()) {
+      throw StateError(
+        'Recording ${recording.recordingId} already exists; '
+        'raw recordings are immutable.',
+      );
+    }
+    await file.writeAsString(recordingToJson(recording), flush: true);
+  }
+
+  @override
+  Future<String> nextId(DateTime date) async {
+    final directory = await _directory();
+    if (!await directory.exists()) return nextRecordingId(const [], date);
+    final ids = <String>[
+      await for (final entity in directory.list())
+        if (entity is File && entity.path.endsWith('.json'))
+          entity.uri.pathSegments.last.replaceAll('.json', ''),
+    ];
+    return nextRecordingId(ids, date);
+  }
+
+  @override
+  Future<void> clearAll() async {
+    final directory = await _directory();
+    if (!await directory.exists()) return;
+    await for (final entity in directory.list()) {
+      if (entity is File && entity.path.endsWith('.json')) {
+        try {
+          await entity.delete();
+        } on Object {
+          // Ignore deletion error for locked files
+        }
+      }
+    }
+    await clearActiveSessionCache();
+  }
+
+  Future<File> _cacheFile() async {
+    final directory = await _directory();
+    return File('${directory.path}/.temp_active_run.json');
+  }
+
+  @override
+  Future<void> saveActiveSessionCache(ActiveSessionSnapshot snapshot) async {
+    try {
+      final file = await _cacheFile();
+      await file.parent.create(recursive: true);
+      await file.writeAsString(jsonEncode(snapshot.toMap()), flush: true);
+    } on Object {
+      // Ignore cache write errors in restricted sandbox
+    }
+  }
+
+  @override
+  Future<ActiveSessionSnapshot?> loadActiveSessionCache() async {
+    try {
+      final file = await _cacheFile();
+      if (!await file.exists()) return null;
+      final content = await file.readAsString();
+      if (content.trim().isEmpty) return null;
+      final map = jsonDecode(content);
+      if (map is! Map<String, dynamic>) return null;
+      return ActiveSessionSnapshot.fromMap(map);
+    } on Object {
+      return null;
+    }
+  }
+
+  @override
+  Future<void> clearActiveSessionCache() async {
+    try {
+      final file = await _cacheFile();
+      if (await file.exists()) {
+        await file.delete();
+      }
+    } on Object {
+      // Ignore cache deletion errors
+    }
+  }
+}
