@@ -42,19 +42,19 @@ Dokumen ini merangkum rencana tindak lanjut (**follow-up refactor**) setelah mig
 **Target Branch:** `feat/audio-engine`
 
 1. **Arsitektur Audio 2 Layer (`docs/PRD-MVP.md` FR-3)**
-   - **Layer 1 (Background Loop):** Implementasi via `audioplayers` dengan *gapless looping*, fade-in/fade-out 800 ms, dan hysteresis lockout (`>= 130 SPM` masuk Jogging Zone, `< 120 SPM` selama 3 detik keluar).
-   - **Layer 2 (Step SFX):** Implementasi via `soundpool` ($\le 15\ \text{ms}$ native latency, $< 50\ \text{ms}$ end-to-end dari footstrike).
+   - [x] **Layer 1 (Background Loop):** Implementasi via `audioplayers` (`AudioplayersLoopBackend`) dengan *gapless looping*, fade-in/fade-out 800 ms, dan hysteresis lockout (`>= 130 SPM` masuk Jogging Zone, `< 120 SPM` selama 3 detik keluar).
+   - [x] **Layer 2 (Step SFX):** Implementasi via `soundpool` (`SoundpoolSfxBackend`, native Android `SoundPool`) + fallback `namespace` AGP 8+ di `android/build.gradle.kts`.
 2. **Orkestrasi 6 Sound Pack (`README.md` & `docs/PRD-MVP.md` FR-4)**
-   - `BREAKBEAT_FVNKY`: `Full_Fade_NoKick_BG.mp3` (>= 130 SPM) + `drums_1_step.mp3` per langkah.
-   - `LARI_NGACIR`: Dual-stem sinkron 140 BPM (`lari_ngacir_layer1_walk.mp3` + `lari_ngacir_layer2_jog.mp3` bar-aligned fade-in, Step SFX off).
-   - `GBA_SAND_HOP`: `hoenn_island_loop.mp4` dengan dynamic playback rate (`clamp(SPM / 132.5, 0.90, 1.18)`) + round-robin `gba_sand_01..03.mp3`.
-   - `SQUID` & `SPONGE`: Alternating left/right step SFX (`squid_1/2.MP3`, `sponge_1/2.mp3`).
-   - `RUBBER_BOUNCY`: `rubber_01.mp3` dengan micro-pitch alternation (1.00 / 1.03).
-   - Dukung **zero-interruption switching** (ganti pack saat lari tanpa reset step/timer).
-3. **Verifikasi Seamless Loop `LARI_NGACIR` di Perangkat Android**
-   - Uji apakah versi `.mp3` 320k sudah *gapless* tanpa klik di titik loop 72-bar. Jika ditemukan jeda/padding MP3, convert dari `.wav` master ke `.ogg` (Vorbis/Opus) agar tetap *gapless* tanpa membengkakkan APK.
+   - [x] `BREAKBEAT_FVNKY`: `Full_Fade_NoKick_BG.mp3` (>= 130 SPM) + `drums_1_step.mp3` per langkah.
+   - [x] `LARI_NGACIR`: Dual-stem sinkron 140 BPM (`lari_ngacir_layer1_walk.mp3` + `lari_ngacir_layer2_jog.mp3` bar-aligned fade-in, Step SFX off).
+   - [x] `GBA_SAND_HOP`: `hoenn_island_loop.mp4` dengan dynamic playback rate (`clamp(SPM / 132.5, 0.90, 1.18)`) + round-robin `gba_sand_01..03.mp3`.
+   - [x] `SQUID` & `SPONGE`: Alternating left/right step SFX (`squid_1/2.MP3`, `sponge_1/2.mp3`).
+   - [x] `RUBBER_BOUNCY`: `rubber_01.mp3` dengan micro-pitch alternation (1.00 / 1.03).
+   - [x] Dukung **zero-interruption switching** (ganti pack saat lari tanpa reset step/timer) via `StradioAudioEngine.switchPack()` dan pemilih Sound Pack di `ActiveRunScreen`.
+3. **Verifikasi Seamless Loop `LARI_NGACIR` di Perangkat Android *(Dipindahkan ke Phase 4)***
+   - [ ] Uji apakah versi `.mp3` 320k sudah *gapless* tanpa klik di titik loop 72-bar saat uji HP Android fisik (Phase 4). Jika ditemukan jeda/padding MP3, convert dari `.wav` master di `assets/audio/_raw_sources/` ke `.ogg` (Vorbis/Opus).
 4. **Pocket Mode (Foreground Service)**
-   - Hubungkan step detector + audio engine ke `flutter_foreground_task` agar tetap berjalan stabil saat layar dikunci di saku, lengkap dengan notifikasi durasi, jumlah langkah, dan tombol `Stop run`.
+   - [x] Hubungkan step detector + `StradioAudioEngine` ke `flutter_foreground_task` agar tetap sinkron (start, pause, resume, stop, dan tombol notifikasi `Stop run` + tampilan Sound Pack aktif).
 
 ---
 

@@ -10,6 +10,8 @@ import '../../algorithms/step_detector.dart';
 import '../../evaluation/run_metrics_calculator.dart';
 import '../../l10n/stradio_strings.dart';
 import '../../models/experiment_models.dart';
+import '../../models/sound_pack.dart';
+import '../../services/audio_engine_service.dart';
 import '../../services/export_service.dart';
 import '../../services/foreground_notification_service.dart';
 import '../../services/posthog_service.dart';
@@ -43,6 +45,7 @@ class ActiveRunScreen extends StatefulWidget {
     this.exportService,
     this.postHogService,
     this.foregroundService,
+    this.audioEngine,
     this.initialLabSettings = const StradioLabSettings(),
     this.onToggleThemeMode,
     this.isConsumerMode = false,
@@ -56,6 +59,7 @@ class ActiveRunScreen extends StatefulWidget {
   final ExportService? exportService;
   final PostHogTelemetryService? postHogService;
   final ForegroundNotificationService? foregroundService;
+  final StradioAudioEngine? audioEngine;
   final StradioLabSettings initialLabSettings;
   final VoidCallback? onToggleThemeMode;
   final bool isConsumerMode;
@@ -73,6 +77,8 @@ class _ActiveRunScreenState extends State<ActiveRunScreen>
   late final RecordingService _recordingService;
   late final PostHogTelemetryService _postHogService;
   late final ForegroundNotificationService _foregroundService;
+  late final StradioAudioEngine _audioEngine;
+  late final bool _ownsAudioEngine;
   late StradioLabSettings _labSettings;
   late String _soundscapeTitle;
 
@@ -118,8 +124,12 @@ class _ActiveRunScreenState extends State<ActiveRunScreen>
     _postHogService = widget.postHogService ?? PostHogTelemetryService();
     _foregroundService =
         widget.foregroundService ?? FlutterForegroundNotificationService();
+    _ownsAudioEngine = widget.audioEngine == null;
+    _audioEngine = widget.audioEngine ?? StradioAudioEngine();
     _labSettings = widget.initialLabSettings;
     _soundscapeTitle = widget.soundscapeTitle;
+
+    unawaited(_audioEngine.preloadActivePack());
 
     _waveformTicker = createTicker(_onWaveformTick);
     _foregroundService.addActionListener(_handleNotificationAction);
@@ -487,6 +497,8 @@ class _ActiveRunScreenState extends State<ActiveRunScreen>
           requestedRateHz: 100.0,
         );
       }
+      final liveSpm = _currentLiveCadenceSpm();
+      _audioEngine.updateCadence(liveSpm);
       if (_foregroundService.isServiceActive) {
         unawaited(
           _foregroundService.updateWorkoutService(
@@ -496,10 +508,20 @@ class _ActiveRunScreenState extends State<ActiveRunScreen>
             targetBpm: _labSettings.targetBpm,
             algorithmName: _labSettings.primaryAlgorithm.displayName,
             isRunning: true,
+            soundPackTitle: _audioEngine.activePack.title,
           ),
         );
       }
     });
+  }
+
+  double _currentLiveCadenceSpm() {
+    final nowNs = _latestSample?.timestampNs ??
+        DateTime.now().microsecondsSinceEpoch * 1000;
+    return RunMetricsCalculator.rollingCadenceSpm(
+      detections: _primaryDetections,
+      currentTimestampNs: nowNs,
+    );
   }
 
   void _handleIncomingSample(SensorSample sample) {
@@ -534,6 +556,11 @@ class _ActiveRunScreenState extends State<ActiveRunScreen>
         _recentThresholds.removeFirst();
       }
       if (primaryOut.step != null) {
+        final liveSpm = RunMetricsCalculator.rollingCadenceSpm(
+          detections: _primaryDetections,
+          currentTimestampNs: sample.timestampNs,
+        );
+        unawaited(_audioEngine.onStepDetected(cadenceSpm: liveSpm));
         _lastStepFlashAt = DateTime.now();
         _stepFlashTimer?.cancel();
         _stepFlashTimer = Timer(const Duration(milliseconds: 240), () {
@@ -548,6 +575,7 @@ class _ActiveRunScreenState extends State<ActiveRunScreen>
               targetBpm: _labSettings.targetBpm,
               algorithmName: _labSettings.primaryAlgorithm.displayName,
               isRunning: true,
+              soundPackTitle: _audioEngine.activePack.title,
             ),
           );
         }
@@ -645,6 +673,7 @@ class _ActiveRunScreenState extends State<ActiveRunScreen>
         _streamState = _RunStreamState.paused;
       });
       _syncWaveformTicker();
+      unawaited(_audioEngine.pauseSession());
       unawaited(
         _foregroundService.updateWorkoutService(
           steps: _primaryDetections.length,
@@ -653,6 +682,7 @@ class _ActiveRunScreenState extends State<ActiveRunScreen>
           targetBpm: _labSettings.targetBpm,
           algorithmName: _labSettings.primaryAlgorithm.displayName,
           isRunning: false,
+          soundPackTitle: _audioEngine.activePack.title,
         ),
       );
       unawaited(
@@ -675,6 +705,11 @@ class _ActiveRunScreenState extends State<ActiveRunScreen>
       });
       _syncWaveformTicker();
       _startElapsedTicker();
+      if (_audioEngine.isSessionActive) {
+        unawaited(_audioEngine.resumeSession());
+      } else {
+        unawaited(_audioEngine.startSession());
+      }
       unawaited(_foregroundService.requestNotificationPermission());
       unawaited(
         _foregroundService.startWorkoutService(
@@ -684,6 +719,7 @@ class _ActiveRunScreenState extends State<ActiveRunScreen>
           targetBpm: _labSettings.targetBpm,
           algorithmName: _labSettings.primaryAlgorithm.displayName,
           isRunning: true,
+          soundPackTitle: _audioEngine.activePack.title,
         ),
       );
       if (isFirstStart) {
@@ -713,6 +749,7 @@ class _ActiveRunScreenState extends State<ActiveRunScreen>
       _waveformTicker.stop();
     }
     unawaited(_recordingService.stop());
+    unawaited(_audioEngine.stopSession());
     unawaited(_foregroundService.stopWorkoutService());
 
     final palette = StradioPalette.of(context);
@@ -890,6 +927,152 @@ class _ActiveRunScreenState extends State<ActiveRunScreen>
       );
     });
     unawaited(StradioPreferencesService.saveLabSettings(_labSettings));
+  }
+
+  Future<void> _showSoundPackPickerSheet() async {
+    final palette = StradioPalette.of(context);
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (sheetContext) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+            child: Container(
+              key: const Key('sound_pack_picker_sheet'),
+              padding: const EdgeInsets.fromLTRB(20, 14, 20, 20),
+              decoration: BoxDecoration(
+                color: palette.surface,
+                borderRadius: BorderRadius.circular(StradioRadii.hero),
+                boxShadow: palette.cardShadow,
+              ),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Center(
+                      child: Container(
+                        width: 40,
+                        height: 4,
+                        decoration: BoxDecoration(
+                          color: palette.textMuted.withValues(alpha: 0.4),
+                          borderRadius: BorderRadius.circular(StradioRadii.pill),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    Text(
+                      'Sound Pack',
+                      style: StradioTypography.soraHeading(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w800,
+                        color: palette.textPrimary,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Switch live without interrupting your run',
+                      style: StradioTypography.interBody(
+                        fontSize: 13,
+                        color: palette.textSecondary,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    for (final pack in StradioSoundPack.catalog) ...[
+                      Material(
+                        color: _audioEngine.activePackId == pack.id
+                            ? palette.accentCoral.withValues(alpha: 0.14)
+                            : palette.surfaceSubtle,
+                        borderRadius: BorderRadius.circular(
+                          StradioRadii.control,
+                        ),
+                        child: InkWell(
+                          key: Key('sound_pack_option_${pack.code}'),
+                          borderRadius: BorderRadius.circular(
+                            StradioRadii.control,
+                          ),
+                          onTap: () {
+                            unawaited(_audioEngine.switchPack(pack.id));
+                            setState(() {});
+                            if (_foregroundService.isServiceActive) {
+                              unawaited(
+                                _foregroundService.updateWorkoutService(
+                                  steps: _primaryDetections.length,
+                                  targetSteps: _labSettings.targetSteps,
+                                  activeDurationSeconds: _activeDurationSeconds,
+                                  targetBpm: _labSettings.targetBpm,
+                                  algorithmName:
+                                      _labSettings.primaryAlgorithm.displayName,
+                                  isRunning:
+                                      _streamState == _RunStreamState.running,
+                                  soundPackTitle: pack.title,
+                                ),
+                              );
+                            }
+                            Navigator.of(sheetContext).pop();
+                          },
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 14,
+                              vertical: 12,
+                            ),
+                            child: Row(
+                              children: [
+                                Icon(
+                                  Icons.headphones_rounded,
+                                  size: 18,
+                                  color: _audioEngine.activePackId == pack.id
+                                      ? palette.accentCoral
+                                      : palette.accentViolet,
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        '${pack.title} · ${pack.artist}',
+                                        style: StradioTypography.soraHeading(
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.w700,
+                                          color: palette.textPrimary,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 2),
+                                      Text(
+                                        pack.tagline,
+                                        style: StradioTypography.interBody(
+                                          fontSize: 12,
+                                          color: palette.textSecondary,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                if (_audioEngine.activePackId == pack.id)
+                                  Icon(
+                                    Icons.check_circle_rounded,
+                                    size: 18,
+                                    color: palette.accentCoral,
+                                  ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
   }
 
   Future<void> _showTempoPickerSheet() async {
@@ -1147,6 +1330,11 @@ class _ActiveRunScreenState extends State<ActiveRunScreen>
     _sensorHealthNotifier.dispose();
     _foregroundService.removeActionListener(_handleNotificationAction);
     unawaited(_foregroundService.stopWorkoutService());
+    if (_ownsAudioEngine) {
+      unawaited(_audioEngine.dispose());
+    } else {
+      unawaited(_audioEngine.stopSession());
+    }
     unawaited(_recordingService.dispose());
     super.dispose();
   }
@@ -1251,11 +1439,13 @@ class _ActiveRunScreenState extends State<ActiveRunScreen>
                               targetBpm: _labSettings.targetBpm,
                               algorithmCode: _primaryVariant.code,
                               soundscapeTitle: _soundscapeTitle,
+                              activeSoundPackTitle: _audioEngine.activePack.title,
                               phonePlacement: _labSettings.phonePlacement,
                               showAlgorithmBadge:
                                   !widget.isConsumerMode ||
                                   widget.developerModeEnabled,
                               onOpenTempoPicker: _showTempoPickerSheet,
+                              onOpenSoundPackPicker: _showSoundPackPickerSheet,
                               onTogglePlacement: _togglePlacement,
                             ),
                             SizedBox(height: isCompactHeight ? 10 : 14),
@@ -1490,8 +1680,10 @@ class _EditorialRunHeader extends StatelessWidget {
     required this.algorithmCode,
     required this.phonePlacement,
     this.soundscapeTitle = 'Neon Stride',
+    this.activeSoundPackTitle = 'Breakbeat Fvnky',
     this.showAlgorithmBadge = true,
     required this.onOpenTempoPicker,
+    required this.onOpenSoundPackPicker,
     required this.onTogglePlacement,
   });
 
@@ -1499,8 +1691,10 @@ class _EditorialRunHeader extends StatelessWidget {
   final String algorithmCode;
   final PhonePlacement phonePlacement;
   final String soundscapeTitle;
+  final String activeSoundPackTitle;
   final bool showAlgorithmBadge;
   final VoidCallback onOpenTempoPicker;
+  final VoidCallback onOpenSoundPackPicker;
   final VoidCallback onTogglePlacement;
 
   @override
@@ -1603,6 +1797,41 @@ class _EditorialRunHeader extends StatelessWidget {
                 fontWeight: FontWeight.w600,
                 color: palette.textSecondary,
                 letterSpacing: 0.2,
+              ),
+            ),
+            // Live Zero-Interruption Sound Pack Switcher Pill
+            Material(
+              color: palette.surfaceSubtle,
+              borderRadius: BorderRadius.circular(StradioRadii.pill),
+              child: InkWell(
+                key: const Key('sound_pack_selector_button'),
+                borderRadius: BorderRadius.circular(StradioRadii.pill),
+                onTap: onOpenSoundPackPicker,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 5,
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.headphones_rounded,
+                        size: 13,
+                        color: palette.accentCoral,
+                      ),
+                      const SizedBox(width: 5),
+                      Text(
+                        activeSoundPackTitle,
+                        style: StradioTypography.interLabel(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          color: palette.textPrimary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               ),
             ),
             // Optional Lightweight Hand / Pocket Placement Pill
