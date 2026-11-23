@@ -11,7 +11,7 @@ import '../../models/sound_pack.dart';
 import '../../services/posthog_service.dart';
 import '../../services/recording_repository.dart';
 import '../../theme/stradio_theme.dart';
-import 'share_studio_screen.dart';
+import '../../widgets/share/share_run_rhythm_sheet.dart';
 
 enum _StemFilter { all, active, walking }
 
@@ -81,14 +81,11 @@ class _PostRunSummaryScreenState extends State<PostRunSummaryScreen> {
 
   void _openShareStudio() {
     final pack = StradioSoundPack.byId(widget.soundPackId);
-    Navigator.of(context).push<void>(
-      MaterialPageRoute<void>(
-        builder: (_) => ShareStudioScreen(
-          metrics: widget.metrics,
-          soundPack: pack,
-          language: widget.language,
-        ),
-      ),
+    ShareRunRhythmSheet.show(
+      context,
+      metrics: widget.metrics,
+      soundPack: pack,
+      language: widget.language,
     );
   }
 

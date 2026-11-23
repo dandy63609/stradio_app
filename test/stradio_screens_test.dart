@@ -283,8 +283,33 @@ void main() {
         expect(find.text('Squid Stride'), findsOneWidget);
         expect(foreground.isServiceActive, isFalse);
 
-        // Open Phase 3B full-screen ShareStudioScreen from Cadence Summary
+        // Open Mockup 12 Share Run Rhythm bottom sheet, test Copy Text, then open ShareStudioScreen (9:16)
         await tester.tap(find.byKey(const Key('export_ig_story_button')));
+        await tester.pumpAndSettle();
+        expect(find.byKey(const Key('share_run_rhythm_sheet')), findsOneWidget);
+        expect(find.text('Share Run Rhythm'), findsOneWidget);
+        expect(find.byKey(const Key('share_rhythm_quick_save')), findsOneWidget);
+        expect(find.byKey(const Key('share_rhythm_quick_copy')), findsOneWidget);
+        expect(
+          find.byKey(const Key('share_rhythm_quick_messages')),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(const Key('share_rhythm_primary_button')),
+          findsOneWidget,
+        );
+
+        final copyBtn = find.byKey(const Key('share_rhythm_quick_copy'));
+        await tester.ensureVisible(copyBtn);
+        await tester.tap(copyBtn);
+        await tester.pumpAndSettle();
+        expect(find.text('Caption copied'), findsOneWidget);
+
+        final openStudioBtn = find.byKey(
+          const Key('share_rhythm_open_studio_button'),
+        );
+        await tester.ensureVisible(openStudioBtn);
+        await tester.tap(openStudioBtn);
         await tester.pumpAndSettle();
         expect(find.byKey(const Key('share_studio_screen')), findsOneWidget);
         expect(
