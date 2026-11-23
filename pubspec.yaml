@@ -80,6 +80,7 @@ flutter:
 
   assets:
     - assets/images/stradio-logo.png
+    - assets/images/earphones_recommendation.jpg
     - assets/design/ribbon_tight_corner.png
     - assets/audio/breakbeat_fvnky/drums_1_step.mp3
     - assets/audio/breakbeat_fvnky/Full_Fade_NoKick_BG.mp3

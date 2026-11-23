@@ -90,33 +90,44 @@ class EarphonesRecommendationModal extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                // 184px Mockup 08 Warm Studio Header: Window-Light Bokeh + Acoustic Ribbons + 3D Ivory Headphones SVG
+                // 176px Mockup 08 Warm Studio Photo Header + bottom fade + close button
                 SizedBox(
-                  height: 184,
+                  height: 176,
                   child: Stack(
                     fit: StackFit.expand,
                     children: [
-                      const CustomPaint(
-                        painter: _Mockup08StudioBackdropPainter(),
-                      ),
-                      const Padding(
-                        padding: EdgeInsets.symmetric(horizontal: 6),
-                        child: CustomPaint(
-                          painter: SonicRibbonPainter(
-                            phase: 0.95,
-                            amplitude: 0.86,
-                            strokeWidth: 2.3,
-                            fillGradientArea: true,
-                          ),
-                        ),
-                      ),
-                      const Center(
-                        child: SizedBox(
-                          width: 156,
-                          height: 156,
-                          child: CustomPaint(
-                            painter: _Alabaster3DHeadphonesPainter(),
-                          ),
+                      Image.asset(
+                        'assets/images/earphones_recommendation.jpg',
+                        key: const Key('earphones_modal_hero_image'),
+                        fit: BoxFit.cover,
+                        alignment: Alignment.center,
+                        errorBuilder: (_, _, _) => const Stack(
+                          fit: StackFit.expand,
+                          children: [
+                            CustomPaint(
+                              painter: _Mockup08StudioBackdropPainter(),
+                            ),
+                            Padding(
+                              padding: EdgeInsets.symmetric(horizontal: 6),
+                              child: CustomPaint(
+                                painter: SonicRibbonPainter(
+                                  phase: 0.95,
+                                  amplitude: 0.86,
+                                  strokeWidth: 2.3,
+                                  fillGradientArea: true,
+                                ),
+                              ),
+                            ),
+                            Center(
+                              child: SizedBox(
+                                width: 156,
+                                height: 156,
+                                child: CustomPaint(
+                                  painter: _Alabaster3DHeadphonesPainter(),
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                       // Subtle bottom fade into card surface
@@ -124,7 +135,7 @@ class EarphonesRecommendationModal extends StatelessWidget {
                         left: 0,
                         right: 0,
                         bottom: 0,
-                        height: 28,
+                        height: 36,
                         child: DecoratedBox(
                           decoration: BoxDecoration(
                             gradient: LinearGradient(
@@ -169,55 +180,75 @@ class EarphonesRecommendationModal extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 4,
-                        ),
-                        decoration: BoxDecoration(
-                          color: StradioColors.glowCoralSoft,
-                          borderRadius: BorderRadius.circular(StradioRadii.full),
-                        ),
-                        child: Text(
-                          s.earphonesBadge,
-                          style: StradioTypography.microCap(
-                            color: StradioColors.textAccentDeep,
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 6,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
+                          Text(
+                            s.earphonesTitle,
+                            style: StradioTypography.headingSmall(fontSize: 18),
                           ),
-                        ),
-                      ),
-                      const SizedBox(height: 10),
-                      Text(
-                        s.earphonesTitle,
-                        style: StradioTypography.headingSmall(fontSize: 18),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 9,
+                              vertical: 3,
+                            ),
+                            decoration: BoxDecoration(
+                              color: StradioColors.glowCoralSoft,
+                              borderRadius: BorderRadius.circular(
+                                StradioRadii.full,
+                              ),
+                            ),
+                            child: Text(
+                              s.earphonesBadge,
+                              style: StradioTypography.microCap(
+                                color: StradioColors.textAccentDeep,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                       const SizedBox(height: 8),
                       Text(
                         s.earphonesBody,
                         style: StradioTypography.body(fontSize: 13),
                       ),
-                      const SizedBox(height: 20),
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                      const SizedBox(height: 18),
+                      Row(
                         children: [
-                          SizedBox(
-                            height: 48,
-                            child: FilledButton(
-                              key: const Key('earphones_modal_primary_button'),
-                              onPressed: onDismiss,
-                              child: Text(s.earphonesPrimaryAction),
+                          Expanded(
+                            child: SizedBox(
+                              height: 46,
+                              child: FilledButton(
+                                key: const Key('earphones_modal_primary_button'),
+                                onPressed: onDismiss,
+                                style: FilledButton.styleFrom(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 14,
+                                  ),
+                                ),
+                                child: FittedBox(
+                                  fit: BoxFit.scaleDown,
+                                  child: Text(s.earphonesPrimaryAction),
+                                ),
+                              ),
                             ),
                           ),
-                          const SizedBox(height: 8),
+                          const SizedBox(width: 8),
                           SizedBox(
-                            height: 44,
+                            height: 46,
                             child: TextButton(
                               key: const Key('earphones_modal_later_button'),
                               onPressed: onDismiss,
                               style: TextButton.styleFrom(
                                 foregroundColor: StradioColors.textSecondary,
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                ),
                                 textStyle: StradioTypography.buttonLabel(
                                   color: StradioColors.textSecondary,
-                                ),
+                                ).copyWith(fontSize: 13),
                               ),
                               child: Text(s.earphonesLaterAction),
                             ),
