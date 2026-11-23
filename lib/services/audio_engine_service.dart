@@ -174,6 +174,7 @@ class AudioplayersSfxBackend implements StepSfxBackend {
 
   final Map<String, AudioPlayer> _players = {};
   final Map<String, double> _lastRates = {};
+  final Map<String, double> _lastVolumes = {};
 
   String _normalizeAssetPath(String assetPath) =>
       assetPath.startsWith('assets/')
@@ -226,7 +227,12 @@ class AudioplayersSfxBackend implements StepSfxBackend {
   }) async {
     try {
       final player = await _ensurePreloadedPlayer(assetPath);
-      await player.setVolume(volume.clamp(0.0, 1.0));
+      final clampedVol = volume.clamp(0.0, 1.0);
+      final prevVol = _lastVolumes[assetPath];
+      if (prevVol == null || (clampedVol - prevVol).abs() > 0.01) {
+        await player.setVolume(clampedVol);
+        _lastVolumes[assetPath] = clampedVol;
+      }
       final prevRate = _lastRates[assetPath] ?? 1.0;
       if ((rate - prevRate).abs() > 0.001) {
         await player.setPlaybackRate(rate);
@@ -243,6 +249,7 @@ class AudioplayersSfxBackend implements StepSfxBackend {
     final players = List<AudioPlayer>.of(_players.values);
     _players.clear();
     _lastRates.clear();
+    _lastVolumes.clear();
     for (final player in players) {
       try {
         await player.dispose();

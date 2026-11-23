@@ -78,7 +78,7 @@ abstract class StradioStrings {
   String get soundPackSheetTitle;
   String get soundPackSheetSubtitle;
   String get recoverRunTitle;
-  String recoverRunBody(int sampleCount, int durationSeconds);
+  String recoverRunBody(int sampleCount, int durationSeconds, {int stepCount = 0});
   String get discardAction;
   String get reviewAndSaveAction;
 

@@ -116,8 +116,10 @@ class StradioStringsEn extends StradioStrings {
   String get recoverRunTitle => 'Recover unfinished run?';
 
   @override
-  String recoverRunBody(int sampleCount, int durationSeconds) =>
-      'Found an unsaved session with $sampleCount sensor samples (${durationSeconds}s).';
+  String recoverRunBody(int sampleCount, int durationSeconds, {int stepCount = 0}) =>
+      sampleCount > 0
+          ? 'Found an unsaved session with $sampleCount sensor samples (${durationSeconds}s).'
+          : 'Found an unsaved session with $stepCount steps (${durationSeconds}s).';
 
   @override
   String get discardAction => 'Discard';

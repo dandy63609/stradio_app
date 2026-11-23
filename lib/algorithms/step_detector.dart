@@ -102,6 +102,7 @@ class StepDetector {
   double? _sPrev2;
   double? _sPrev1;
   double? _tPrev1;
+  double _hysteresisPrev1 = 0.0;
   int? _tsPrev1;
   int? _indexPrev1;
   bool _stationaryPrev1 = true;
@@ -151,7 +152,10 @@ class StepDetector {
     final tPrev1 = _tPrev1;
     final tsPrev1 = _tsPrev1;
     if (sPrev1 != null && sPrev2 != null && tPrev1 != null && tsPrev1 != null) {
-      final isPeak = sPrev1 >= sPrev2 && sPrev1 > smoothed && sPrev1 > tPrev1;
+      final isPeak =
+          sPrev1 >= sPrev2 &&
+          sPrev1 > smoothed &&
+          sPrev1 > tPrev1 + _hysteresisPrev1;
       final intervalOk =
           _lastStepNs == null ||
           tsPrev1 - _lastStepNs! >= parameters.minimumStepIntervalMs * 1000000;
@@ -169,27 +173,57 @@ class StepDetector {
       }
     }
 
-    // 3. Add s[i] to the window, drop old values, and compute T[i].
+    // 3. Add s[i] to the window, drop old values, and compute T[i] in a single pass.
     _window.addLast(_WindowEntry(sample.timestampNs, smoothed));
     final windowStart =
         sample.timestampNs - parameters.windowDurationMs * 1000000;
     while (_window.first.timestampNs < windowStart) {
       _window.removeFirst();
     }
-    final values = _window.map((e) => e.value);
-    final rawThreshold = threshold(values);
-    final spread = windowSpread(values);
+
+    var minVal = double.infinity;
+    var maxVal = double.negativeInfinity;
+    var sum = 0.0;
+    var count = 0;
+    for (final entry in _window) {
+      final v = entry.value;
+      if (v < minVal) minVal = v;
+      if (v > maxVal) maxVal = v;
+      sum += v;
+      count++;
+    }
+    final spread = (minVal == double.infinity || maxVal == double.negativeInfinity)
+        ? 0.0
+        : maxVal - minVal;
+
+    final double rawThreshold;
+    if (algorithm == ThresholdAlgorithm.adaptiveMidpoint) {
+      rawThreshold = (maxVal + minVal) / 2;
+    } else {
+      final mean = sum / count;
+      var squares = 0.0;
+      for (final entry in _window) {
+        final diff = entry.value - mean;
+        squares += diff * diff;
+      }
+      rawThreshold = mean + parameters.k * math.sqrt(squares / count);
+    }
+
     final isStationary = spread < parameters.minWindowSpreadMps2;
     final currentThreshold = isStationary
         ? rawThreshold + (parameters.minWindowSpreadMps2 - spread) * 0.5
         : rawThreshold;
+    final hysteresis = algorithm == ThresholdAlgorithm.adaptiveMidpoint
+        ? math.max(parameters.minPeakProminenceMps2, spread * 0.12)
+        : 0.0;
 
-    // 5. Valley confirmation: re-arm once the signal drops below threshold.
-    if (smoothed < currentThreshold) _armed = true;
+    // 5. Valley confirmation: re-arm only once the signal drops cleanly below threshold - hysteresis.
+    if (smoothed < currentThreshold - hysteresis) _armed = true;
 
     _sPrev2 = _sPrev1;
     _sPrev1 = smoothed;
     _tPrev1 = currentThreshold;
+    _hysteresisPrev1 = hysteresis;
     _tsPrev1 = sample.timestampNs;
     _indexPrev1 = sample.sampleIndex;
     _stationaryPrev1 = isStationary;

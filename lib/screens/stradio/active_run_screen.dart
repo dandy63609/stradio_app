@@ -1,6 +1,8 @@
 import 'dart:async';
+import 'dart:collection';
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -24,6 +26,14 @@ import 'post_run_summary_screen.dart';
 enum _RunStreamState { connecting, running, paused, sensorError }
 
 enum _RecoveryAction { reviewAndSave, discard }
+
+Map<AlgorithmVariant, List<DetectionEvent>> _replayAllFourIsolate(
+  Map<String, Object?> payload,
+) {
+  final samples = payload['samples'] as List<SensorSample>;
+  final params = payload['params'] as AlgorithmParameters;
+  return StepDetector.replayAllFour(samples, params);
+}
 
 /// Surface 2: Active Run Instrument (`docs/DESIGN.md` & `docs/EXPERIENCE.md`).
 ///
@@ -68,6 +78,7 @@ class ActiveRunScreen extends StatefulWidget {
 class _ActiveRunScreenState extends State<ActiveRunScreen>
     with TickerProviderStateMixin {
   static const Duration _holdToEndDuration = Duration(milliseconds: 1500);
+  static const int _healthRingCapacity = 300;
 
   late final RecordingStore _store;
   late final RecordingService _recordingService;
@@ -76,6 +87,8 @@ class _ActiveRunScreenState extends State<ActiveRunScreen>
   late final StradioAudioEngine _audioEngine;
   late final bool _ownsAudioEngine;
   late StradioLabSettings _labSettings;
+  late double _strideSensitivity;
+  late bool _isDeveloperMode;
 
   late final AnimationController _ribbonController;
   late final AnimationController _continuousWaveController;
@@ -91,11 +104,13 @@ class _ActiveRunScreenState extends State<ActiveRunScreen>
   bool _stepPulseActive = false;
   bool _hasStartedRun = false;
   bool _isFinishing = false;
+  bool _isFlushingCache = false;
   int _lastHapticBucket = -1;
 
   late Map<AlgorithmVariant, StepDetector> _detectors;
   late Map<AlgorithmVariant, List<DetectionEvent>> _liveDetections;
   final List<SensorSample> _activeSamples = [];
+  final ListQueue<SensorSample> _recentHealthSamples = ListQueue<SensorSample>();
   SensorSample? _latestSample;
 
   Timer? _elapsedTimer;
@@ -106,6 +121,8 @@ class _ActiveRunScreenState extends State<ActiveRunScreen>
   AlgorithmVariant get _primaryVariant => AlgorithmVariant.a1MidpointRaw;
   List<DetectionEvent> get _primaryDetections =>
       _liveDetections[_primaryVariant] ?? const [];
+  AlgorithmParameters get _detectorParams =>
+      AlgorithmParameters.forSensitivity(_strideSensitivity);
 
   @override
   void initState() {
@@ -120,6 +137,10 @@ class _ActiveRunScreenState extends State<ActiveRunScreen>
         widget.audioEngine ??
         StradioAudioEngine(initialPack: widget.initialSoundPackId);
     _labSettings = widget.initialLabSettings;
+    _strideSensitivity = StradioPreferencesService.loadStrideSensitivity();
+    _isDeveloperMode =
+        StradioPreferencesService.loadUserProfile().developerModeEnabled ||
+        _labSettings.developerOverlayEnabled;
 
     if (widget.audioEngine != null &&
         _audioEngine.activePackId != widget.initialSoundPackId) {
@@ -149,15 +170,39 @@ class _ActiveRunScreenState extends State<ActiveRunScreen>
   }
 
   void _resetDetectors() {
+    final params = _detectorParams;
+    final activeVariants = _isDeveloperMode
+        ? AlgorithmVariant.values
+        : [_primaryVariant];
     _detectors = {
-      for (final variant in AlgorithmVariant.values)
+      for (final variant in activeVariants)
         variant: StepDetector(
           algorithm: variant.thresholdAlgorithm,
+          parameters: params,
           useLinearAcceleration: variant.usesLinearAcceleration,
         ),
     };
     _liveDetections = {
       for (final variant in AlgorithmVariant.values) variant: [],
+    };
+  }
+
+  void _applyCalibrationSensitivity(double sensitivity) {
+    final clamped = sensitivity.clamp(0.8, 2.4);
+    if ((clamped - _strideSensitivity).abs() < 0.005) return;
+    _strideSensitivity = clamped;
+    unawaited(StradioPreferencesService.saveStrideSensitivity(clamped));
+    final params = _detectorParams;
+    final activeVariants = _isDeveloperMode
+        ? AlgorithmVariant.values
+        : [_primaryVariant];
+    _detectors = {
+      for (final variant in activeVariants)
+        variant: StepDetector(
+          algorithm: variant.thresholdAlgorithm,
+          parameters: params,
+          useLinearAcceleration: variant.usesLinearAcceleration,
+        ),
     };
   }
 
@@ -177,7 +222,8 @@ class _ActiveRunScreenState extends State<ActiveRunScreen>
     final cached = await _store.loadActiveSessionCache();
     if (!mounted) return;
 
-    if (cached != null && cached.samples.isNotEmpty) {
+    if (cached != null &&
+        (cached.samples.isNotEmpty || cached.liveStepCount > 0)) {
       final action = await _showCrashRecoveryDialog(cached);
       if (!mounted) return;
       if (action == _RecoveryAction.reviewAndSave) {
@@ -210,7 +256,11 @@ class _ActiveRunScreenState extends State<ActiveRunScreen>
           style: StradioTypography.headingSmall(),
         ),
         content: Text(
-          s.recoverRunBody(samplesCount, snapshot.activeDurationSeconds.round()),
+          s.recoverRunBody(
+            samplesCount,
+            snapshot.activeDurationSeconds.round(),
+            stepCount: snapshot.liveStepCount,
+          ),
           style: StradioTypography.body(),
         ),
         actions: [
@@ -232,26 +282,38 @@ class _ActiveRunScreenState extends State<ActiveRunScreen>
   }
 
   Future<void> _openRecoveredSummary(ActiveSessionSnapshot snapshot) async {
-    final replay = StepDetector.replayAllFour(
-      snapshot.samples,
-      const AlgorithmParameters(),
-    );
-    final primaryDetections =
-        replay[AlgorithmVariant.a1MidpointRaw] ?? const <DetectionEvent>[];
+    final hasRaw = snapshot.samples.isNotEmpty;
+    final replay = hasRaw
+        ? (snapshot.samples.length > 500
+              ? await compute(_replayAllFourIsolate, {
+                  'samples': snapshot.samples,
+                  'params': _detectorParams,
+                })
+              : StepDetector.replayAllFour(snapshot.samples, _detectorParams))
+        : const <AlgorithmVariant, List<DetectionEvent>>{};
+    final primaryDetections = hasRaw
+        ? (replay[AlgorithmVariant.a1MidpointRaw] ?? const <DetectionEvent>[])
+        : snapshot.detections;
+    final stepCount = hasRaw
+        ? primaryDetections.length
+        : math.max(snapshot.liveStepCount, primaryDetections.length);
     final recording = SavedRecording(
       recordingId: snapshot.recordingId,
       createdAt: snapshot.createdAt,
       config: snapshot.config,
       samples: snapshot.samples,
-      liveStepCount: primaryDetections.length,
-      replayDetections: {
-        ThresholdAlgorithm.adaptiveMidpoint: primaryDetections,
-        ThresholdAlgorithm.meanStd:
-            replay[AlgorithmVariant.b1MeanSdRaw] ?? const [],
-      },
+      liveStepCount: stepCount,
+      replayDetections: hasRaw
+          ? {
+              ThresholdAlgorithm.adaptiveMidpoint: primaryDetections,
+              ThresholdAlgorithm.meanStd:
+                  replay[AlgorithmVariant.b1MeanSdRaw] ?? const [],
+            }
+          : const {},
       replayVariantDetections: replay,
       summaryDurationSeconds: snapshot.activeDurationSeconds,
       targetBpm: snapshot.targetBpm,
+      includeRawSamples: hasRaw,
     );
     final metrics = RunMetricsCalculator.computeSummary(
       detections: primaryDetections,
@@ -260,12 +322,13 @@ class _ActiveRunScreenState extends State<ActiveRunScreen>
       activeDurationSeconds: snapshot.activeDurationSeconds,
       targetBpm: snapshot.targetBpm,
       heightCm: widget.userHeightCm,
-      overrideStepCount: primaryDetections.length,
+      overrideStepCount: stepCount,
     );
     final health = RunMetricsCalculator.analyzeSensorHealth(
       samples: snapshot.samples,
     );
 
+    if (!mounted) return;
     await Navigator.of(context).push<bool>(
       MaterialPageRoute<bool>(
         builder: (_) => PostRunSummaryScreen(
@@ -310,6 +373,7 @@ class _ActiveRunScreenState extends State<ActiveRunScreen>
       _recordingService.start(
         _recordingId,
         samplingRateHz: 100.0,
+        retainSamples: _isDeveloperMode,
         onSample: _handleIncomingSample,
         onError: (err) {
           if (!mounted) return;
@@ -344,6 +408,9 @@ class _ActiveRunScreenState extends State<ActiveRunScreen>
       setState(() => _activeDurationSeconds += 1.0);
       _audioEngine.updateCadence(_currentLiveCadenceSpm());
       _syncForegroundNotification(isRunning: true);
+      if (_activeDurationSeconds.round() % 10 == 0) {
+        unawaited(_flushActiveSessionCache());
+      }
     });
   }
 
@@ -358,35 +425,46 @@ class _ActiveRunScreenState extends State<ActiveRunScreen>
     );
   }
 
-  void _flushActiveSessionCache() {
-    if (_activeSamples.isEmpty) return;
-    final snapshot = ActiveSessionSnapshot(
-      recordingId: _recordingId,
-      createdAt: DateTime.now(),
-      config: _labSettings.toExperimentConfig(),
-      samples: List.of(_activeSamples),
-      activeDurationSeconds: _activeDurationSeconds,
-      targetBpm: _labSettings.targetBpm,
-    );
-    unawaited(_store.saveActiveSessionCache(snapshot));
+  Future<void> _flushActiveSessionCache() async {
+    if (_isFlushingCache) return;
+    if (_activeSamples.isEmpty && _primaryDetections.isEmpty) return;
+    _isFlushingCache = true;
+    try {
+      final snapshot = ActiveSessionSnapshot(
+        recordingId: _recordingId,
+        createdAt: DateTime.now(),
+        config: _labSettings.toExperimentConfig(),
+        samples: _isDeveloperMode ? List.of(_activeSamples) : const [],
+        liveStepCount: _primaryDetections.length,
+        detections: List.of(_primaryDetections),
+        activeDurationSeconds: _activeDurationSeconds,
+        targetBpm: _labSettings.targetBpm,
+      );
+      await _store.saveActiveSessionCache(snapshot);
+    } finally {
+      _isFlushingCache = false;
+    }
   }
 
   void _handleIncomingSample(SensorSample sample) {
     if (!mounted || _streamState != _RunStreamState.running) return;
 
-    _activeSamples.add(sample);
-    _latestSample = sample;
-    if (_activeSamples.length % 100 == 0) {
-      _flushActiveSessionCache();
+    if (_recentHealthSamples.length >= _healthRingCapacity) {
+      _recentHealthSamples.removeFirst();
     }
+    _recentHealthSamples.addLast(sample);
+    if (_isDeveloperMode) {
+      _activeSamples.add(sample);
+    }
+    _latestSample = sample;
 
     DetectorOutput? primaryOut;
-    for (final variant in AlgorithmVariant.values) {
-      final out = _detectors[variant]!.addSample(sample);
+    for (final entry in _detectors.entries) {
+      final out = entry.value.addSample(sample);
       if (out.step != null) {
-        _liveDetections[variant]!.add(out.step!);
+        _liveDetections[entry.key]!.add(out.step!);
       }
-      if (variant == _primaryVariant) {
+      if (entry.key == _primaryVariant) {
         primaryOut = out;
       }
     }
@@ -415,9 +493,9 @@ class _ActiveRunScreenState extends State<ActiveRunScreen>
 
   /// Explicit fallback for emulator/testing when hardware accelerometer is unavailable.
   void _simulateSingleStride() {
-    final baseTs = _activeSamples.isEmpty
+    final baseTs = _latestSample == null
         ? DateTime.now().microsecondsSinceEpoch * 1000
-        : _activeSamples.last.timestampNs + 350000000;
+        : _latestSample!.timestampNs + 350000000;
 
     const rawAzWave = [
       9.5,
@@ -429,6 +507,9 @@ class _ActiveRunScreenState extends State<ActiveRunScreen>
       14.2,
       16.8,
       13.8,
+      9.1,
+      9.1,
+      9.1,
       9.1,
       9.1,
       9.1,
@@ -446,6 +527,9 @@ class _ActiveRunScreenState extends State<ActiveRunScreen>
       0.1,
       0.1,
       0.1,
+      0.1,
+      0.1,
+      0.1,
     ];
 
     final prevState = _streamState;
@@ -454,11 +538,12 @@ class _ActiveRunScreenState extends State<ActiveRunScreen>
       unawaited(_audioEngine.startSession());
     }
 
+    final baseIdx = _latestSample?.sampleIndex ?? -1;
     for (var i = 0; i < rawAzWave.length; i++) {
       _handleIncomingSample(
         SensorSample(
           recordingId: _recordingId,
-          sampleIndex: _activeSamples.length,
+          sampleIndex: baseIdx + 1 + i,
           timestampNs: baseTs + i * 25000000,
           axMps2: 0.3,
           ayMps2: 1.2,
@@ -533,7 +618,7 @@ class _ActiveRunScreenState extends State<ActiveRunScreen>
   }
 
   Future<void> _pauseRunning() async {
-    _flushActiveSessionCache();
+    unawaited(_flushActiveSessionCache());
     setState(() => _streamState = _RunStreamState.paused);
     _syncRibbonAnimation();
     unawaited(_audioEngine.pauseSession());
@@ -624,26 +709,41 @@ class _ActiveRunScreenState extends State<ActiveRunScreen>
     unawaited(_audioEngine.stopSession());
     unawaited(_foregroundService.stopWorkoutService());
 
-    final samplesCopy = List<SensorSample>.of(_activeSamples);
-    final replay = StepDetector.replayAllFour(
-      samplesCopy,
-      const AlgorithmParameters(),
-    );
+    final hasRaw = _isDeveloperMode && _activeSamples.isNotEmpty;
+    final samplesCopy = hasRaw
+        ? List<SensorSample>.of(_activeSamples)
+        : const <SensorSample>[];
+    final healthSamples = hasRaw
+        ? samplesCopy
+        : List<SensorSample>.of(_recentHealthSamples);
+    final replay = hasRaw
+        ? (samplesCopy.length > 500
+              ? await compute(_replayAllFourIsolate, {
+                  'samples': samplesCopy,
+                  'params': _detectorParams,
+                })
+              : StepDetector.replayAllFour(samplesCopy, _detectorParams))
+        : const <AlgorithmVariant, List<DetectionEvent>>{};
     final recording = SavedRecording(
       recordingId: _recordingId,
       createdAt: DateTime.now(),
-      config: _labSettings.toExperimentConfig(),
+      config: _labSettings.toExperimentConfig().copyWithParameters(
+        _detectorParams,
+      ),
       samples: samplesCopy,
       liveStepCount: _primaryDetections.length,
-      replayDetections: {
-        ThresholdAlgorithm.adaptiveMidpoint:
-            replay[AlgorithmVariant.a1MidpointRaw] ?? const [],
-        ThresholdAlgorithm.meanStd:
-            replay[AlgorithmVariant.b1MeanSdRaw] ?? const [],
-      },
+      replayDetections: hasRaw
+          ? {
+              ThresholdAlgorithm.adaptiveMidpoint:
+                  replay[AlgorithmVariant.a1MidpointRaw] ?? const [],
+              ThresholdAlgorithm.meanStd:
+                  replay[AlgorithmVariant.b1MeanSdRaw] ?? const [],
+            }
+          : const {},
       replayVariantDetections: replay,
       summaryDurationSeconds: _activeDurationSeconds,
       targetBpm: _labSettings.targetBpm,
+      includeRawSamples: hasRaw,
     );
     final metrics = RunMetricsCalculator.computeSummary(
       detections: _primaryDetections,
@@ -655,7 +755,7 @@ class _ActiveRunScreenState extends State<ActiveRunScreen>
       overrideStepCount: _primaryDetections.length,
     );
     final health = RunMetricsCalculator.analyzeSensorHealth(
-      samples: samplesCopy,
+      samples: healthSamples,
     );
 
     if (!mounted) return;
@@ -827,7 +927,7 @@ class _ActiveRunScreenState extends State<ActiveRunScreen>
       _RunStreamState.sensorError => SensorPipelineState.unavailable,
     };
     final health = RunMetricsCalculator.analyzeSensorHealth(
-      samples: _activeSamples,
+      samples: _isDeveloperMode ? _activeSamples : _recentHealthSamples.toList(),
       requestedRateHz: 100.0,
     );
     await SensorCalibrationSheet.show(
@@ -835,6 +935,8 @@ class _ActiveRunScreenState extends State<ActiveRunScreen>
       state: pipelineState,
       healthReport: health,
       errorMessage: _sensorErrorText,
+      initialSensitivity: _strideSensitivity,
+      onApplyCalibration: _applyCalibrationSensitivity,
       language: widget.language,
       onRetrySensor: _startSensorStream,
       onSimulateStride: _simulateSingleStride,
@@ -1019,46 +1121,48 @@ class _ActiveRunScreenState extends State<ActiveRunScreen>
                                     color: StradioColors.surfaceRecessed,
                                   ),
                                   clipBehavior: Clip.antiAlias,
-                                  child: AnimatedBuilder(
-                                    animation: Listenable.merge([
-                                      _ribbonController,
-                                      _continuousWaveController,
-                                    ]),
-                                    builder: (_, _) {
-                                      final curvedImpulse = Curves.easeOutCubic
-                                          .transform(_ribbonController.value);
-                                      final continuousFlow =
-                                          _continuousWaveController.value *
-                                          math.pi *
-                                          2 *
-                                          (hasCadence
-                                              ? (liveSpm / 140.0).clamp(
-                                                  0.8,
-                                                  1.6,
-                                                )
-                                              : 0.65);
-                                      final phase = reducedMotion
-                                          ? 0.4
-                                          : 0.4 +
-                                                steps * 0.52 +
-                                                continuousFlow +
-                                                curvedImpulse * 0.85;
-                                      final smoothBoost = _stepPulseActive
-                                          ? (1.0 - curvedImpulse * 0.55).clamp(
-                                              0.25,
-                                              1.0,
-                                            )
-                                          : 0.0;
-                                      return CustomPaint(
-                                        painter: SonicRibbonPainter(
-                                          phase: phase,
-                                          amplitude: isRunning ? 0.82 : 0.44,
-                                          pulseBoost: smoothBoost,
-                                          strokeWidth: 2.6,
-                                          fillGradientArea: true,
-                                        ),
-                                      );
-                                    },
+                                  child: RepaintBoundary(
+                                    child: AnimatedBuilder(
+                                      animation: Listenable.merge([
+                                        _ribbonController,
+                                        _continuousWaveController,
+                                      ]),
+                                      builder: (_, _) {
+                                        final curvedImpulse = Curves.easeOutCubic
+                                            .transform(_ribbonController.value);
+                                        final continuousFlow =
+                                            _continuousWaveController.value *
+                                            math.pi *
+                                            2 *
+                                            (hasCadence
+                                                ? (liveSpm / 140.0).clamp(
+                                                    0.8,
+                                                    1.6,
+                                                  )
+                                                : 0.65);
+                                        final phase = reducedMotion
+                                            ? 0.4
+                                            : 0.4 +
+                                                  steps * 0.52 +
+                                                  continuousFlow +
+                                                  curvedImpulse * 0.85;
+                                        final smoothBoost = _stepPulseActive
+                                            ? (1.0 - curvedImpulse * 0.55).clamp(
+                                                0.25,
+                                                1.0,
+                                              )
+                                            : 0.0;
+                                        return CustomPaint(
+                                          painter: SonicRibbonPainter(
+                                            phase: phase,
+                                            amplitude: isRunning ? 0.82 : 0.44,
+                                            pulseBoost: smoothBoost,
+                                            strokeWidth: 2.6,
+                                            fillGradientArea: true,
+                                          ),
+                                        );
+                                      },
+                                    ),
                                   ),
                                 ),
 

@@ -116,8 +116,10 @@ class StradioStringsId extends StradioStrings {
   String get recoverRunTitle => 'Pulihkan sesi belum selesai?';
 
   @override
-  String recoverRunBody(int sampleCount, int durationSeconds) =>
-      'Ditemukan sesi belum tersimpan dengan $sampleCount sampel sensor ($durationSeconds dtk).';
+  String recoverRunBody(int sampleCount, int durationSeconds, {int stepCount = 0}) =>
+      sampleCount > 0
+          ? 'Ditemukan sesi belum tersimpan dengan $sampleCount sampel sensor ($durationSeconds dtk).'
+          : 'Ditemukan sesi belum tersimpan dengan $stepCount langkah ($durationSeconds dtk).';
 
   @override
   String get discardAction => 'Buang';

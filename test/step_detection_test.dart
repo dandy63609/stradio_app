@@ -177,6 +177,53 @@ void main() {
       expect(allFour[AlgorithmVariant.b1MeanSdRaw], isEmpty);
       expect(allFour[AlgorithmVariant.b2MeanSdLinear], isEmpty);
     });
+
+    test(
+      'single walking stride followed by speaker bass vibration ripples counts 1 step, not 4-7',
+      () {
+        final detector = StepDetector(
+          algorithm: ThresholdAlgorithm.adaptiveMidpoint,
+        );
+
+        final samples = <SensorSample>[];
+        // 1.0 s baseline at 100 Hz (0..990ms)
+        for (var i = 0; i < 100; i++) {
+          samples.add(_sample(i, i * 10, 9.81));
+        }
+
+        // Single real walking heel-strike (1000..1350ms, peak ~14.8 m/s²)
+        for (var i = 0; i < 36; i++) {
+          final pulse = math.sin((i / 35.0) * math.pi);
+          samples.add(_sample(samples.length, 1000 + i * 10, 9.81 + 5.0 * pulse));
+        }
+
+        // 1.5 s of 25 Hz speaker chassis vibration ripples (±0.7 m/s² -> 1.4 m/s² peak-to-peak)
+        for (var i = 0; i < 150; i++) {
+          final tMs = 1360 + i * 10;
+          final speakerRipple = 0.7 * math.sin(i * 0.5 * math.pi);
+          samples.add(_sample(samples.length, tMs, 9.81 + speakerRipple));
+        }
+
+        final detections = <DetectionEvent>[];
+        for (final s in samples) {
+          final out = detector.addSample(s);
+          if (out.step != null) detections.add(out.step!);
+        }
+
+        expect(detections.length, 1);
+      },
+    );
+
+    test('AlgorithmParameters.forSensitivity scales spread and prominence monotonically', () {
+      final lowSens = AlgorithmParameters.forSensitivity(0.8);
+      final neutralSens = AlgorithmParameters.forSensitivity(1.68);
+      final highSens = AlgorithmParameters.forSensitivity(2.4);
+
+      expect(lowSens.minWindowSpreadMps2, greaterThan(neutralSens.minWindowSpreadMps2));
+      expect(neutralSens.minWindowSpreadMps2, greaterThan(highSens.minWindowSpreadMps2));
+      expect(lowSens.minPeakProminenceMps2, greaterThan(neutralSens.minPeakProminenceMps2));
+      expect(neutralSens.minPeakProminenceMps2, greaterThan(highSens.minPeakProminenceMps2));
+    });
   });
 
   group('Ground Truth, Scoreboard Status & Error Metrics (§10)', () {
@@ -519,6 +566,44 @@ void main() {
 
         await store.clearActiveSessionCache();
         expect(await store.loadActiveSessionCache(), isNull);
+
+        // Also verify O(1) lightweight checkpoint (no raw samples, detections only)
+        final lightweight = ActiveSessionSnapshot(
+          recordingId: 'REC_LIGHTWEIGHT_001',
+          createdAt: DateTime(2026, 11, 23, 20, 45),
+          config: const ExperimentConfig(
+            participantId: 'Runner',
+            activity: Activity.jogging,
+            phonePlacement: PhonePlacement.hand,
+            placementDetail: 'Right hand',
+            trialNumber: 1,
+          ),
+          targetBpm: 165,
+          activeDurationSeconds: 120.0,
+          liveStepCount: 2,
+          detections: const [
+            DetectionEvent(
+              detectionId: 0,
+              sampleIndex: 100,
+              peakTimestampNs: 1000000000,
+              outputTimestampNs: 1010000000,
+              thresholdMps2: 11.2,
+            ),
+            DetectionEvent(
+              detectionId: 1,
+              sampleIndex: 150,
+              peakTimestampNs: 1500000000,
+              outputTimestampNs: 1510000000,
+              thresholdMps2: 11.4,
+            ),
+          ],
+        );
+        await store.saveActiveSessionCache(lightweight);
+        final loadedLight = await store.loadActiveSessionCache();
+        expect(loadedLight, isNotNull);
+        expect(loadedLight!.samples, isEmpty);
+        expect(loadedLight.liveStepCount, 2);
+        expect(loadedLight.detections.length, 2);
       } finally {
         if (await tempDir.exists()) {
           await tempDir.delete(recursive: true);

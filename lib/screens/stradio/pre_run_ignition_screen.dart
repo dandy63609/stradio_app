@@ -202,6 +202,10 @@ class _PreRunIgnitionScreenState extends State<PreRunIgnitionScreen>
       context,
       state: _sensorState,
       language: _profile.language,
+      initialSensitivity: StradioPreferencesService.loadStrideSensitivity(),
+      onApplyCalibration: (sensitivity) {
+        unawaited(StradioPreferencesService.saveStrideSensitivity(sensitivity));
+      },
       onRetrySensor: () {
         setState(() => _sensorState = SensorPipelineState.ready);
       },

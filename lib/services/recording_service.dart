@@ -39,6 +39,8 @@ class RecordingService {
   double _gz = 0.0;
   bool _gravityInitialized = false;
 
+  int _sampleCount = 0;
+
   bool get isRecording => _subscription != null;
   List<SensorSample> get samples => List.unmodifiable(_samples);
 
@@ -55,14 +57,19 @@ class RecordingService {
   }
 
   /// Starts dual-stream recording and calls [onSample] for every new sample.
+  ///
+  /// Set [retainSamples] to `false` for consumer workouts so samples are not
+  /// duplicated in memory alongside the caller's own storage/ring buffer.
   void start(
     String recordingId, {
     required double samplingRateHz,
     required void Function(SensorSample sample) onSample,
     void Function(Object error)? onError,
+    bool retainSamples = true,
   }) {
     if (isRecording) throw StateError('A recording is already active.');
     _samples.clear();
+    _sampleCount = 0;
     _lastTimestampNs = null;
     _latestUx = 0.0;
     _latestUy = 0.0;
@@ -115,7 +122,7 @@ class RecordingService {
 
       final sample = SensorSample(
         recordingId: recordingId,
-        sampleIndex: _samples.length,
+        sampleIndex: _sampleCount++,
         timestampNs: timestampNs,
         axMps2: event.x,
         ayMps2: event.y,
@@ -124,7 +131,9 @@ class RecordingService {
         uyMps2: uy,
         uzMps2: uz,
       );
-      _samples.add(sample);
+      if (retainSamples) {
+        _samples.add(sample);
+      }
       onSample(sample);
     }, onError: (Object error) => onError?.call(error));
   }

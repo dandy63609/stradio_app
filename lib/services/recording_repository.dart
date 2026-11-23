@@ -1,9 +1,12 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 
 import '../models/experiment_models.dart';
+
+String _encodeSnapshotMap(Map<String, dynamic> map) => jsonEncode(map);
 
 /// Builds the next `REC_YYYYMMDD_NNN` ID for [date], continuing from the
 /// IDs already used that day.
@@ -126,7 +129,10 @@ class ActiveSessionSnapshot {
     required this.config,
     required this.targetBpm,
     required this.activeDurationSeconds,
-    required this.samples,
+    this.samples = const [],
+    this.liveStepCount = 0,
+    this.detections = const [],
+    this.cadenceBucketsSpm = const [],
   });
 
   final String recordingId;
@@ -135,6 +141,9 @@ class ActiveSessionSnapshot {
   final int targetBpm;
   final double activeDurationSeconds;
   final List<SensorSample> samples;
+  final int liveStepCount;
+  final List<DetectionEvent> detections;
+  final List<double> cadenceBucketsSpm;
 
   Map<String, dynamic> toMap() => {
     'recording_id': recordingId,
@@ -142,6 +151,9 @@ class ActiveSessionSnapshot {
     'config': config.toMap(),
     'target_bpm': targetBpm,
     'active_duration_seconds': activeDurationSeconds,
+    'live_step_count': liveStepCount,
+    'detections': [for (final d in detections) d.toMap()],
+    'cadence_buckets_spm': cadenceBucketsSpm,
     'samples': [for (final s in samples) s.toMap()],
   };
 
@@ -170,6 +182,15 @@ class ActiveSessionSnapshot {
       for (final row in rawSamples)
         if (row is Map<String, dynamic>) SensorSample.fromMap(id, row),
     ];
+    final rawDetections = map['detections'] as List? ?? const [];
+    final detections = [
+      for (final row in rawDetections)
+        if (row is Map<String, dynamic>) DetectionEvent.fromMap(row),
+    ];
+    final rawBuckets = map['cadence_buckets_spm'] as List? ?? const [];
+    final buckets = [for (final v in rawBuckets) (v as num).toDouble()];
+    final liveStepCount =
+        (map['live_step_count'] as num?)?.toInt() ?? detections.length;
     return ActiveSessionSnapshot(
       recordingId: id,
       createdAt: createdAt,
@@ -177,6 +198,9 @@ class ActiveSessionSnapshot {
       targetBpm: targetBpm,
       activeDurationSeconds: activeDurationSeconds,
       samples: samples,
+      liveStepCount: liveStepCount,
+      detections: detections,
+      cadenceBucketsSpm: buckets,
     );
   }
 }
@@ -287,7 +311,11 @@ class FileRecordingStore implements RecordingStore {
     try {
       final file = await _cacheFile();
       await file.parent.create(recursive: true);
-      await file.writeAsString(jsonEncode(snapshot.toMap()), flush: true);
+      final map = snapshot.toMap();
+      final encoded = snapshot.samples.length > 200
+          ? await compute(_encodeSnapshotMap, map)
+          : _encodeSnapshotMap(map);
+      await file.writeAsString(encoded);
     } on Object {
       // Ignore cache write errors in restricted sandbox
     }

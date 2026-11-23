@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../evaluation/run_metrics_calculator.dart';
 import '../l10n/stradio_strings.dart';
+import '../services/preferences_service.dart';
 import '../theme/stradio_theme.dart';
 
 /// Honest state of the 100 Hz smartphone accelerometer pipeline.
@@ -37,6 +40,8 @@ class SensorCalibrationSheet extends StatefulWidget {
     this.errorMessage,
     this.onRetrySensor,
     this.onSimulateStride,
+    this.initialSensitivity,
+    this.onApplyCalibration,
     this.language = AppLanguage.en,
   });
 
@@ -45,6 +50,8 @@ class SensorCalibrationSheet extends StatefulWidget {
   final String? errorMessage;
   final VoidCallback? onRetrySensor;
   final VoidCallback? onSimulateStride;
+  final double? initialSensitivity;
+  final ValueChanged<double>? onApplyCalibration;
   final AppLanguage language;
 
   static Future<void> show(
@@ -54,6 +61,8 @@ class SensorCalibrationSheet extends StatefulWidget {
     String? errorMessage,
     VoidCallback? onRetrySensor,
     VoidCallback? onSimulateStride,
+    double? initialSensitivity,
+    ValueChanged<double>? onApplyCalibration,
     AppLanguage language = AppLanguage.en,
   }) {
     return showModalBottomSheet<void>(
@@ -66,6 +75,8 @@ class SensorCalibrationSheet extends StatefulWidget {
         errorMessage: errorMessage,
         onRetrySensor: onRetrySensor,
         onSimulateStride: onSimulateStride,
+        initialSensitivity: initialSensitivity,
+        onApplyCalibration: onApplyCalibration,
         language: language,
       ),
     );
@@ -81,10 +92,17 @@ class _SensorCalibrationSheetState extends State<SensorCalibrationSheet> {
   static const int _defaultLockWindowSpm = 5;
   static const bool _defaultSpatialEq = true;
 
-  double _strideSensitivity = _defaultSensitivity;
+  late double _strideSensitivity;
   AudioLatencyPreset _latencyPreset = _defaultLatency;
   int _cadenceLockWindowSpm = _defaultLockWindowSpm;
   bool _spatialEqEnabled = _defaultSpatialEq;
+
+  @override
+  void initState() {
+    super.initState();
+    _strideSensitivity = (widget.initialSensitivity ?? _defaultSensitivity)
+        .clamp(0.8, 2.4);
+  }
 
   void _resetDefaults() {
     HapticFeedback.selectionClick();
@@ -492,6 +510,14 @@ class _SensorCalibrationSheetState extends State<SensorCalibrationSheet> {
                           key: const Key('sensor_apply_calibrate_button'),
                           onPressed: () {
                             HapticFeedback.mediumImpact();
+                            unawaited(
+                              StradioPreferencesService.saveStrideSensitivity(
+                                _strideSensitivity,
+                              ),
+                            );
+                            widget.onApplyCalibration?.call(
+                              _strideSensitivity,
+                            );
                             Navigator.of(context).pop();
                             widget.onRetrySensor?.call();
                           },

@@ -347,6 +347,22 @@ void main() {
           find.byKey(const Key('sensor_apply_calibrate_button')),
           findsOneWidget,
         );
+
+        // Apply calibration persists Stride Sensitivity to SharedPreferences
+        await tester.drag(
+          find.byKey(const Key('sensor_sensitivity_slider')),
+          const Offset(-40, 0),
+        );
+        await tester.pump();
+        final applyBtn = find.byKey(const Key('sensor_apply_calibrate_button'));
+        await tester.ensureVisible(applyBtn);
+        await tester.tap(applyBtn);
+        await tester.pumpAndSettle();
+        expect(find.byKey(const Key('sensor_calibration_sheet')), findsNothing);
+        expect(
+          StradioPreferencesService.loadStrideSensitivity(),
+          lessThan(StradioPreferencesService.defaultStrideSensitivity),
+        );
       },
     );
 

@@ -22,6 +22,8 @@ class StradioPreferencesService {
   static const _keyUserProfileJson = 'stradio_user_profile_v1';
   static const _keyHasSeenAudioRecommendation = 'has_seen_audio_recommendation';
   static const _keyActiveSoundPack = 'stradio_active_sound_pack';
+  static const _keyStrideSensitivity = 'stradio_stride_sensitivity';
+  static const double defaultStrideSensitivity = 1.68;
 
   static SharedPreferences? _prefs;
 
@@ -153,6 +155,20 @@ class StradioPreferencesService {
     final p = _prefs ?? await SharedPreferences.getInstance();
     _prefs = p;
     await p.setString(_keyActiveSoundPack, StradioSoundPack.byId(id).code);
+  }
+
+  /// Loads the calibrated IMU stride sensitivity (`0.8..2.4`, default `1.68`).
+  static double loadStrideSensitivity() {
+    final raw = _prefs?.getDouble(_keyStrideSensitivity);
+    if (raw == null || raw.isNaN) return defaultStrideSensitivity;
+    return raw.clamp(0.8, 2.4);
+  }
+
+  /// Persists the calibrated IMU stride sensitivity (`0.8..2.4`).
+  static Future<void> saveStrideSensitivity(double sensitivity) async {
+    final p = _prefs ?? await SharedPreferences.getInstance();
+    _prefs = p;
+    await p.setDouble(_keyStrideSensitivity, sensitivity.clamp(0.8, 2.4));
   }
 }
 

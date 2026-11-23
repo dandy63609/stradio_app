@@ -229,12 +229,27 @@ String conditionId(
 /// Signal-processing parameters shared by all algorithms in the comparison.
 class AlgorithmParameters {
   const AlgorithmParameters({
-    this.smoothingSamples = 3,
+    this.smoothingSamples = 7,
     this.windowDurationMs = 1000,
-    this.minimumStepIntervalMs = 250,
+    this.minimumStepIntervalMs = 310,
     this.k = 1.5,
-    this.minWindowSpreadMps2 = 1.2,
+    this.minWindowSpreadMps2 = 2.2,
+    this.minPeakProminenceMps2 = 0.45,
   });
+
+  /// Builds tuned parameters scaled by user IMU sensitivity (`0.8..2.4`, neutral `1.68`).
+  ///
+  /// Higher sensitivity lowers the spread & peak prominence floors so lighter
+  /// strides still register; lower sensitivity raises those floors to reject
+  /// phone speaker chassis vibration.
+  factory AlgorithmParameters.forSensitivity(double sensitivity) {
+    final clamped = sensitivity.clamp(0.8, 2.4);
+    final ratio = 1.68 / clamped;
+    return AlgorithmParameters(
+      minWindowSpreadMps2: (2.2 * ratio).clamp(1.4, 3.6),
+      minPeakProminenceMps2: (0.45 * ratio).clamp(0.25, 0.90),
+    );
+  }
 
   final int smoothingSamples;
   final int windowDurationMs;
@@ -243,9 +258,12 @@ class AlgorithmParameters {
 
   /// Minimum dynamic range (`max(window) - min(window)`) in m/s² required in
   /// the rolling window to accept a candidate step. Prevents thermal/MEMS
-  /// micro-noise from triggering false steps when the phone rests stationary
-  /// on a table (~0.01–0.15 m/s² spread).
+  /// micro-noise and speaker chassis vibration from triggering false steps.
   final double minWindowSpreadMps2;
+
+  /// Minimum hysteresis prominence around the adaptive midpoint threshold in
+  /// m/s² required for both peak trigger and valley re-arm.
+  final double minPeakProminenceMps2;
 
   Map<String, Object> toMap() => {
     'smoothing_samples': smoothingSamples,
@@ -253,18 +271,21 @@ class AlgorithmParameters {
     'minimum_step_interval_ms': minimumStepIntervalMs,
     'k': k,
     'min_window_spread_mps2': minWindowSpreadMps2,
+    'min_peak_prominence_mps2': minPeakProminenceMps2,
   };
 
   factory AlgorithmParameters.fromMap(Map<String, dynamic>? map) {
     if (map == null) return const AlgorithmParameters();
     return AlgorithmParameters(
-      smoothingSamples: (map['smoothing_samples'] as num?)?.toInt() ?? 3,
+      smoothingSamples: (map['smoothing_samples'] as num?)?.toInt() ?? 7,
       windowDurationMs: (map['window_duration_ms'] as num?)?.toInt() ?? 1000,
       minimumStepIntervalMs:
-          (map['minimum_step_interval_ms'] as num?)?.toInt() ?? 250,
+          (map['minimum_step_interval_ms'] as num?)?.toInt() ?? 310,
       k: (map['k'] as num?)?.toDouble() ?? 1.5,
       minWindowSpreadMps2:
-          (map['min_window_spread_mps2'] as num?)?.toDouble() ?? 1.2,
+          (map['min_window_spread_mps2'] as num?)?.toDouble() ?? 2.2,
+      minPeakProminenceMps2:
+          (map['min_peak_prominence_mps2'] as num?)?.toDouble() ?? 0.45,
     );
   }
 }
@@ -305,6 +326,21 @@ class ExperimentConfig {
   final double requestedSamplingRateHz;
   final AlgorithmParameters parameters;
 
+  ExperimentConfig copyWithParameters(AlgorithmParameters parameters) =>
+      ExperimentConfig(
+        participantId: participantId,
+        activity: activity,
+        phonePlacement: phonePlacement,
+        placementDetail: placementDetail,
+        trialNumber: trialNumber,
+        primaryLiveAlgorithm: primaryLiveAlgorithm,
+        targetSteps: targetSteps,
+        fallbackTimeoutSeconds: fallbackTimeoutSeconds,
+        notes: notes,
+        requestedSamplingRateHz: requestedSamplingRateHz,
+        parameters: parameters,
+      );
+
   List<String> validate() => [
     if (!RegExp(r'^P[0-9]+$').hasMatch(participantId))
       'Participant ID must look like P01.',
@@ -321,6 +357,8 @@ class ExperimentConfig {
     if (parameters.k < 0) 'k must not be negative.',
     if (parameters.minWindowSpreadMps2 < 0)
       'Stationary noise floor must not be negative.',
+    if (parameters.minPeakProminenceMps2 < 0)
+      'Peak prominence floor must not be negative.',
   ];
 
   Map<String, Object> toMap() => {
