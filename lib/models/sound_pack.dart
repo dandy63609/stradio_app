@@ -113,6 +113,50 @@ class StradioSoundPack {
     return (cadenceSpm / bpm).clamp(minPlaybackRate, maxPlaybackRate);
   }
 
+  /// Estimates target step cadence (SPM) from a target running/jogging pace
+  /// (`210..600` sec/km, i.e. `3:30..10:00 /km`).
+  static double estimateCadenceFromPace(int paceSecondsPerKm) {
+    final clamped = paceSecondsPerKm.clamp(210, 600);
+    final t = (600 - clamped) / 390.0;
+    return 132.0 + t * 54.0;
+  }
+
+  /// Formats pace seconds per kilometer as `m:ss`.
+  static String formatPace(int secondsPerKm) {
+    final clamped = secondsPerKm.clamp(180, 900);
+    final mins = clamped ~/ 60;
+    final secs = (clamped % 60).toString().padLeft(2, '0');
+    return '$mins:$secs';
+  }
+
+  /// Computes deterministic match percentage (`65.0..99.6`) between this pack's
+  /// tempo/layering profile and the runner's calibrated [targetPaceSecondsPerKm].
+  double computeSyncIntegrity({required int targetPaceSecondsPerKm}) {
+    final cadence = estimateCadenceFromPace(targetPaceSecondsPerKm);
+    final rawScore = switch (backgroundMode) {
+      BackgroundLayerMode.continuousTempoScaled => () {
+        final refBpm = baseBpm ?? 132.5;
+        final minBand = refBpm * minPlaybackRate;
+        final maxBand = refBpm * maxPlaybackRate;
+        if (cadence >= minBand && cadence <= maxBand) {
+          return 99.4 - (cadence - refBpm).abs() * 0.08;
+        }
+        final excess = cadence < minBand ? minBand - cadence : cadence - maxBand;
+        return 97.0 - excess * 0.65;
+      }(),
+      BackgroundLayerMode.dualStemBarAligned => () {
+        final sweetSpot = (baseBpm ?? 140.0) + 14.0;
+        return 99.2 - (cadence - sweetSpot).abs() * 0.14;
+      }(),
+      BackgroundLayerMode.joggingZoneOnly =>
+        cadence < 130.0
+            ? 88.0 - (130.0 - cadence) * 0.60
+            : 99.4 - (cadence - 158.0).abs() * 0.18,
+      BackgroundLayerMode.silent => 98.6 - (cadence - 152.0).abs() * 0.06,
+    };
+    return rawScore.clamp(65.0, 99.6);
+  }
+
   /// All 6 curated MVP sound packs defined in `docs/PRD-MVP.md` FR-4.1.
   static const List<StradioSoundPack> catalog = [
     StradioSoundPack(

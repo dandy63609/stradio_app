@@ -68,8 +68,9 @@ void main() {
 
   group('Phase 3A: Daylight Liquid Glass 3-Surface MVP', () {
     testWidgets(
-      'First-launch Earphone Recommendation modal shows once, persists dismissal, and opens Pre-Run Ignition',
+      'Audio Device Recommendation modal shows on every app launch even after prior dismissal',
       (tester) async {
+        await StradioPreferencesService.setHasSeenAudioRecommendation(true);
         final store = InMemoryRecordingStore();
         final audioEngine = StradioAudioEngine.noop();
 
@@ -79,7 +80,6 @@ void main() {
             recordingService: _fakeSensorService(),
             foregroundNotificationService: NoopForegroundNotificationService(),
             audioEngine: audioEngine,
-            showFirstLaunchModal: true,
           ),
         );
         await tester.pumpAndSettle();
@@ -105,6 +105,63 @@ void main() {
           isTrue,
         );
         expect(find.byKey(const Key('swipe_to_start_pill')), findsOneWidget);
+        expect(find.text('Pace Target'), findsOneWidget);
+        expect(find.text('Distance Target'), findsOneWidget);
+        expect(find.text('Sync Integrity'), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'Pre-Run Target Calibration adjusts Pace Target & Distance Target and updates Sync Integrity',
+      (tester) async {
+        await tester.pumpWidget(
+          StradioApp(
+            store: InMemoryRecordingStore(),
+            recordingService: _fakeSensorService(),
+            foregroundNotificationService: NoopForegroundNotificationService(),
+            audioEngine: StradioAudioEngine.noop(),
+            showFirstLaunchModal: false,
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        // Default targets: 6:00 /km & 5.0 km
+        expect(find.text('6:00'), findsOneWidget);
+        expect(find.text('5.0'), findsOneWidget);
+
+        // Open Target Calibration glassmorphism sheet via top-left button
+        await tester.tap(find.byKey(const Key('pre_run_sensor_button')));
+        await tester.pumpAndSettle();
+        expect(
+          find.byKey(const Key('target_calibration_sheet')),
+          findsOneWidget,
+        );
+
+        // Drag pace slider to the right (slower pace) and distance slider
+        await tester.drag(
+          find.byKey(const Key('target_pace_slider')),
+          const Offset(80, 0),
+        );
+        await tester.drag(
+          find.byKey(const Key('target_distance_slider')),
+          const Offset(60, 0),
+        );
+        await tester.pump();
+
+        final applyBtn = find.byKey(const Key('target_calibration_apply_button'));
+        await tester.ensureVisible(applyBtn);
+        await tester.tap(applyBtn);
+        await tester.pumpAndSettle();
+
+        expect(find.byKey(const Key('target_calibration_sheet')), findsNothing);
+        expect(
+          StradioPreferencesService.loadTargetPaceSecondsPerKm(),
+          greaterThan(StradioPreferencesService.defaultTargetPaceSecondsPerKm),
+        );
+        expect(
+          StradioPreferencesService.loadTargetDistanceKm(),
+          greaterThan(StradioPreferencesService.defaultTargetDistanceKm),
+        );
       },
     );
 
@@ -473,6 +530,13 @@ void main() {
           await tester.pumpAndSettle();
           expect(tester.takeException(), isNull);
           expect(find.byKey(const Key('swipe_to_start_pill')), findsOneWidget);
+
+          // Expanding sound pack deck at bottom also holds cleanly without overflow
+          await tester.tap(
+            find.byKey(const Key('pre_run_timbre_dropdown_button')),
+          );
+          await tester.pumpAndSettle();
+          expect(tester.takeException(), isNull);
         }
         addTearDown(() => tester.binding.setSurfaceSize(null));
       },

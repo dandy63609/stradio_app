@@ -23,7 +23,11 @@ class StradioPreferencesService {
   static const _keyHasSeenAudioRecommendation = 'has_seen_audio_recommendation';
   static const _keyActiveSoundPack = 'stradio_active_sound_pack';
   static const _keyStrideSensitivity = 'stradio_stride_sensitivity';
+  static const _keyTargetPaceSecondsPerKm = 'stradio_target_pace_sec_per_km';
+  static const _keyTargetDistanceKm = 'stradio_target_distance_km';
   static const double defaultStrideSensitivity = 1.68;
+  static const int defaultTargetPaceSecondsPerKm = 360; // 6:00 /km
+  static const double defaultTargetDistanceKm = 5.0;
 
   static SharedPreferences? _prefs;
 
@@ -169,6 +173,34 @@ class StradioPreferencesService {
     final p = _prefs ?? await SharedPreferences.getInstance();
     _prefs = p;
     await p.setDouble(_keyStrideSensitivity, sensitivity.clamp(0.8, 2.4));
+  }
+
+  /// Loads calibrated target pace in seconds/km (`210..600`, default `360` = `6:00 /km`).
+  static int loadTargetPaceSecondsPerKm() {
+    final raw = _prefs?.getInt(_keyTargetPaceSecondsPerKm);
+    if (raw == null) return defaultTargetPaceSecondsPerKm;
+    return raw.clamp(210, 600);
+  }
+
+  /// Persists calibrated target pace in seconds/km (`210..600`).
+  static Future<void> saveTargetPaceSecondsPerKm(int secondsPerKm) async {
+    final p = _prefs ?? await SharedPreferences.getInstance();
+    _prefs = p;
+    await p.setInt(_keyTargetPaceSecondsPerKm, secondsPerKm.clamp(210, 600));
+  }
+
+  /// Loads calibrated target distance in km (`1.0..21.1`, default `5.0`).
+  static double loadTargetDistanceKm() {
+    final raw = _prefs?.getDouble(_keyTargetDistanceKm);
+    if (raw == null || raw.isNaN) return defaultTargetDistanceKm;
+    return raw.clamp(1.0, 21.1);
+  }
+
+  /// Persists calibrated target distance in km (`1.0..21.1`).
+  static Future<void> saveTargetDistanceKm(double km) async {
+    final p = _prefs ?? await SharedPreferences.getInstance();
+    _prefs = p;
+    await p.setDouble(_keyTargetDistanceKm, km.clamp(1.0, 21.1));
   }
 }
 

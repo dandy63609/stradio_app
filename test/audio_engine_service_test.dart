@@ -120,6 +120,23 @@ void main() {
         'by DDHANNi',
       );
     });
+
+    test('computeSyncIntegrity responds deterministically to target pace and pack mode', () {
+      final breakbeat = StradioSoundPack.byId(SoundPackId.breakbeatFvnky);
+      final gba = StradioSoundPack.byId(SoundPackId.gbaSandHop);
+
+      expect(
+        breakbeat.computeSyncIntegrity(targetPaceSecondsPerKm: 330),
+        greaterThan(
+          breakbeat.computeSyncIntegrity(targetPaceSecondsPerKm: 600),
+        ),
+      );
+      expect(
+        gba.computeSyncIntegrity(targetPaceSecondsPerKm: 450),
+        inInclusiveRange(95.0, 99.6),
+      );
+      expect(StradioSoundPack.formatPace(360), '6:00');
+    });
   });
 
   group('StradioAudioEngine Preview', () {
