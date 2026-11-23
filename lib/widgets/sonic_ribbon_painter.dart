@@ -48,7 +48,7 @@ class SonicRibbonPainter extends CustomPainter {
       amp: amp * 0.88,
       freq: 1.65,
       harmonicFreq: 3.1,
-      phaseShift: phase * 0.85,
+      phaseShift: phase,
       color: StradioColors.twilightPlum.withValues(alpha: 0.82),
       width: strokeWidth * 0.92,
     );
@@ -59,7 +59,7 @@ class SonicRibbonPainter extends CustomPainter {
       amp: amp * 0.78,
       freq: 2.05,
       harmonicFreq: 3.6,
-      phaseShift: -phase * 0.95 + 1.4,
+      phaseShift: -phase + 1.4,
       color: StradioColors.rhythmViolet.withValues(alpha: 0.90),
       width: strokeWidth * 0.96,
     );
@@ -70,7 +70,7 @@ class SonicRibbonPainter extends CustomPainter {
       amp: amp * (0.90 + pulseBoost * 0.25),
       freq: 1.80,
       harmonicFreq: 2.9,
-      phaseShift: phase * 1.12 + 2.4,
+      phaseShift: phase + 2.4,
       color: StradioColors.sonicCoral,
       width: strokeWidth * (1.05 + pulseBoost * 0.30),
     );
@@ -91,7 +91,7 @@ class SonicRibbonPainter extends CustomPainter {
       final x = t * size.width;
       final envelope = math.sin(t * math.pi);
       final primary = math.sin(t * math.pi * 2 * freq + phaseShift);
-      final sub = math.cos(t * math.pi * 3.2 - phaseShift * 0.6) * 0.28;
+      final sub = math.cos(t * math.pi * 3.2 - phaseShift) * 0.28;
       final y = midY + (primary + sub) * amp * envelope;
       if (i == 0) {
         path.moveTo(x, y);
@@ -145,9 +145,9 @@ class SonicRibbonPainter extends CustomPainter {
       final envelope = math.pow(math.sin(t * math.pi), 0.85).toDouble();
       final primary = math.sin(t * math.pi * 2 * freq + phaseShift);
       final secondary =
-          math.cos(t * math.pi * harmonicFreq - phaseShift * 0.72) * 0.26;
+          math.cos(t * math.pi * harmonicFreq - phaseShift) * 0.26;
       final tertiary =
-          math.sin(t * math.pi * (freq * 0.5) + phaseShift * 0.45) * 0.16;
+          math.sin(t * math.pi * (freq * 0.5) + phaseShift) * 0.16;
       final y = midY + (primary + secondary + tertiary) * amp * envelope;
       if (i == 0) {
         path.moveTo(x, y);

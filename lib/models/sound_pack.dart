@@ -161,6 +161,20 @@ class StradioSoundPack {
     return rawScore.clamp(65.0, 99.6);
   }
 
+  /// Finds the 5-second pace increment (`210..900` s/km) yielding highest sync integrity.
+  int get optimalPaceSecondsPerKm {
+    var bestPace = 360;
+    var bestScore = -1.0;
+    for (var pace = 210; pace <= 900; pace += 5) {
+      final score = computeSyncIntegrity(targetPaceSecondsPerKm: pace);
+      if (score > bestScore) {
+        bestScore = score;
+        bestPace = pace;
+      }
+    }
+    return bestPace;
+  }
+
   /// All 6 curated MVP sound packs defined in `docs/PRD-MVP.md` FR-4.1.
   static const List<StradioSoundPack> catalog = [
     StradioSoundPack(

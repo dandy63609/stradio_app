@@ -1,3 +1,5 @@
+import 'dart:ui' as ui;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -138,17 +140,35 @@ class _DaylightSettingsSheetState extends State<DaylightSettingsSheet> {
   Widget build(BuildContext context) {
     final s = StradioStrings.of(_profile.language);
     final bottomInset = MediaQuery.viewInsetsOf(context).bottom;
+    final bottomPadding = MediaQuery.paddingOf(context).bottom;
 
-    return SafeArea(
-      child: Padding(
-        padding: EdgeInsets.fromLTRB(16, 12, 16, 16 + bottomInset),
+    return ClipRRect(
+      borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
+      child: BackdropFilter(
+        filter: ui.ImageFilter.blur(sigmaX: 18, sigmaY: 18),
         child: Container(
           key: const Key('daylight_settings_sheet'),
-          padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+          width: double.infinity,
+          padding: EdgeInsets.fromLTRB(
+            20,
+            12,
+            20,
+            20 + bottomPadding + bottomInset,
+          ),
           decoration: BoxDecoration(
-            color: StradioColors.surfaceCard,
-            borderRadius: BorderRadius.circular(StradioRadii.tray),
-            border: Border.all(color: StradioColors.borderSubtle),
+            color: StradioColors.surfaceCard.withValues(alpha: 0.86),
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
+            border: Border.all(
+              color: Colors.white.withValues(alpha: 0.90),
+              width: 1.2,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: StradioColors.midnight.withValues(alpha: 0.14),
+                blurRadius: 28,
+                offset: const Offset(0, -6),
+              ),
+            ],
           ),
           child: SingleChildScrollView(
             child: Column(
@@ -191,9 +211,11 @@ class _DaylightSettingsSheetState extends State<DaylightSettingsSheet> {
                     vertical: 12,
                   ),
                   decoration: BoxDecoration(
-                    color: StradioColors.warmIvory,
+                    color: StradioColors.warmIvory.withValues(alpha: 0.68),
                     borderRadius: BorderRadius.circular(StradioRadii.lg),
-                    border: Border.all(color: StradioColors.borderSubtle),
+                    border: Border.all(
+                      color: Colors.white.withValues(alpha: 0.82),
+                    ),
                   ),
                   child: Row(
                     children: [
@@ -271,11 +293,13 @@ class _DaylightSettingsSheetState extends State<DaylightSettingsSheet> {
                           hintText: '170',
                           errorText: _heightError,
                           filled: true,
-                          fillColor: StradioColors.warmIvory,
+                          fillColor: StradioColors.warmIvory.withValues(
+                            alpha: 0.72,
+                          ),
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(StradioRadii.md),
-                            borderSide: const BorderSide(
-                              color: StradioColors.borderSubtle,
+                            borderSide: BorderSide(
+                              color: Colors.white.withValues(alpha: 0.85),
                             ),
                           ),
                         ),
@@ -299,7 +323,7 @@ class _DaylightSettingsSheetState extends State<DaylightSettingsSheet> {
                   buttonKey: const Key('settings_earphone_guide_button'),
                   icon: Icons.headphones_rounded,
                   label: s.earphoneGuideAction,
-                  baseColor: StradioColors.warmIvory,
+                  baseColor: StradioColors.warmIvory.withValues(alpha: 0.68),
                   pressedColor: StradioColors.glowVioletSoft,
                   foregroundColor: StradioColors.textPrimary,
                   pressedForegroundColor: StradioColors.twilightPlum,
@@ -316,7 +340,7 @@ class _DaylightSettingsSheetState extends State<DaylightSettingsSheet> {
                   buttonKey: const Key('settings_clear_history_button'),
                   icon: Icons.delete_outline_rounded,
                   label: s.clearHistoryAction,
-                  baseColor: StradioColors.warmIvory,
+                  baseColor: StradioColors.warmIvory.withValues(alpha: 0.68),
                   pressedColor: StradioColors.glowCoralSoft,
                   foregroundColor: StradioColors.textAccentDeep,
                   pressedForegroundColor: StradioColors.textAccentDeep,

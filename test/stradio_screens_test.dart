@@ -137,6 +137,18 @@ void main() {
           findsOneWidget,
         );
 
+        // Verify Sync Integrity pod & Lock Optimal Pace button before adjusting sliders
+        expect(
+          find.byKey(const Key('target_sync_integrity_readout')),
+          findsOneWidget,
+        );
+        final lockOptimalBtn = find.byKey(
+          const Key('target_lock_optimal_pace_button'),
+        );
+        await tester.ensureVisible(lockOptimalBtn);
+        await tester.tap(lockOptimalBtn);
+        await tester.pump();
+
         // Drag pace slider to the right (slower pace) and distance slider
         await tester.drag(
           find.byKey(const Key('target_pace_slider')),
@@ -205,11 +217,22 @@ void main() {
         await tester.pump();
         expect(audioEngine.isPreviewing, isFalse);
 
-        // Expand Unified Timbre Glass Capsule, select LARI_NGACIR
+        // Expand Unified Timbre Glass Capsule (grows bottom-to-top overlay without shifting hero/ribbons), select LARI_NGACIR
+        final heroRectBefore = tester.getRect(
+          find.byKey(const Key('pre_run_open_waveform_hero')),
+        );
         await tester.tap(
           find.byKey(const Key('pre_run_timbre_dropdown_button')),
         );
         await tester.pumpAndSettle();
+        expect(
+          find.byKey(const Key('pre_run_expanded_pack_list')),
+          findsOneWidget,
+        );
+        expect(
+          tester.getRect(find.byKey(const Key('pre_run_open_waveform_hero'))),
+          heroRectBefore,
+        );
         final lariTile = find.byKey(const Key('pre_run_pack_LARI_NGACIR'));
         await tester.ensureVisible(lariTile);
         await tester.tap(lariTile);
