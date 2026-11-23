@@ -158,6 +158,24 @@ void main() {
       expect(gappedHealth.sampleDrops, greaterThanOrEqualTo(3));
       expect(gappedHealth.isHealthy, isFalse);
     });
+
+    test('estimates realistic live walking (10-11 /km) and running pace from rolling cadence', () {
+      // Normal walking at ~108 SPM (~5.5-5.8 km/h -> ~10:20-10:55 /km)
+      final walkSpeed = RunMetricsCalculator.estimateLiveSpeedKmh(
+        liveCadenceSpm: 108.0,
+        activity: Activity.walking,
+      );
+      final walkSecPerKm = 3600.0 / walkSpeed;
+      expect(walkSecPerKm, inInclusiveRange(600.0, 660.0));
+
+      // Jogging at 165 SPM (~11-12.5 km/h -> ~4:48-5:27 /km)
+      final runSpeed = RunMetricsCalculator.estimateLiveSpeedKmh(
+        liveCadenceSpm: 165.0,
+        activity: Activity.jogging,
+      );
+      final runSecPerKm = 3600.0 / runSpeed;
+      expect(runSecPerKm, inInclusiveRange(280.0, 340.0));
+    });
   });
 }
 

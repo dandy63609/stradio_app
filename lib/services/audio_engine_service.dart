@@ -40,23 +40,26 @@ abstract class StepSfxBackend {
 
 /// Production Layer 1 backend powered by `audioplayers`.
 class AudioplayersLoopBackend implements AudioLoopBackend {
-  AudioplayersLoopBackend({this.requestAudioFocus = true});
+  AudioplayersLoopBackend({this.requestAudioFocus = false});
 
   final bool requestAudioFocus;
   AudioPlayer? _player;
   bool _isStarted = false;
+  double _lastRate = 1.0;
 
   Future<AudioPlayer> _ensurePlayer() async {
     final existing = _player;
     if (existing != null) return existing;
 
     final player = AudioPlayer();
+    // Prevent audioplayers FramePositionUpdater from scheduling 60fps getCurrentPosition loops.
+    player.positionUpdater = null;
     await player.setReleaseMode(ReleaseMode.loop);
     await player.setAudioContext(
       AudioContext(
         android: AudioContextAndroid(
           isSpeakerphoneOn: false,
-          stayAwake: true,
+          stayAwake: false,
           contentType: AndroidContentType.music,
           usageType: AndroidUsageType.media,
           audioFocus: requestAudioFocus
@@ -88,9 +91,11 @@ class AudioplayersLoopBackend implements AudioLoopBackend {
       final player = await _ensurePlayer();
       await player.setVolume(volume.clamp(0.0, 1.0));
       await player.play(AssetSource(_normalizeAssetPath(assetPath)));
-      if ((playbackRate - 1.0).abs() > 0.001) {
+      if ((playbackRate - _lastRate).abs() > 0.001 ||
+          (playbackRate - 1.0).abs() > 0.001) {
         await player.setPlaybackRate(playbackRate);
       }
+      _lastRate = playbackRate;
       _isStarted = true;
     } on Object catch (error) {
       debugPrint('AudioplayersLoopBackend.startLoop error ($assetPath): $error');
@@ -114,6 +119,7 @@ class AudioplayersLoopBackend implements AudioLoopBackend {
     if (player == null || !_isStarted) return;
     try {
       await player.setPlaybackRate(rate);
+      _lastRate = rate;
     } on Object catch (error) {
       debugPrint('AudioplayersLoopBackend.setPlaybackRate error: $error');
     }
@@ -172,20 +178,22 @@ class AudioplayersLoopBackend implements AudioLoopBackend {
 class AudioplayersSfxBackend implements StepSfxBackend {
   AudioplayersSfxBackend();
 
-  final Map<String, AudioPlayer> _players = {};
-  final Map<String, double> _lastRates = {};
-  final Map<String, double> _lastVolumes = {};
+  static const int _voicesPerAsset = 2;
+
+  final Map<String, List<AudioPlayer>> _playerPools = {};
+  final Map<String, int> _poolCursor = {};
+  final Map<AudioPlayer, double> _lastRates = {};
+  final Map<AudioPlayer, double> _lastVolumes = {};
 
   String _normalizeAssetPath(String assetPath) =>
       assetPath.startsWith('assets/')
           ? assetPath.substring('assets/'.length)
           : assetPath;
 
-  Future<AudioPlayer> _ensurePreloadedPlayer(String assetPath) async {
-    final existing = _players[assetPath];
-    if (existing != null) return existing;
-
+  Future<AudioPlayer> _createPreloadedVoice(String assetPath) async {
     final player = AudioPlayer();
+    // SoundPool does not support getCurrentPosition and FramePositionUpdater leaks frame callbacks.
+    player.positionUpdater = null;
     await player.setPlayerMode(PlayerMode.lowLatency);
     await player.setReleaseMode(ReleaseMode.stop);
     await player.setAudioContext(
@@ -204,15 +212,26 @@ class AudioplayersSfxBackend implements StepSfxBackend {
       ),
     );
     await player.setSourceAsset(_normalizeAssetPath(assetPath));
-    _players[assetPath] = player;
     return player;
+  }
+
+  Future<List<AudioPlayer>> _ensurePreloadedPool(String assetPath) async {
+    final existing = _playerPools[assetPath];
+    if (existing != null && existing.isNotEmpty) return existing;
+
+    final pool = <AudioPlayer>[];
+    for (var i = 0; i < _voicesPerAsset; i++) {
+      pool.add(await _createPreloadedVoice(assetPath));
+    }
+    _playerPools[assetPath] = pool;
+    return pool;
   }
 
   @override
   Future<void> preload(List<String> assetPaths) async {
     for (final path in assetPaths) {
       try {
-        await _ensurePreloadedPlayer(path);
+        await _ensurePreloadedPool(path);
       } on Object catch (error) {
         debugPrint('AudioplayersSfxBackend.preload error ($path): $error');
       }
@@ -226,19 +245,25 @@ class AudioplayersSfxBackend implements StepSfxBackend {
     double volume = 1.0,
   }) async {
     try {
-      final player = await _ensurePreloadedPlayer(assetPath);
+      final pool = await _ensurePreloadedPool(assetPath);
+      final cursor = _poolCursor[assetPath] ?? 0;
+      final player = pool[cursor % pool.length];
+      _poolCursor[assetPath] = (cursor + 1) % pool.length;
+
       final clampedVol = volume.clamp(0.0, 1.0);
-      final prevVol = _lastVolumes[assetPath];
+      final prevVol = _lastVolumes[player];
       if (prevVol == null || (clampedVol - prevVol).abs() > 0.01) {
         await player.setVolume(clampedVol);
-        _lastVolumes[assetPath] = clampedVol;
+        _lastVolumes[player] = clampedVol;
       }
-      final prevRate = _lastRates[assetPath] ?? 1.0;
+      final prevRate = _lastRates[player] ?? 1.0;
       if ((rate - prevRate).abs() > 0.001) {
         await player.setPlaybackRate(rate);
-        _lastRates[assetPath] = rate;
+        _lastRates[player] = rate;
       }
-      await player.play(AssetSource(_normalizeAssetPath(assetPath)));
+      // Reset WrappedPlayer/SoundPoolPlayer playing state (SoundPool never emits onCompletion).
+      await player.stop();
+      await player.resume();
     } on Object catch (error) {
       debugPrint('AudioplayersSfxBackend.play error ($assetPath): $error');
     }
@@ -246,11 +271,14 @@ class AudioplayersSfxBackend implements StepSfxBackend {
 
   @override
   Future<void> dispose() async {
-    final players = List<AudioPlayer>.of(_players.values);
-    _players.clear();
+    final allPlayers = [
+      for (final pool in _playerPools.values) ...pool,
+    ];
+    _playerPools.clear();
+    _poolCursor.clear();
     _lastRates.clear();
     _lastVolumes.clear();
-    for (final player in players) {
+    for (final player in allPlayers) {
       try {
         await player.dispose();
       } on Object catch (error) {
@@ -315,12 +343,8 @@ class StradioAudioEngine {
     AudioClock? clockMs,
     this.fadeDuration = const Duration(milliseconds: 800),
     this.fadeStepInterval = const Duration(milliseconds: 40),
-  }) : _primaryLoop =
-           primaryLoopBackend ??
-           AudioplayersLoopBackend(requestAudioFocus: true),
-       _secondaryLoop =
-           secondaryLoopBackend ??
-           AudioplayersLoopBackend(requestAudioFocus: false),
+  }) : _primaryLoop = primaryLoopBackend ?? AudioplayersLoopBackend(),
+       _secondaryLoop = secondaryLoopBackend ?? AudioplayersLoopBackend(),
        _sfx = sfxBackend ?? AudioplayersSfxBackend(),
        _activePack = StradioSoundPack.byId(initialPack),
        _clockMs = clockMs ?? (() => DateTime.now().millisecondsSinceEpoch);

@@ -56,16 +56,19 @@ class RecordingService {
     }
   }
 
-  /// Starts dual-stream recording and calls [onSample] for every new sample.
+  /// Starts recording and calls [onSample] for every new sample.
   ///
   /// Set [retainSamples] to `false` for consumer workouts so samples are not
   /// duplicated in memory alongside the caller's own storage/ring buffer.
+  /// Set [includeLinearStream] to `false` when only raw accelerometer (A1) is active
+  /// to halve platform-channel traffic on high-rate sensors.
   void start(
     String recordingId, {
     required double samplingRateHz,
     required void Function(SensorSample sample) onSample,
     void Function(Object error)? onError,
     bool retainSamples = true,
+    bool includeLinearStream = true,
   }) {
     if (isRecording) throw StateError('A recording is already active.');
     _samples.clear();
@@ -78,29 +81,39 @@ class RecordingService {
     _gravityInitialized = false;
 
     final interval = Duration(microseconds: (1000000 / samplingRateHz).round());
+    final minAcceptedPeriodNs = !retainSamples && samplingRateHz <= 100.0
+        ? 7500000
+        : 0;
 
-    // Subscribe to Stream B (User Accelerometer without gravity) in parallel.
-    try {
-      _userSubscription = _userSource(interval).listen(
-        (userEvent) {
-          _latestUx = userEvent.x;
-          _latestUy = userEvent.y;
-          _latestUz = userEvent.z;
-          _hasUserEvent = true;
-        },
-        onError: (_) {
-          // If hardware lacks a virtual linear sensor, fallback filter handles it.
-        },
-      );
-    } on Object {
-      // Ignore if unavailable in test environment.
+    // Subscribe to Stream B (User Accelerometer without gravity) only when requested.
+    if (includeLinearStream) {
+      try {
+        _userSubscription = _userSource(interval).listen(
+          (userEvent) {
+            _latestUx = userEvent.x;
+            _latestUy = userEvent.y;
+            _latestUz = userEvent.z;
+            _hasUserEvent = true;
+          },
+          onError: (_) {
+            // If hardware lacks a virtual linear sensor, fallback filter handles it.
+          },
+        );
+      } on Object {
+        // Ignore if unavailable in test environment.
+      }
     }
 
     // Subscribe to Stream A (Raw Accelerometer with gravity) as the primary clock.
     _subscription = _source(interval).listen((event) {
       var timestampNs = event.timestamp.microsecondsSinceEpoch * 1000;
       final last = _lastTimestampNs;
-      if (last != null && timestampNs <= last) timestampNs = last + 1;
+      if (last != null) {
+        if (minAcceptedPeriodNs > 0 && timestampNs - last < minAcceptedPeriodNs) {
+          return;
+        }
+        if (timestampNs <= last) timestampNs = last + 1;
+      }
       _lastTimestampNs = timestampNs;
 
       // Update causal low-pass gravity estimate (alpha = 0.8) for fallback

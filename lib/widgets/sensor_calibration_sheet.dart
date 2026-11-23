@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -69,6 +70,7 @@ class SensorCalibrationSheet extends StatefulWidget {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
+      constraints: const BoxConstraints(maxWidth: double.infinity),
       builder: (_) => SensorCalibrationSheet(
         state: state,
         healthReport: healthReport,
@@ -124,17 +126,30 @@ class _SensorCalibrationSheetState extends State<SensorCalibrationSheet> {
   Widget build(BuildContext context) {
     final s = StradioStrings.of(widget.language);
     final isUnavailable = widget.state == SensorPipelineState.unavailable;
+    final bottomPadding = MediaQuery.paddingOf(context).bottom;
 
-    return SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
+    return ClipRRect(
+      borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
+      child: BackdropFilter(
+        filter: ui.ImageFilter.blur(sigmaX: 18, sigmaY: 18),
         child: Container(
           key: const Key('sensor_calibration_sheet'),
-          padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+          width: double.infinity,
+          padding: EdgeInsets.fromLTRB(20, 12, 20, 20 + bottomPadding),
           decoration: BoxDecoration(
-            color: StradioColors.surfaceCard,
-            borderRadius: BorderRadius.circular(StradioRadii.tray),
-            border: Border.all(color: StradioColors.borderSubtle),
+            color: StradioColors.surfaceCard.withValues(alpha: 0.86),
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
+            border: Border.all(
+              color: Colors.white.withValues(alpha: 0.90),
+              width: 1.2,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: StradioColors.midnight.withValues(alpha: 0.14),
+                blurRadius: 28,
+                offset: const Offset(0, -6),
+              ),
+            ],
           ),
           child: SingleChildScrollView(
             child: Column(

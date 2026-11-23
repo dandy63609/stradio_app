@@ -244,7 +244,7 @@ class _PreRunIgnitionScreenState extends State<PreRunIgnitionScreen>
           recordingService: widget.recordingService,
           postHogService: _postHogService,
           foregroundService: widget.foregroundService,
-          audioEngine: widget.audioEngine,
+          audioEngine: _audioEngine,
           initialSoundPackId: pack.id,
           initialLabSettings: labSettings,
           userHeightCm: _profile.validHeightCm,

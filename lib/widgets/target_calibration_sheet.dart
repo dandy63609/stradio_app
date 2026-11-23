@@ -39,6 +39,7 @@ class TargetCalibrationSheet extends StatefulWidget {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
+      constraints: const BoxConstraints(maxWidth: double.infinity),
       builder: (_) => TargetCalibrationSheet(
         initialPaceSecondsPerKm: initialPaceSecondsPerKm,
         initialDistanceKm: initialDistanceKm,

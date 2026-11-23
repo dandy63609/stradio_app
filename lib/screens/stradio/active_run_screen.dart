@@ -375,6 +375,7 @@ class _ActiveRunScreenState extends State<ActiveRunScreen>
         _recordingId,
         samplingRateHz: 100.0,
         retainSamples: _isDeveloperMode,
+        includeLinearStream: _isDeveloperMode,
         onSample: _handleIncomingSample,
         onError: (err) {
           if (!mounted) return;
@@ -431,13 +432,17 @@ class _ActiveRunScreenState extends State<ActiveRunScreen>
     if (_activeSamples.isEmpty && _primaryDetections.isEmpty) return;
     _isFlushingCache = true;
     try {
+      final cachedDetections =
+          (_isDeveloperMode || _primaryDetections.length <= 60)
+          ? List.of(_primaryDetections)
+          : _primaryDetections.sublist(_primaryDetections.length - 60);
       final snapshot = ActiveSessionSnapshot(
         recordingId: _recordingId,
         createdAt: DateTime.now(),
         config: _labSettings.toExperimentConfig(),
         samples: _isDeveloperMode ? List.of(_activeSamples) : const [],
         liveStepCount: _primaryDetections.length,
-        detections: List.of(_primaryDetections),
+        detections: cachedDetections,
         activeDurationSeconds: _activeDurationSeconds,
         targetBpm: _labSettings.targetBpm,
       );
@@ -792,17 +797,33 @@ class _ActiveRunScreenState extends State<ActiveRunScreen>
       context: context,
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
+      constraints: const BoxConstraints(maxWidth: double.infinity),
       builder: (sheetContext) {
-        return SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+        final bottomPadding = MediaQuery.paddingOf(sheetContext).bottom;
+        return ClipRRect(
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
+          child: BackdropFilter(
+            filter: ui.ImageFilter.blur(sigmaX: 18, sigmaY: 18),
             child: Container(
               key: const Key('sound_pack_picker_sheet'),
-              padding: const EdgeInsets.fromLTRB(20, 14, 20, 20),
+              width: double.infinity,
+              padding: EdgeInsets.fromLTRB(20, 14, 20, 20 + bottomPadding),
               decoration: BoxDecoration(
-                color: StradioColors.surfaceCard,
-                borderRadius: BorderRadius.circular(StradioRadii.tray),
-                border: Border.all(color: StradioColors.borderSubtle),
+                color: StradioColors.surfaceCard.withValues(alpha: 0.86),
+                borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(32),
+                ),
+                border: Border.all(
+                  color: Colors.white.withValues(alpha: 0.90),
+                  width: 1.2,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: StradioColors.midnight.withValues(alpha: 0.14),
+                    blurRadius: 28,
+                    offset: const Offset(0, -6),
+                  ),
+                ],
               ),
               child: SingleChildScrollView(
                 child: Column(
@@ -833,8 +854,10 @@ class _ActiveRunScreenState extends State<ActiveRunScreen>
                     for (final pack in StradioSoundPack.catalog) ...[
                       Material(
                         color: _audioEngine.activePackId == pack.id
-                            ? StradioColors.glowCoralSoft
-                            : StradioColors.warmIvory,
+                            ? StradioColors.glowCoralSoft.withValues(
+                                alpha: 0.85,
+                              )
+                            : StradioColors.warmIvory.withValues(alpha: 0.68),
                         borderRadius: BorderRadius.circular(StradioRadii.lg),
                         child: InkWell(
                           key: Key('sound_pack_option_${pack.code}'),
@@ -867,7 +890,7 @@ class _ActiveRunScreenState extends State<ActiveRunScreen>
                               border: Border.all(
                                 color: _audioEngine.activePackId == pack.id
                                     ? StradioColors.midnight
-                                    : StradioColors.borderSubtle,
+                                    : Colors.white.withValues(alpha: 0.82),
                               ),
                             ),
                             child: Row(
@@ -1010,8 +1033,14 @@ class _ActiveRunScreenState extends State<ActiveRunScreen>
       distanceKm: currentDistanceKm,
       activeDurationSeconds: _activeDurationSeconds,
     );
-    final paceText = (steps > 0 && speedKmh >= 0.5)
-        ? _formatPaceFromSpeedKmh(speedKmh)
+    final liveSpeedKmh = RunMetricsCalculator.estimateLiveSpeedKmh(
+      liveCadenceSpm: liveSpm,
+      activity: _labSettings.activity,
+      heightCm: widget.userHeightCm,
+      fallbackSpeedKmh: speedKmh,
+    );
+    final paceText = (steps > 0 && liveSpeedKmh >= 0.5)
+        ? _formatPaceFromSpeedKmh(liveSpeedKmh)
         : '--:--';
 
     final (pillLabel, dotColor) = switch (_streamState) {
@@ -1690,33 +1719,19 @@ class _ActiveRunScreenState extends State<ActiveRunScreen>
                                                       ),
                                                     ),
                                                   ),
-                                                  // Resting subtle coral top-right quarter arc matching Mockup #10
+                                                  // Hold 1.5s Progress Arc (starts strictly at 0% at rest)
                                                   SizedBox(
                                                     width: 48,
                                                     height: 48,
                                                     child: CircularProgressIndicator(
+                                                      key: const Key(
+                                                        'hold_to_end_progress_indicator',
+                                                      ),
                                                       value: _holdController
-                                                                  .value >
-                                                              0
-                                                          ? _holdController
-                                                                .value
-                                                          : 0.22,
-                                                      strokeWidth:
-                                                          _holdController
-                                                                      .value >
-                                                                  0
-                                                              ? 3.0
-                                                              : 2.0,
-                                                      color: _holdController
-                                                                  .value >
-                                                              0
-                                                          ? StradioColors
-                                                                .sonicCoral
-                                                          : StradioColors
-                                                                .sonicCoral
-                                                                .withValues(
-                                                                  alpha: 0.72,
-                                                                ),
+                                                          .value,
+                                                      strokeWidth: 3.0,
+                                                      color: StradioColors
+                                                          .sonicCoral,
                                                       backgroundColor:
                                                           Colors.transparent,
                                                     ),

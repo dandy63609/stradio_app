@@ -60,8 +60,30 @@ class RunSummaryMetrics {
 class RunMetricsCalculator {
   const RunMetricsCalculator._();
 
-  /// Standardized or height-calibrated stride length estimate in meters by activity.
-  static double strideLengthMeters(Activity activity, {double? heightCm}) {
+  /// Standardized, height-calibrated, or cadence-adaptive stride length estimate in meters.
+  static double strideLengthMeters(
+    Activity activity, {
+    double? heightCm,
+    double? cadenceSpm,
+  }) {
+    if (cadenceSpm != null && cadenceSpm > 0) {
+      final heightScale =
+          (heightCm != null && heightCm >= 100.0 && heightCm <= 240.0)
+          ? (heightCm / 170.0)
+          : 1.0;
+      final double baseStride;
+      if (cadenceSpm < 130.0) {
+        // Walking (~80..130 SPM) -> 0.80m..0.92m (~10:00–11:00 /km around 105–115 SPM)
+        final t = ((cadenceSpm - 80.0) / 50.0).clamp(0.0, 1.0);
+        baseStride = 0.80 + t * 0.12;
+      } else {
+        // Running (130..185+ SPM) -> 0.96m..1.30m
+        final t = ((cadenceSpm - 130.0) / 55.0).clamp(0.0, 1.0);
+        baseStride = 0.96 + t * 0.34;
+      }
+      return baseStride * heightScale;
+    }
+
     if (heightCm != null && heightCm >= 100.0 && heightCm <= 240.0) {
       return switch (activity) {
         Activity.walking => heightCm * 0.00415,
@@ -72,6 +94,26 @@ class RunMetricsCalculator {
       Activity.walking => 0.74,
       Activity.jogging => 0.95,
     };
+  }
+
+  /// Estimates real-time instantaneous speed (km/h) from live rolling [liveCadenceSpm]
+  /// so initial stationary seconds do not distort active walking/running pace.
+  static double estimateLiveSpeedKmh({
+    required double liveCadenceSpm,
+    required Activity activity,
+    double? heightCm,
+    double fallbackSpeedKmh = 0.0,
+  }) {
+    if (liveCadenceSpm > 0) {
+      final strideM = strideLengthMeters(
+        activity,
+        heightCm: heightCm,
+        cadenceSpm: liveCadenceSpm,
+      );
+      final raw = (liveCadenceSpm * strideM * 60.0) / 1000.0;
+      return raw.isFinite ? math.min(raw, 35.0) : fallbackSpeedKmh;
+    }
+    return fallbackSpeedKmh;
   }
 
   /// Default target tempo BPM for reactive rhythm matching.
@@ -113,7 +155,7 @@ class RunMetricsCalculator {
   }
 
   /// Rolling cadence (SPM) over the most recent [windowSeconds] up to
-  /// [currentTimestampNs].
+  /// [currentTimestampNs], scanning backward in O(1) window time.
   static double rollingCadenceSpm({
     required List<DetectionEvent> detections,
     required int currentTimestampNs,
@@ -122,24 +164,29 @@ class RunMetricsCalculator {
     if (detections.isEmpty) return 0.0;
     final windowNs = windowSeconds * 1000000000;
     final cutoffNs = currentTimestampNs - windowNs;
-    final recent = detections
-        .where(
-          (d) =>
-              d.peakTimestampNs >= cutoffNs &&
-              d.peakTimestampNs <= currentTimestampNs,
-        )
-        .toList();
 
-    if (recent.isEmpty) return 0.0;
-    if (recent.length == 1) {
+    var count = 0;
+    int? firstTs;
+    int? lastTs;
+    for (var i = detections.length - 1; i >= 0; i--) {
+      final ts = detections[i].peakTimestampNs;
+      if (ts < cutoffNs) break;
+      if (ts > currentTimestampNs) continue;
+      count++;
+      lastTs ??= ts;
+      firstTs = ts;
+    }
+
+    if (count == 0) return 0.0;
+    if (count == 1) {
       return (1.0 / windowSeconds) * 60.0;
     }
 
-    final spanNs = recent.last.peakTimestampNs - recent.first.peakTimestampNs;
+    final spanNs = (lastTs ?? 0) - (firstTs ?? 0);
     if (spanNs <= 0) {
-      return (recent.length / windowSeconds) * 60.0;
+      return (count / windowSeconds) * 60.0;
     }
-    final intervals = recent.length - 1;
+    final intervals = count - 1;
     final avgIntervalSeconds = (spanNs / 1e9) / intervals;
     if (avgIntervalSeconds <= 0) return 0.0;
     final spm = 60.0 / avgIntervalSeconds;

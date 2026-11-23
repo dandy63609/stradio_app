@@ -265,15 +265,23 @@ void main() {
           find.text('HOLD STOP BUTTON TO CONCLUDE SESSION'),
           findsOneWidget,
         );
+        final holdIndicator = tester.widget<CircularProgressIndicator>(
+          find.byKey(const Key('hold_to_end_progress_indicator')),
+        );
+        expect(holdIndicator.value, 0.0);
         expect(find.text('Cadence'), findsNothing);
         expect(find.text('Take a step to trigger audio'), findsOneWidget);
         expect(audioEngine.activePackId, SoundPackId.lariNgacir);
         expect(audioEngine.isSessionActive, isTrue);
         expect(foreground.isServiceActive, isTrue);
 
-        // Zero-interruption mid-run sound pack swap -> SQUID
+        // Zero-interruption mid-run sound pack swap -> SQUID (full-edge glassmorphism sheet)
         await tester.tap(find.byKey(const Key('sound_pack_selector_button')));
         await tester.pumpAndSettle();
+        final sheetBox = tester.getRect(
+          find.byKey(const Key('sound_pack_picker_sheet')),
+        );
+        expect(sheetBox.left, 0.0);
         final squidOpt = find.byKey(const Key('sound_pack_option_SQUID'));
         await tester.ensureVisible(squidOpt);
         await tester.tap(squidOpt);
