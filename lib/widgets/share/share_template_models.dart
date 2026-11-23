@@ -39,6 +39,7 @@ class PhotoBackdropPreset {
     required this.label,
     required this.gradientColors,
     required this.tintSeed,
+    this.icon = Icons.gradient_rounded,
     this.isNone = false,
   });
 
@@ -46,62 +47,88 @@ class PhotoBackdropPreset {
   final String label;
   final List<Color> gradientColors;
   final Color tintSeed;
+  final IconData icon;
   final bool isNone;
 
   static const PhotoBackdropPreset none = PhotoBackdropPreset(
     id: 'none',
     label: 'None',
-    gradientColors: [StradioColors.warmIvory, StradioColors.surfaceRecessed],
+    icon: Icons.layers_clear_outlined,
+    gradientColors: [Colors.transparent, Colors.transparent],
     tintSeed: StradioColors.surfaceCard,
     isNone: true,
   );
+
+  /// 12 curated brand & ambient swatches for custom 2-color gradient picking.
+  static const List<Color> customPaletteColors = [
+    StradioColors.midnight,
+    Color(0xFF2D274B),
+    StradioColors.twilightPlum,
+    StradioColors.rhythmViolet,
+    StradioColors.sonicCoral,
+    StradioColors.textAccentDeep,
+    Color(0xFF283A33),
+    Color(0xFF4F6F60),
+    Color(0xFF1E3C4C),
+    Color(0xFF3A7385),
+    Color(0xFFDFD5C8),
+    StradioColors.surfaceCard,
+  ];
 
   static const List<PhotoBackdropPreset> presets = [
     PhotoBackdropPreset(
       id: 'morning_trail',
       label: 'Morning',
+      icon: Icons.wb_twilight_rounded,
       gradientColors: [Color(0xFFDFD5C8), Color(0xFFC5B9D6), Color(0xFFE7B6A9)],
       tintSeed: Color(0xFFE7B6A9),
     ),
     PhotoBackdropPreset(
       id: 'forest_mist',
       label: 'Forest',
+      icon: Icons.terrain_rounded,
       gradientColors: [Color(0xFF283A33), Color(0xFF4F6F60), Color(0xFF9EB5A5)],
       tintSeed: Color(0xFF6B8F7C),
     ),
     PhotoBackdropPreset(
       id: 'golden_dusk',
       label: 'Dusk',
+      icon: Icons.nights_stay_rounded,
       gradientColors: [Color(0xFF2D2B4E), Color(0xFF5D538C), Color(0xFFD98773)],
       tintSeed: Color(0xFF9A7EC0),
     ),
     PhotoBackdropPreset(
       id: 'midnight_neon',
       label: 'Midnight',
+      icon: Icons.dark_mode_rounded,
       gradientColors: [Color(0xFF151520), Color(0xFF2D274B), Color(0xFF46509E)],
       tintSeed: Color(0xFF6D74B8),
     ),
     PhotoBackdropPreset(
       id: 'ocean_breeze',
       label: 'Ocean',
+      icon: Icons.water_drop_outlined,
       gradientColors: [Color(0xFF1E3C4C), Color(0xFF3A7385), Color(0xFFA4CED4)],
       tintSeed: Color(0xFF6BA6B5),
     ),
     PhotoBackdropPreset(
       id: 'solar_flare',
       label: 'Solar',
+      icon: Icons.wb_sunny_outlined,
       gradientColors: [Color(0xFF4A2024), Color(0xFFB53D28), Color(0xFFFF7A59)],
       tintSeed: Color(0xFFFF7A59),
     ),
     PhotoBackdropPreset(
       id: 'alpine_frost',
       label: 'Alpine',
+      icon: Icons.ac_unit_rounded,
       gradientColors: [Color(0xFFDCE6EE), Color(0xFFB8CADB), Color(0xFF8AA2BE)],
       tintSeed: Color(0xFFB8CADB),
     ),
     PhotoBackdropPreset(
       id: 'cyber_violet',
       label: 'Violet',
+      icon: Icons.auto_awesome_rounded,
       gradientColors: [Color(0xFF2A1F4A), Color(0xFF6A56A8), Color(0xFFD0BCFF)],
       tintSeed: Color(0xFFA995DB),
     ),
@@ -179,8 +206,17 @@ class ShareMetricFormat {
 
   /// Normalizes cadence buckets into a fixed bar count (returns empty list when no real steps).
   static List<double> sampleStems(RunSummaryMetrics m, {int count = 20}) {
+    if (m.totalSteps <= 0) return const [];
     final valid = m.cadenceBucketsSpm.where((v) => v > 0).toList();
-    if (valid.isEmpty) return const [];
+    if (valid.isEmpty) {
+      if (m.averageCadenceSpm <= 0) return const [];
+      // Short run before first 10s bucket closes: derive bars cleanly from real average cadence.
+      return [
+        for (var i = 0; i < count; i++)
+          m.averageCadenceSpm *
+              (0.92 + 0.08 * math.sin((i / math.max(1, count - 1)) * math.pi)),
+      ];
+    }
     if (valid.length == count) return valid;
     return [
       for (var i = 0; i < count; i++)

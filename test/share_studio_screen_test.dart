@@ -27,6 +27,18 @@ const _sampleMetrics = RunSummaryMetrics(
   cadenceBucketsSpm: [118, 124, 148, 154, 156, 160, 158, 155, 162, 156],
 );
 
+const _shortRunMetrics = RunSummaryMetrics(
+  totalSteps: 16,
+  activeDurationSeconds: 6,
+  liveCadenceSpm: 162,
+  averageCadenceSpm: 162,
+  distanceKm: 0.01,
+  speedKmh: 6.0,
+  targetBpm: 160,
+  rhythmScorePercent: 91,
+  cadenceBucketsSpm: [],
+);
+
 const _emptyMetrics = RunSummaryMetrics(
   totalSteps: 0,
   activeDurationSeconds: 0,
@@ -40,7 +52,7 @@ const _emptyMetrics = RunSummaryMetrics(
 );
 
 void main() {
-  group('Phase 3B: ShareStudioScreen (6 P2 Templates + Photo Glass)', () {
+  group('Phase 3B: ShareStudioScreen (Full-Screen Glassmorphism + 6 P2 Templates)', () {
     testWidgets(
       'Switches across both modes and renders all 6 P2 templates cleanly',
       (tester) async {
@@ -55,13 +67,19 @@ void main() {
         );
         await tester.pumpAndSettle();
 
-        // Mode 1: Transparent Sticker (3 templates with promotional STRADIO watermark & corner ribbon on Aura Wave)
+        // Mode 1: Transparent Sticker shows checkerboard outside capture + 3 sticker cards
+        expect(
+          find.byKey(const Key('share_transparent_checkerboard')),
+          findsOneWidget,
+        );
         expect(find.byKey(const Key('sticker_card_aura_wave')), findsOneWidget);
         expect(
           find.byKey(const Key('aura_wave_corner_ribbon_image')),
           findsOneWidget,
         );
         expect(find.text('STRADIO'), findsOneWidget);
+        expect(find.text('Save'), findsOneWidget);
+        expect(find.text('Add to Story'), findsOneWidget);
         expect(PhotoBackdropPreset.presets.length, 8);
 
         await tester.tap(find.byKey(const Key('share_template_sonicDial')));
@@ -83,18 +101,20 @@ void main() {
         expect(find.text('118-162 spm Lock Zone'), findsOneWidget);
         expect(find.text('CADENCE RANGE CONSISTENCY'), findsOneWidget);
 
-        // Switch to Mode 2: Photo Glass (3 templates)
+        // Switch to Mode 2: Photo Glass (3 templates + Save Photo / Add to Story)
         await tester.tap(find.byKey(const Key('share_mode_photo_glass_tab')));
         await tester.pumpAndSettle();
         expect(
-          find.byKey(const Key('photo_glass_orbital_nexus')),
+          find.byKey(const Key('photo_glass_classic_wave')),
           findsOneWidget,
         );
+        expect(find.text('Save Photo'), findsOneWidget);
+        expect(find.text('Add to Story'), findsOneWidget);
 
-        await tester.tap(find.byKey(const Key('share_template_classicWave')));
+        await tester.tap(find.byKey(const Key('share_template_orbitalNexus')));
         await tester.pumpAndSettle();
         expect(
-          find.byKey(const Key('photo_glass_classic_wave')),
+          find.byKey(const Key('photo_glass_orbital_nexus')),
           findsOneWidget,
         );
 
@@ -109,12 +129,27 @@ void main() {
     );
 
     testWidgets(
-      'Displays honest empty metrics (-- and 0.00 km) when session has 0 steps',
+      'Short runs without 10s buckets still render stem bars in Aura Wave & Sonic Dial while 0-step runs stay honest',
       (tester) async {
+        // Short run with real steps -> bars render (no empty-state text)
         await tester.pumpWidget(
           MaterialApp(
             theme: StradioTheme.daylightTheme,
             home: ShareStudioScreen(
+              metrics: _shortRunMetrics,
+              soundPack: StradioSoundPack.byId(SoundPackId.breakbeatFvnky),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(find.text('No cadence samples yet'), findsNothing);
+
+        // 0-step run -> honest placeholders
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: StradioTheme.daylightTheme,
+            home: ShareStudioScreen(
+              key: const Key('empty_photo_glass_studio'),
               metrics: _emptyMetrics,
               soundPack: StradioSoundPack.byId(SoundPackId.squid),
               initialMode: ShareExportMode.photoGlass,
@@ -130,7 +165,7 @@ void main() {
     );
 
     testWidgets(
-      'Photo Glass supports Gallery/Camera chooser, custom photo upload, preset switch, and drag-to-reposition + double-tap reset',
+      'Photo Glass supports photo chooser, None transparent mode, custom 2-color picker, drag/pinch & double-tap reset',
       (tester) async {
         ImageSource? requestedSource;
 
@@ -150,7 +185,7 @@ void main() {
         );
         await tester.pumpAndSettle();
 
-        // Tap + Add -> verify both Gallery and Camera options appear
+        // Tap Add -> verify both Gallery and Camera options appear
         await tester.tap(find.byKey(const Key('backdrop_add_photo_button')));
         await tester.pumpAndSettle();
         expect(
@@ -180,35 +215,71 @@ void main() {
         );
 
         // Drag card vertically and confirm offset changes & hint updates
-        expect(
-          find.text('Drag card to reposition over photo'),
-          findsOneWidget,
-        );
+        expect(find.text('Drag to move · Pinch to resize'), findsOneWidget);
         await tester.drag(
           find.byKey(const Key('photo_glass_drag_handle')),
           const Offset(0, 40),
         );
         await tester.pumpAndSettle();
-        expect(
-          find.text('Double-tap card to reset center'),
-          findsOneWidget,
-        );
+        expect(find.text('Double-tap card to reset center'), findsOneWidget);
 
-        // Double-tap resets offset back to Offset.zero
+        // Two-finger pinch gesture scales cleanly without assertion errors
         final handleCenter = tester.getCenter(
           find.byKey(const Key('photo_glass_drag_handle')),
         );
+        final g1 = await tester.startGesture(handleCenter - const Offset(30, 0));
+        final g2 = await tester.startGesture(handleCenter + const Offset(30, 0));
+        await tester.pump();
+        await g1.moveBy(const Offset(-20, 0));
+        await g2.moveBy(const Offset(20, 0));
+        await tester.pump();
+        await g1.up();
+        await g2.up();
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull);
+
+        // Double-tap resets offset & scale back to default
         await tester.tapAt(handleCenter);
         await tester.pump(const Duration(milliseconds: 50));
         await tester.tapAt(handleCenter);
         await tester.pumpAndSettle();
+        expect(find.text('Drag to move · Pinch to resize'), findsOneWidget);
+
+        // Selecting None displays true transparent checkerboard stage
+        await tester.tap(find.byKey(const Key('backdrop_option_none')));
+        await tester.pumpAndSettle();
         expect(
-          find.text('Drag card to reposition over photo'),
+          find.byKey(const Key('share_transparent_checkerboard')),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(const Key('photo_glass_gradient_backdrop')),
+          findsNothing,
+        );
+
+        // Custom 2-Color Gradient Picker Sheet
+        final customBtn = find.byKey(const Key('backdrop_custom_color_button'));
+        await tester.ensureVisible(customBtn);
+        await tester.tap(customBtn);
+        await tester.pumpAndSettle();
+        expect(
+          find.byKey(const Key('custom_color_picker_sheet')),
+          findsOneWidget,
+        );
+        await tester.tap(find.byKey(const Key('custom_top_color_0')));
+        await tester.tap(find.byKey(const Key('custom_bottom_color_4')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const Key('custom_color_apply_button')));
+        await tester.pumpAndSettle();
+        expect(
+          find.byKey(const Key('photo_glass_gradient_backdrop')),
           findsOneWidget,
         );
 
-        // Switching to a preset clears custom photo cleanly
-        await tester.tap(find.byKey(const Key('backdrop_option_forest_mist')));
+        // Switching to a curated preset works cleanly
+        final forestBtn = find.byKey(const Key('backdrop_option_forest_mist'));
+        await tester.ensureVisible(forestBtn);
+        await tester.tap(forestBtn);
         await tester.pumpAndSettle();
         expect(
           find.byKey(const Key('photo_glass_custom_image')),

@@ -1069,6 +1069,28 @@ class _ObsidianTelemetryThreeColBox extends StatelessWidget {
   }
 }
 
+Color _adaptiveStemAccent({
+  required double value,
+  required double minVal,
+  required double maxVal,
+  required int index,
+  required int total,
+  required Color mutedColor,
+}) {
+  final spread = maxVal - minVal;
+  if (spread < 1.0) {
+    // Flat or single-bucket session: highlight center groove in Sonic Coral, flanks in Rhythm Violet.
+    final centerDist = (index - (total - 1) / 2.0).abs() / math.max(1.0, total / 2.0);
+    return centerDist < 0.48
+        ? StradioColors.sonicCoral
+        : StradioColors.rhythmViolet;
+  }
+  final norm = ((value - minVal) / spread).clamp(0.0, 1.0);
+  if (norm >= 0.62) return StradioColors.sonicCoral;
+  if (norm >= 0.22) return StradioColors.rhythmViolet;
+  return mutedColor;
+}
+
 class _StickerStemRow extends StatelessWidget {
   const _StickerStemRow({required this.stems});
 
@@ -1076,40 +1098,40 @@ class _StickerStemRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final maxVal = math.max(180.0, stems.reduce(math.max));
+    final minVal = stems.reduce(math.min);
+    final rawMax = stems.reduce(math.max);
+    final maxVal = math.max(180.0, rawMax);
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       crossAxisAlignment: CrossAxisAlignment.end,
       children: [
         for (var i = 0; i < stems.length; i++)
-          Container(
-            width: 3.5,
-            height: 54 * (stems[i] / maxVal).clamp(0.20, 1.0),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: stems[i] >= 150
-                    ? [
-                        StradioColors.sonicCoral,
-                        StradioColors.sonicCoral.withValues(alpha: 0.38),
-                      ]
-                    : (stems[i] >= 130
-                          ? [
-                              StradioColors.rhythmViolet,
-                              StradioColors.rhythmViolet.withValues(
-                                alpha: 0.38,
-                              ),
-                            ]
-                          : [
-                              StradioColors.borderSubtle,
-                              StradioColors.borderSubtle.withValues(
-                                alpha: 0.65,
-                              ),
-                            ]),
-              ),
-              borderRadius: BorderRadius.circular(StradioRadii.full),
-            ),
+          Builder(
+            builder: (_) {
+              final accent = _adaptiveStemAccent(
+                value: stems[i],
+                minVal: minVal,
+                maxVal: rawMax,
+                index: i,
+                total: stems.length,
+                mutedColor: StradioColors.borderSubtle,
+              );
+              return Container(
+                width: 3.5,
+                height: 54 * (stems[i] / maxVal).clamp(0.22, 1.0),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      accent,
+                      accent.withValues(alpha: 0.42),
+                    ],
+                  ),
+                  borderRadius: BorderRadius.circular(StradioRadii.full),
+                ),
+              );
+            },
           ),
       ],
     );
@@ -1123,7 +1145,9 @@ class _ObsidianMiniStemRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final maxVal = math.max(180.0, stems.reduce(math.max));
+    final minVal = stems.reduce(math.min);
+    final rawMax = stems.reduce(math.max);
+    final maxVal = math.max(180.0, rawMax);
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       crossAxisAlignment: CrossAxisAlignment.end,
@@ -1131,13 +1155,16 @@ class _ObsidianMiniStemRow extends StatelessWidget {
         for (var i = 0; i < stems.length; i++)
           Container(
             width: 3.5,
-            height: 26 * (stems[i] / maxVal).clamp(0.24, 1.0),
+            height: 26 * (stems[i] / maxVal).clamp(0.26, 1.0),
             decoration: BoxDecoration(
-              color: stems[i] >= 152
-                  ? StradioColors.sonicCoral
-                  : (stems[i] >= 130
-                        ? StradioColors.rhythmViolet
-                        : Colors.white.withValues(alpha: 0.22)),
+              color: _adaptiveStemAccent(
+                value: stems[i],
+                minVal: minVal,
+                maxVal: rawMax,
+                index: i,
+                total: stems.length,
+                mutedColor: Colors.white.withValues(alpha: 0.28),
+              ),
               borderRadius: BorderRadius.circular(StradioRadii.full),
             ),
           ),
