@@ -60,7 +60,7 @@ class _TargetCalibrationSheetState extends State<TargetCalibrationSheet> {
   @override
   void initState() {
     super.initState();
-    _paceSec = widget.initialPaceSecondsPerKm.clamp(210, 600);
+    _paceSec = widget.initialPaceSecondsPerKm.clamp(210, 900);
     _distanceKm = widget.initialDistanceKm.clamp(1.0, 21.1);
   }
 
@@ -222,8 +222,8 @@ class _TargetCalibrationSheetState extends State<TargetCalibrationSheet> {
                               key: const Key('target_pace_slider'),
                               value: _paceSec.toDouble(),
                               min: 210,
-                              max: 600,
-                              divisions: 78, // 5-second steps
+                              max: 900,
+                              divisions: 138, // 5-second steps
                               onChanged: (v) =>
                                   setState(() => _paceSec = v.round()),
                             ),
@@ -240,7 +240,7 @@ class _TargetCalibrationSheetState extends State<TargetCalibrationSheet> {
                                 style: StradioTypography.metricLabel(),
                               ),
                               Text(
-                                '10:00 /km',
+                                '15:00 /km',
                                 style: StradioTypography.metricLabel(),
                               ),
                             ],

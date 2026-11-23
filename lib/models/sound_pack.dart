@@ -113,12 +113,16 @@ class StradioSoundPack {
     return (cadenceSpm / bpm).clamp(minPlaybackRate, maxPlaybackRate);
   }
 
-  /// Estimates target step cadence (SPM) from a target running/jogging pace
-  /// (`210..600` sec/km, i.e. `3:30..10:00 /km`).
+  /// Estimates target step cadence (SPM) from a target running or walking pace
+  /// (`210..900` sec/km, i.e. `3:30..15:00 /km`).
   static double estimateCadenceFromPace(int paceSecondsPerKm) {
-    final clamped = paceSecondsPerKm.clamp(210, 600);
-    final t = (600 - clamped) / 390.0;
-    return 132.0 + t * 54.0;
+    final clamped = paceSecondsPerKm.clamp(210, 900);
+    if (clamped <= 600) {
+      final t = (600 - clamped) / 390.0;
+      return 132.0 + t * 54.0;
+    }
+    final walkT = (clamped - 600) / 300.0;
+    return 132.0 - walkT * 28.0;
   }
 
   /// Formats pace seconds per kilometer as `m:ss`.

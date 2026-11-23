@@ -175,18 +175,18 @@ class StradioPreferencesService {
     await p.setDouble(_keyStrideSensitivity, sensitivity.clamp(0.8, 2.4));
   }
 
-  /// Loads calibrated target pace in seconds/km (`210..600`, default `360` = `6:00 /km`).
+  /// Loads calibrated target pace in seconds/km (`210..900`, default `360` = `6:00 /km`).
   static int loadTargetPaceSecondsPerKm() {
     final raw = _prefs?.getInt(_keyTargetPaceSecondsPerKm);
     if (raw == null) return defaultTargetPaceSecondsPerKm;
-    return raw.clamp(210, 600);
+    return raw.clamp(210, 900);
   }
 
-  /// Persists calibrated target pace in seconds/km (`210..600`).
+  /// Persists calibrated target pace in seconds/km (`210..900`).
   static Future<void> saveTargetPaceSecondsPerKm(int secondsPerKm) async {
     final p = _prefs ?? await SharedPreferences.getInstance();
     _prefs = p;
-    await p.setInt(_keyTargetPaceSecondsPerKm, secondsPerKm.clamp(210, 600));
+    await p.setInt(_keyTargetPaceSecondsPerKm, secondsPerKm.clamp(210, 900));
   }
 
   /// Loads calibrated target distance in km (`1.0..21.1`, default `5.0`).
