@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:collection';
 import 'dart:math' as math;
+import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -18,9 +19,7 @@ import '../../services/preferences_service.dart';
 import '../../services/recording_repository.dart';
 import '../../services/recording_service.dart';
 import '../../theme/stradio_theme.dart';
-import '../../widgets/liquid_glass_lens.dart';
 import '../../widgets/sensor_calibration_sheet.dart';
-import '../../widgets/sonic_ribbon_painter.dart';
 import 'post_run_summary_screen.dart';
 
 enum _RunStreamState { connecting, running, paused, sensorError }
@@ -88,6 +87,7 @@ class _ActiveRunScreenState extends State<ActiveRunScreen>
   late final bool _ownsAudioEngine;
   late StradioLabSettings _labSettings;
   late double _strideSensitivity;
+  late double _targetDistanceKm;
   late bool _isDeveloperMode;
 
   late final AnimationController _ribbonController;
@@ -138,6 +138,7 @@ class _ActiveRunScreenState extends State<ActiveRunScreen>
         StradioAudioEngine(initialPack: widget.initialSoundPackId);
     _labSettings = widget.initialLabSettings;
     _strideSensitivity = StradioPreferencesService.loadStrideSensitivity();
+    _targetDistanceKm = StradioPreferencesService.loadTargetDistanceKm();
     _isDeveloperMode =
         StradioPreferencesService.loadUserProfile().developerModeEnabled ||
         _labSettings.developerOverlayEnabled;
@@ -960,6 +961,13 @@ class _ActiveRunScreenState extends State<ActiveRunScreen>
     return buf.toString();
   }
 
+  String _formatPaceFromSpeedKmh(double kmh) {
+    final secPerKm = (3600.0 / kmh).round().clamp(150, 1800);
+    final mins = secPerKm ~/ 60;
+    final rem = (secPerKm % 60).toString().padLeft(2, '0');
+    return '$mins:$rem';
+  }
+
   @override
   void dispose() {
     _elapsedTimer?.cancel();
@@ -982,12 +990,29 @@ class _ActiveRunScreenState extends State<ActiveRunScreen>
   @override
   Widget build(BuildContext context) {
     final s = StradioStrings.of(widget.language);
+    final isId = widget.language == AppLanguage.id;
     final steps = _primaryDetections.length;
     final liveSpm = _currentLiveCadenceSpm();
     final hasCadence = liveSpm > 0;
     final isRunning = _streamState == _RunStreamState.running;
     final isJogZone = liveSpm >= StradioAudioEngine.joggingEntrySpm;
     final reducedMotion = MediaQuery.disableAnimationsOf(context);
+
+    final currentDistanceKm = RunMetricsCalculator.estimateDistanceKm(
+      steps: steps,
+      activity: _labSettings.activity,
+      heightCm: widget.userHeightCm,
+    );
+    final targetProgressPct = _targetDistanceKm > 0
+        ? ((currentDistanceKm / _targetDistanceKm) * 100.0).round().clamp(0, 100)
+        : 0;
+    final speedKmh = RunMetricsCalculator.estimateSpeedKmh(
+      distanceKm: currentDistanceKm,
+      activeDurationSeconds: _activeDurationSeconds,
+    );
+    final paceText = (steps > 0 && speedKmh >= 0.5)
+        ? _formatPaceFromSpeedKmh(speedKmh)
+        : '--:--';
 
     final (pillLabel, dotColor) = switch (_streamState) {
       _RunStreamState.running => (
@@ -1005,160 +1030,209 @@ class _ActiveRunScreenState extends State<ActiveRunScreen>
       ),
     };
 
+    final targetDotColor = _streamState == _RunStreamState.sensorError
+        ? StradioColors.textAccentDeep
+        : (targetProgressPct >= 100
+              ? StradioColors.statusLive
+              : StradioColors.sonicCoral);
+
     return Scaffold(
       backgroundColor: StradioColors.warmIvory,
       body: SafeArea(
         child: Center(
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 480),
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(24, 16, 24, 20),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  // Top Brand Bar (Logo + Stradio) + Dual-Tone Stacked Sub-Header (Stride / Rhythm) + 100 Hz Sensor Pill (Mockup #10)
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                // Top Header Section: Brand Bar + Stride/Rhythm + Target Progress Pill (Mockup #10)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(24, 14, 24, 0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      Image.asset(
-                        'assets/images/stradio-logo.png',
-                        height: 22,
-                        fit: BoxFit.contain,
-                        errorBuilder: (_, _, _) => const SizedBox.shrink(),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Image.asset(
+                            'assets/images/stradio-logo.png',
+                            height: 22,
+                            fit: BoxFit.contain,
+                            errorBuilder: (_, _, _) => const SizedBox.shrink(),
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Stradio',
+                            style: StradioTypography.headingSmall(fontSize: 18),
+                          ),
+                        ],
                       ),
-                      const SizedBox(width: 8),
-                      Text(
-                        'Stradio',
-                        style: StradioTypography.headingSmall(fontSize: 18),
+                      const SizedBox(height: 8),
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  s.strideTitle,
+                                  style: StradioTypography.titlePrimary(),
+                                ),
+                                Text(
+                                  s.rhythmTitle,
+                                  style: StradioTypography.titleMuted(),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Semantics(
+                            button: true,
+                            label: 'Target distance progress and sensor calibration',
+                            child: Material(
+                              color: StradioColors.surfaceRecessed.withValues(
+                                alpha: 0.78,
+                              ),
+                              borderRadius: BorderRadius.circular(
+                                StradioRadii.full,
+                              ),
+                              child: InkWell(
+                                key: const Key('active_run_sensor_button'),
+                                borderRadius: BorderRadius.circular(
+                                  StradioRadii.full,
+                                ),
+                                onTap: _openSensorCalibrationSheet,
+                                child: Container(
+                                  constraints: const BoxConstraints(
+                                    minHeight: 38,
+                                    maxWidth: 156,
+                                  ),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 12,
+                                    vertical: 8,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    borderRadius: BorderRadius.circular(
+                                      StradioRadii.full,
+                                    ),
+                                    border: Border.all(
+                                      color: Colors.white.withValues(
+                                        alpha: 0.80,
+                                      ),
+                                    ),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Container(
+                                        width: 6,
+                                        height: 6,
+                                        decoration: BoxDecoration(
+                                          shape: BoxShape.circle,
+                                          color: targetDotColor,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 6),
+                                      Flexible(
+                                        child: Text(
+                                          '$targetProgressPct% · ${_targetDistanceKm.toStringAsFixed(1)} km',
+                                          key: const Key(
+                                            'active_run_target_progress_pill',
+                                          ),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: StradioTypography.microCap(
+                                            color: _streamState ==
+                                                    _RunStreamState.sensorError
+                                                ? StradioColors.textAccentDeep
+                                                : StradioColors.textPrimary,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
+
+                      // Honest Loading / Error Inline Banner (R-27)
+                      if (_streamState == _RunStreamState.connecting) ...[
+                        const SizedBox(height: 10),
+                        _InlineStatusStrip(
+                          dotColor: StradioColors.twilightPlum,
+                          message: s.calibratingSensorMessage,
+                        ),
+                      ] else if (_streamState ==
+                          _RunStreamState.sensorError) ...[
+                        const SizedBox(height: 10),
+                        _InlineStatusStrip(
+                          dotColor: StradioColors.textAccentDeep,
+                          message:
+                              _sensorErrorText ?? s.sensorUnavailableShort,
+                          actionLabel: s.simulateStrideAction,
+                          actionKey: const Key('simulate_stride_banner_button'),
+                          onAction: _simulateSingleStride,
+                        ),
+                      ],
                     ],
                   ),
-                  const SizedBox(height: 8),
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              s.strideTitle,
-                              style: StradioTypography.titlePrimary(),
-                            ),
-                            Text(
-                              s.rhythmTitle,
-                              style: StradioTypography.titleMuted(),
-                            ),
-                          ],
-                        ),
-                      ),
-                      Semantics(
-                        button: true,
-                        label: 'Motion sensor status and calibration',
-                        child: IconButton(
-                          key: const Key('active_run_sensor_button'),
-                          onPressed: _openSensorCalibrationSheet,
-                          tooltip: 'Sensor status',
-                          style: IconButton.styleFrom(
-                            backgroundColor: StradioColors.surfaceCard,
-                            minimumSize: const Size(48, 48),
-                            side: const BorderSide(
-                              color: StradioColors.borderSubtle,
-                            ),
-                            shape: const CircleBorder(),
+                ),
+
+                // Central Frosted Glass Dial + Orbiting Dot + 7-Bar Acoustic Equalizer (Mockup #10, NO waveform)
+                Expanded(
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      final maxDim = math.min(
+                        constraints.maxWidth - 48,
+                        constraints.maxHeight - 54,
+                      );
+                      final dialSize = maxDim.clamp(150.0, 248.0);
+                      final lensSize = dialSize * 0.54;
+                      final equalizerGap = constraints.maxHeight < 230
+                          ? 10.0
+                          : 18.0;
+
+                      return SingleChildScrollView(
+                        child: ConstrainedBox(
+                          constraints: BoxConstraints(
+                            minHeight: constraints.maxHeight,
                           ),
-                          icon: Icon(
-                            Icons.sensors_rounded,
-                            size: 20,
-                            color: _streamState == _RunStreamState.sensorError
-                                ? StradioColors.textAccentDeep
-                                : StradioColors.textPrimary,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-
-                  // Honest Loading / Error Inline Banner (R-27)
-                  if (_streamState == _RunStreamState.connecting) ...[
-                    const SizedBox(height: 10),
-                    _InlineStatusStrip(
-                      dotColor: StradioColors.twilightPlum,
-                      message: s.calibratingSensorMessage,
-                    ),
-                  ] else if (_streamState == _RunStreamState.sensorError) ...[
-                    const SizedBox(height: 10),
-                    _InlineStatusStrip(
-                      dotColor: StradioColors.textAccentDeep,
-                      message: _sensorErrorText ?? s.sensorUnavailableShort,
-                      actionLabel: s.simulateStrideAction,
-                      actionKey: const Key('simulate_stride_banner_button'),
-                      onAction: _simulateSingleStride,
-                    ),
-                  ],
-
-                  // Central 256px Circular Acoustic Dial + 136px LiquidGlassLens (Glass 1 of 2)
-                  Expanded(
-                    child: LayoutBuilder(
-                      builder: (context, constraints) {
-                        final dialSize = math
-                            .min(constraints.maxWidth, constraints.maxHeight)
-                            .clamp(196.0, 264.0);
-                        final lensSize = dialSize * 0.53;
-
-                        return Center(
-                          child: SizedBox(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                          SizedBox(
                             width: dialSize,
                             height: dialSize,
                             child: Stack(
                               alignment: Alignment.center,
                               children: [
-                                Container(
-                                  width: dialSize,
-                                  height: dialSize,
-                                  decoration: const BoxDecoration(
-                                    shape: BoxShape.circle,
-                                    color: StradioColors.surfaceRecessed,
-                                  ),
-                                  clipBehavior: Clip.antiAlias,
+                                Positioned.fill(
                                   child: RepaintBoundary(
                                     child: AnimatedBuilder(
                                       animation: Listenable.merge([
-                                        _ribbonController,
                                         _continuousWaveController,
+                                        _ribbonController,
                                       ]),
                                       builder: (_, _) {
-                                        final curvedImpulse = Curves.easeOutCubic
-                                            .transform(_ribbonController.value);
-                                        final continuousFlow =
-                                            _continuousWaveController.value *
-                                            math.pi *
-                                            2 *
-                                            (hasCadence
-                                                ? (liveSpm / 140.0).clamp(
-                                                    0.8,
-                                                    1.6,
-                                                  )
-                                                : 0.65);
-                                        final phase = reducedMotion
-                                            ? 0.4
-                                            : 0.4 +
-                                                  steps * 0.52 +
-                                                  continuousFlow +
-                                                  curvedImpulse * 0.85;
-                                        final smoothBoost = _stepPulseActive
-                                            ? (1.0 - curvedImpulse * 0.55).clamp(
-                                                0.25,
-                                                1.0,
-                                              )
-                                            : 0.0;
+                                        final orbitAngle = reducedMotion
+                                            ? -math.pi * 0.78
+                                            : -math.pi * 0.78 +
+                                                  _continuousWaveController
+                                                          .value *
+                                                      math.pi *
+                                                      2;
                                         return CustomPaint(
-                                          painter: SonicRibbonPainter(
-                                            phase: phase,
-                                            amplitude: isRunning ? 0.82 : 0.44,
-                                            pulseBoost: smoothBoost,
-                                            strokeWidth: 2.6,
-                                            fillGradientArea: true,
+                                          painter: _ActiveRunDialPainter(
+                                            orbitAngle: orbitAngle,
+                                            pulse: _stepPulseActive
+                                                ? (1.0 -
+                                                      _ribbonController.value)
+                                                : 0.0,
+                                            isRunning: isRunning,
                                           ),
                                         );
                                       },
@@ -1166,216 +1240,497 @@ class _ActiveRunScreenState extends State<ActiveRunScreen>
                                   ),
                                 ),
 
-                                // 4 Cardinal Acoustic Markers
+                                // 4 Uppercase Cardinal Acoustic Markers
                                 Positioned(
                                   top: 14,
                                   child: _CardinalMarker(
-                                    label: 'kick',
-                                    dotColor: StradioColors.sonicCoral,
+                                    label: 'KICK',
+                                    dotColor: StradioColors.textSecondary,
                                   ),
                                 ),
                                 Positioned(
                                   bottom: 14,
                                   child: _CardinalMarker(
-                                    label: 'bass',
-                                    dotColor: StradioColors.twilightPlum,
+                                    label: 'BASS',
+                                    dotColor: StradioColors.textSecondary,
                                   ),
                                 ),
                                 Positioned(
                                   left: 14,
                                   child: _CardinalMarker(
-                                    label: 'sync',
-                                    dotColor: StradioColors.midnight,
+                                    label: 'SYNC',
+                                    dotColor: StradioColors.textSecondary,
                                     dotFirst: true,
                                   ),
                                 ),
                                 Positioned(
                                   right: 14,
                                   child: _CardinalMarker(
-                                    label: 'stem',
-                                    dotColor: StradioColors.rhythmViolet,
-                                    dotFirst: true,
+                                    label: 'STEM',
+                                    dotColor: StradioColors.textSecondary,
                                   ),
                                 ),
 
-                                // Central 136px LiquidGlassLens reacting <30ms on footstrike
+                                // Central Frosted Glassmorphism Sphere
                                 AnimatedScale(
                                   scale: (_stepPulseActive && !reducedMotion)
                                       ? 1.05
                                       : 1.0,
                                   duration: const Duration(milliseconds: 140),
                                   curve: Curves.easeOutCubic,
-                                  child: LiquidGlassLens(
+                                  child: ClipOval(
                                     key: const Key('active_run_glass_lens'),
-                                    shape: LiquidGlassShape.circle,
-                                    width: lensSize,
-                                    height: lensSize,
-                                    edgeIntensity: _stepPulseActive
-                                        ? 0.065
-                                        : 0.032,
-                                    rippleEffect: _stepPulseActive
-                                        ? 0.24
-                                        : 0.08,
-                                    child: Column(
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.center,
-                                      children: [
-                                        Text(
-                                          hasCadence
-                                              ? '${liveSpm.round()}'
-                                              : '--',
-                                          style: StradioTypography.metricValue(
-                                            fontSize: 28,
+                                    child: BackdropFilter(
+                                      filter: ui.ImageFilter.blur(
+                                        sigmaX: 12,
+                                        sigmaY: 12,
+                                      ),
+                                      child: Container(
+                                        width: lensSize,
+                                        height: lensSize,
+                                        decoration: BoxDecoration(
+                                          shape: BoxShape.circle,
+                                          gradient: LinearGradient(
+                                            begin: Alignment.topLeft,
+                                            end: Alignment.bottomRight,
+                                            colors: [
+                                              Colors.white.withValues(
+                                                alpha: 0.90,
+                                              ),
+                                              StradioColors.surfaceCard
+                                                  .withValues(alpha: 0.78),
+                                            ],
                                           ),
+                                          border: Border.all(
+                                            color: Colors.white.withValues(
+                                              alpha: 0.94,
+                                            ),
+                                            width: 1.4,
+                                          ),
+                                          boxShadow: [
+                                            BoxShadow(
+                                              color: StradioColors.midnight
+                                                  .withValues(alpha: 0.08),
+                                              blurRadius: 18,
+                                              offset: const Offset(0, 6),
+                                            ),
+                                          ],
                                         ),
-                                        Text(
-                                          'spm',
-                                          style:
-                                              StradioTypography.metricLabel(),
+                                        child: Stack(
+                                          alignment: Alignment.center,
+                                          children: [
+                                            // Specular top-left highlight arc
+                                            Positioned(
+                                              top: 6,
+                                              left: lensSize * 0.18,
+                                              right: lensSize * 0.18,
+                                              child: Container(
+                                                height: 3,
+                                                decoration: BoxDecoration(
+                                                  borderRadius:
+                                                      BorderRadius.circular(
+                                                        StradioRadii.full,
+                                                      ),
+                                                  gradient: LinearGradient(
+                                                    colors: [
+                                                      Colors.white.withValues(
+                                                        alpha: 0.0,
+                                                      ),
+                                                      Colors.white.withValues(
+                                                        alpha: 0.95,
+                                                      ),
+                                                      Colors.white.withValues(
+                                                        alpha: 0.0,
+                                                      ),
+                                                    ],
+                                                  ),
+                                                ),
+                                              ),
+                                            ),
+                                            Column(
+                                              mainAxisAlignment:
+                                                  MainAxisAlignment.center,
+                                              children: [
+                                                Text(
+                                                  hasCadence
+                                                      ? '${liveSpm.round()}'
+                                                      : '--',
+                                                  style:
+                                                      StradioTypography.metricValue(
+                                                        fontSize: 28,
+                                                      ),
+                                                ),
+                                                Text(
+                                                  'SPM',
+                                                  style:
+                                                      StradioTypography.microCap(
+                                                        color: StradioColors
+                                                            .textSecondary,
+                                                      ),
+                                                ),
+                                              ],
+                                            ),
+                                          ],
                                         ),
-                                      ],
+                                      ),
                                     ),
                                   ),
                                 ),
                               ],
                             ),
                           ),
-                        );
-                      },
-                    ),
-                  ),
+                          SizedBox(height: equalizerGap),
 
-                  // 2 Borderless Metrics directly on Warm Ivory (Steps & Cadence)
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          // 7-Bar Equalizer Visualizer below the dial (Mockup #10)
+                          RepaintBoundary(
+                            child: AnimatedBuilder(
+                              animation: Listenable.merge([
+                                _continuousWaveController,
+                                _ribbonController,
+                              ]),
+                              builder: (_, _) => _ActiveRunEqualizerBars(
+                                phase: reducedMotion
+                                    ? 0.0
+                                    : _continuousWaveController.value *
+                                          math.pi *
+                                          2,
+                                energy: isRunning
+                                    ? (0.55 +
+                                          (_stepPulseActive
+                                              ? 0.45 *
+                                                    (1.0 -
+                                                        _ribbonController.value)
+                                              : 0.0))
+                                      : 0.28,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                    },
+                  ),
+                ),
+
+                // 2 Borderless Metrics (Steps & Pace — no duplicate Cadence SPM) + Timer · Current Distance
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 24),
+                  child: Column(
                     children: [
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.center,
                         children: [
-                          Text(
-                            s.stepsLabel,
-                            style: StradioTypography.metricLabel(),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  s.stepsLabel,
+                                  style: StradioTypography.metricLabel(),
+                                ),
+                                const SizedBox(height: 2),
+                                FittedBox(
+                                  fit: BoxFit.scaleDown,
+                                  alignment: Alignment.centerLeft,
+                                  child: Text(
+                                    _formatSteps(steps),
+                                    key: const Key('active_run_step_count'),
+                                    style: StradioTypography.metricValue(),
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
-                          const SizedBox(height: 2),
-                          Text(
-                            _formatSteps(steps),
-                            key: const Key('active_run_step_count'),
-                            style: StradioTypography.metricValue(),
+                          Container(
+                            width: 6,
+                            height: 6,
+                            margin: const EdgeInsets.only(top: 16),
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: StradioColors.borderSubtle.withValues(
+                                alpha: 0.9,
+                              ),
+                            ),
+                          ),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.end,
+                              children: [
+                                Text(
+                                  s.paceLabel,
+                                  style: StradioTypography.metricLabel(),
+                                ),
+                                const SizedBox(height: 2),
+                                FittedBox(
+                                  fit: BoxFit.scaleDown,
+                                  alignment: Alignment.centerRight,
+                                  child: Row(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.baseline,
+                                    textBaseline: TextBaseline.alphabetic,
+                                    children: [
+                                      Text(
+                                        paceText,
+                                        key: const Key('active_run_pace_value'),
+                                        style: StradioTypography.metricValue(),
+                                      ),
+                                      const SizedBox(width: 3),
+                                      Text(
+                                        '/km',
+                                        style: StradioTypography.metricLabel(),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
                         ],
                       ),
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.end,
-                        children: [
-                          Text(
-                            s.cadenceLabel,
-                            style: StradioTypography.metricLabel(),
+                      const SizedBox(height: 6),
+                      SizedBox(
+                        height: 20,
+                        child: Center(
+                          child: Text(
+                            steps == 0
+                                ? s.takeStepHint
+                                : '${_formatDuration(_activeDurationSeconds)} · ${currentDistanceKm.toStringAsFixed(2)} km',
+                            key: const Key('active_run_helper_text'),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: StradioTypography.body(
+                              fontSize: 13,
+                              color: StradioColors.textSecondary,
+                            ),
                           ),
-                          const SizedBox(height: 2),
-                          Text(
-                            hasCadence ? '${liveSpm.round()} spm' : '-- spm',
-                            key: const Key('active_run_cadence_value'),
-                            style: StradioTypography.metricValue(),
-                          ),
-                        ],
+                        ),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 8),
+                ),
+                const SizedBox(height: 8),
 
-                  // Calm 1-line helper for empty/0-step state or Hold-to-End hint
-                  SizedBox(
-                    height: 20,
-                    child: Center(
-                      child: Text(
-                        _holdHintText ??
-                            (steps == 0
-                                ? s.takeStepHint
-                                : '${_formatDuration(_activeDurationSeconds)} · ${_audioEngine.activePack.title}'),
-                        key: const Key('active_run_helper_text'),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: StradioTypography.body(
-                          fontSize: 13,
-                          color: _holdHintText != null
-                              ? StradioColors.textAccentDeep
-                              : StradioColors.textSecondary,
+                // Bottom Glassmorphism Dock over 2 Edge-to-Edge Orange & Blue Curves + Permanent Stop Caption
+                Stack(
+                  children: [
+                    const Positioned.fill(
+                      child: IgnorePointer(
+                        child: CustomPaint(
+                          painter: _ActiveRunBottomRibbonsPainter(),
                         ),
                       ),
                     ),
-                  ),
-                  const SizedBox(height: 12),
-
-                  // Bottom LiquidGlassLens Dock Cradle (Glass 2 of 2)
-                  LiquidGlassLens(
-                    key: const Key('active_run_bottom_dock'),
-                    shape: LiquidGlassShape.pill,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 8,
-                    ),
-                    child: Row(
-                      children: [
-                        // Left 48dp Circle: Zero-Interruption 6-Sound-Pack Swap
-                        Semantics(
-                          button: true,
-                          label: 'Switch sound pack',
-                          child: IconButton(
-                            key: const Key('sound_pack_selector_button'),
-                            onPressed: _showSoundPackPickerSheet,
-                            tooltip: 'Switch sound pack',
-                            style: IconButton.styleFrom(
-                              backgroundColor: StradioColors.surfaceCard,
-                              minimumSize: const Size(48, 48),
-                              side: const BorderSide(
-                                color: StradioColors.borderSubtle,
-                              ),
-                              shape: const CircleBorder(),
-                            ),
-                            icon: const Icon(
-                              Icons.headphones_rounded,
-                              size: 20,
-                              color: StradioColors.textPrimary,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-
-                        // Center Solid Midnight Pill: Active Status + Pause/Resume
-                        Expanded(
-                          child: Material(
-                            color: StradioColors.midnight,
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 6, 20, 12),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          ClipRRect(
+                            key: const Key('active_run_bottom_dock'),
                             borderRadius: BorderRadius.circular(
                               StradioRadii.full,
                             ),
-                            child: InkWell(
-                              key: const Key('pause_resume_run_button'),
-                              borderRadius: BorderRadius.circular(
-                                StradioRadii.full,
+                            child: BackdropFilter(
+                              filter: ui.ImageFilter.blur(
+                                sigmaX: 16,
+                                sigmaY: 16,
                               ),
-                              onTap: _togglePauseResume,
-                              child: SizedBox(
-                                height: 48,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 8,
+                                ),
+                                decoration: BoxDecoration(
+                                  gradient: LinearGradient(
+                                    begin: Alignment.topLeft,
+                                    end: Alignment.bottomRight,
+                                    colors: [
+                                      StradioColors.surfaceCard.withValues(
+                                        alpha: 0.80,
+                                      ),
+                                      StradioColors.warmIvory.withValues(
+                                        alpha: 0.68,
+                                      ),
+                                    ],
+                                  ),
+                                  borderRadius: BorderRadius.circular(
+                                    StradioRadii.full,
+                                  ),
+                                  border: Border.all(
+                                    color: Colors.white.withValues(alpha: 0.88),
+                                    width: 1.2,
+                                  ),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: StradioColors.midnight.withValues(
+                                        alpha: 0.08,
+                                      ),
+                                      blurRadius: 20,
+                                      offset: const Offset(0, 8),
+                                    ),
+                                  ],
+                                ),
                                 child: Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
                                   children: [
-                                    Container(
-                                      key: const Key('status_indicator_dot'),
-                                      width: 6,
-                                      height: 6,
-                                      decoration: BoxDecoration(
-                                        shape: BoxShape.circle,
-                                        color: dotColor,
+                                    // Left 48dp Circle: Zero-Interruption 6-Sound-Pack Swap
+                                    Semantics(
+                                      button: true,
+                                      label: 'Switch sound pack',
+                                      child: IconButton(
+                                        key: const Key(
+                                          'sound_pack_selector_button',
+                                        ),
+                                        onPressed: _showSoundPackPickerSheet,
+                                        tooltip: 'Switch sound pack',
+                                        style: IconButton.styleFrom(
+                                          backgroundColor:
+                                              StradioColors.surfaceCard,
+                                          minimumSize: const Size(48, 48),
+                                          side: const BorderSide(
+                                            color: StradioColors.borderSubtle,
+                                          ),
+                                          shape: const CircleBorder(),
+                                        ),
+                                        icon: const Icon(
+                                          Icons.headphones_rounded,
+                                          size: 20,
+                                          color: StradioColors.textPrimary,
+                                        ),
                                       ),
                                     ),
                                     const SizedBox(width: 8),
-                                    Flexible(
-                                      child: Text(
-                                        pillLabel,
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: StradioTypography.pillBadge(
-                                          color: StradioColors.textOnDark,
+
+                                    // Center Solid Midnight Pill: Active Status + Pause/Resume
+                                    Expanded(
+                                      child: Material(
+                                        color: StradioColors.midnight,
+                                        borderRadius: BorderRadius.circular(
+                                          StradioRadii.full,
+                                        ),
+                                        child: InkWell(
+                                          key: const Key(
+                                            'pause_resume_run_button',
+                                          ),
+                                          borderRadius: BorderRadius.circular(
+                                            StradioRadii.full,
+                                          ),
+                                          onTap: _togglePauseResume,
+                                          child: SizedBox(
+                                            height: 48,
+                                            child: Row(
+                                              mainAxisAlignment:
+                                                  MainAxisAlignment.center,
+                                              children: [
+                                                Container(
+                                                  key: const Key(
+                                                    'status_indicator_dot',
+                                                  ),
+                                                  width: 6,
+                                                  height: 6,
+                                                  decoration: BoxDecoration(
+                                                    shape: BoxShape.circle,
+                                                    color: dotColor,
+                                                  ),
+                                                ),
+                                                const SizedBox(width: 8),
+                                                Flexible(
+                                                  child: Text(
+                                                    pillLabel,
+                                                    maxLines: 1,
+                                                    overflow:
+                                                        TextOverflow.ellipsis,
+                                                    style: StradioTypography.pillBadge(
+                                                      color: StradioColors
+                                                          .textOnDark,
+                                                    ),
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+
+                                    // Right 48dp Circle: Hold 1.5s to End Session (Anti-Accidental Trigger)
+                                    Semantics(
+                                      button: true,
+                                      label: 'Hold 1.5 seconds to end run',
+                                      child: Listener(
+                                        key: const Key(
+                                          'hold_to_end_run_button',
+                                        ),
+                                        behavior: HitTestBehavior.opaque,
+                                        onPointerDown: (_) => _onHoldStart(),
+                                        onPointerUp: (_) =>
+                                            _onHoldCancelOrShortTap(),
+                                        onPointerCancel: (_) =>
+                                            _onHoldCancelOrShortTap(),
+                                        child: AnimatedBuilder(
+                                          animation: _holdController,
+                                          builder: (_, _) {
+                                            return SizedBox(
+                                              width: 48,
+                                              height: 48,
+                                              child: Stack(
+                                                alignment: Alignment.center,
+                                                children: [
+                                                  Container(
+                                                    width: 48,
+                                                    height: 48,
+                                                    decoration: BoxDecoration(
+                                                      shape: BoxShape.circle,
+                                                      color: StradioColors
+                                                          .surfaceCard,
+                                                      border: Border.all(
+                                                        color: StradioColors
+                                                            .borderSubtle,
+                                                      ),
+                                                    ),
+                                                  ),
+                                                  // Resting subtle coral top-right quarter arc matching Mockup #10
+                                                  SizedBox(
+                                                    width: 48,
+                                                    height: 48,
+                                                    child: CircularProgressIndicator(
+                                                      value: _holdController
+                                                                  .value >
+                                                              0
+                                                          ? _holdController
+                                                                .value
+                                                          : 0.22,
+                                                      strokeWidth:
+                                                          _holdController
+                                                                      .value >
+                                                                  0
+                                                              ? 3.0
+                                                              : 2.0,
+                                                      color: _holdController
+                                                                  .value >
+                                                              0
+                                                          ? StradioColors
+                                                                .sonicCoral
+                                                          : StradioColors
+                                                                .sonicCoral
+                                                                .withValues(
+                                                                  alpha: 0.72,
+                                                                ),
+                                                      backgroundColor:
+                                                          Colors.transparent,
+                                                    ),
+                                                  ),
+                                                  const Icon(
+                                                    Icons.stop_rounded,
+                                                    size: 20,
+                                                    color: StradioColors
+                                                        .textPrimary,
+                                                  ),
+                                                ],
+                                              ),
+                                            );
+                                          },
                                         ),
                                       ),
                                     ),
@@ -1384,73 +1739,200 @@ class _ActiveRunScreenState extends State<ActiveRunScreen>
                               ),
                             ),
                           ),
-                        ),
-                        const SizedBox(width: 8),
-
-                        // Right 48dp Circle: Hold 1.5s to End Session (Anti-Accidental Trigger)
-                        Semantics(
-                          button: true,
-                          label: 'Hold 1.5 seconds to end run',
-                          child: Listener(
-                            key: const Key('hold_to_end_run_button'),
-                            behavior: HitTestBehavior.opaque,
-                            onPointerDown: (_) => _onHoldStart(),
-                            onPointerUp: (_) => _onHoldCancelOrShortTap(),
-                            onPointerCancel: (_) => _onHoldCancelOrShortTap(),
-                            child: AnimatedBuilder(
-                              animation: _holdController,
-                              builder: (_, _) {
-                                return SizedBox(
-                                  width: 48,
-                                  height: 48,
-                                  child: Stack(
-                                    alignment: Alignment.center,
-                                    children: [
-                                      Container(
-                                        width: 48,
-                                        height: 48,
-                                        decoration: BoxDecoration(
-                                          shape: BoxShape.circle,
-                                          color: StradioColors.surfaceCard,
-                                          border: Border.all(
-                                            color: StradioColors.borderSubtle,
-                                          ),
-                                        ),
-                                      ),
-                                      if (_holdController.value > 0)
-                                        SizedBox(
-                                          width: 48,
-                                          height: 48,
-                                          child: CircularProgressIndicator(
-                                            value: _holdController.value,
-                                            strokeWidth: 3.0,
-                                            color: StradioColors.sonicCoral,
-                                            backgroundColor: Colors.transparent,
-                                          ),
-                                        ),
-                                      const Icon(
-                                        Icons.stop_rounded,
-                                        size: 20,
-                                        color: StradioColors.textPrimary,
-                                      ),
-                                    ],
-                                  ),
-                                );
-                              },
+                          const SizedBox(height: 10),
+                          Text(
+                            _holdHintText ??
+                                (isId
+                                    ? 'TAHAN TOMBOL STOP UNTUK MENGAKHIRI SESI'
+                                    : 'HOLD STOP BUTTON TO CONCLUDE SESSION'),
+                            key: const Key('active_run_hold_caption'),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            textAlign: TextAlign.center,
+                            style: StradioTypography.microCap(
+                              color: _holdHintText != null
+                                  ? StradioColors.textAccentDeep
+                                  : StradioColors.textSecondary,
                             ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
-                  ),
-                ],
-              ),
+                  ],
+                ),
+              ],
             ),
           ),
         ),
       ),
     );
   }
+}
+
+/// Outer circular frosted dial + inner dashed ring + orbiting coral dot (Mockup #10).
+class _ActiveRunDialPainter extends CustomPainter {
+  const _ActiveRunDialPainter({
+    required this.orbitAngle,
+    required this.pulse,
+    required this.isRunning,
+  });
+
+  final double orbitAngle;
+  final double pulse;
+  final bool isRunning;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = Offset(size.width / 2, size.height / 2);
+    final outerR = size.width / 2 - 4;
+    final dashedR = outerR * 0.84;
+
+    // Outer frosted circle fill + delicate white rim
+    canvas.drawCircle(
+      center,
+      outerR,
+      Paint()..color = StradioColors.surfaceRecessed.withValues(alpha: 0.72),
+    );
+    canvas.drawCircle(
+      center,
+      outerR,
+      Paint()
+        ..color = Colors.white.withValues(alpha: 0.78)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.4,
+    );
+
+    // Inner dashed acoustic orbit ring
+    const dashCount = 44;
+    final dashPaint = Paint()
+      ..color = StradioColors.borderSubtle.withValues(alpha: 0.90)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.0;
+    final dashedRect = Rect.fromCircle(center: center, radius: dashedR);
+    for (var i = 0; i < dashCount; i++) {
+      final start = (i * 2 * math.pi) / dashCount;
+      canvas.drawArc(
+        dashedRect,
+        start,
+        (math.pi / dashCount) * 0.85,
+        false,
+        dashPaint,
+      );
+    }
+
+    // Smoothly orbiting coral dot along outer perimeter
+    final dotPos = Offset(
+      center.dx + outerR * math.cos(orbitAngle),
+      center.dy + outerR * math.sin(orbitAngle),
+    );
+    if (isRunning || pulse > 0) {
+      canvas.drawCircle(
+        dotPos,
+        7.5 + pulse * 3.0,
+        Paint()..color = StradioColors.sonicCoral.withValues(alpha: 0.25),
+      );
+    }
+    canvas.drawCircle(
+      dotPos,
+      4.5,
+      Paint()..color = StradioColors.sonicCoral,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _ActiveRunDialPainter oldDelegate) =>
+      oldDelegate.orbitAngle != orbitAngle ||
+      oldDelegate.pulse != pulse ||
+      oldDelegate.isRunning != isRunning;
+}
+
+/// 7 vertical rounded equalizer bars below the circular dial (Mockup #10).
+class _ActiveRunEqualizerBars extends StatelessWidget {
+  const _ActiveRunEqualizerBars({required this.phase, required this.energy});
+
+  final double phase;
+  final double energy;
+
+  @override
+  Widget build(BuildContext context) {
+    const baseHeights = [10.0, 14.0, 18.0, 26.0, 18.0, 14.0, 10.0];
+    return SizedBox(
+      height: 32,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          for (var i = 0; i < 7; i++) ...[
+            if (i > 0) const SizedBox(width: 6),
+            Container(
+              width: 4,
+              height: (baseHeights[i] *
+                      (0.65 +
+                          0.35 *
+                              energy *
+                              (0.5 + 0.5 * math.sin(phase * 2 + i * 0.9))))
+                  .clamp(8.0, 30.0),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(StradioRadii.full),
+                color: i == 3
+                    ? StradioColors.twilightPlum
+                    : (i == 2 || i == 4)
+                        ? StradioColors.sonicCoral
+                        : StradioColors.borderSubtle,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+/// Two subtle edge-to-edge flowing coral & twilight-blue curves behind the bottom dock (Mockup #10).
+class _ActiveRunBottomRibbonsPainter extends CustomPainter {
+  const _ActiveRunBottomRibbonsPainter();
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final coralPaint = Paint()
+      ..color = StradioColors.sonicCoral.withValues(alpha: 0.30)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2.0
+      ..strokeCap = StrokeCap.round
+      ..isAntiAlias = true;
+    final coralPath = Path()
+      ..moveTo(0, size.height * 0.42)
+      ..cubicTo(
+        size.width * 0.24,
+        size.height * 0.30,
+        size.width * 0.58,
+        size.height * 0.72,
+        size.width,
+        size.height * 0.36,
+      );
+    canvas.drawPath(coralPath, coralPaint);
+
+    final bluePaint = Paint()
+      ..color = StradioColors.twilightPlum.withValues(alpha: 0.25)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.8
+      ..strokeCap = StrokeCap.round
+      ..isAntiAlias = true;
+    final bluePath = Path()
+      ..moveTo(0, size.height * 0.62)
+      ..cubicTo(
+        size.width * 0.30,
+        size.height * 0.74,
+        size.width * 0.66,
+        size.height * 0.34,
+        size.width,
+        size.height * 0.54,
+      );
+    canvas.drawPath(bluePath, bluePaint);
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
 
 class _CardinalMarker extends StatelessWidget {

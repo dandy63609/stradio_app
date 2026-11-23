@@ -233,6 +233,16 @@ void main() {
         expect(find.text('Rhythm'), findsOneWidget);
         expect(find.byKey(const Key('active_run_glass_lens')), findsOneWidget);
         expect(find.byKey(const Key('active_run_bottom_dock')), findsOneWidget);
+        expect(find.byKey(const Key('active_run_pace_value')), findsOneWidget);
+        expect(
+          find.byKey(const Key('active_run_target_progress_pill')),
+          findsOneWidget,
+        );
+        expect(
+          find.text('HOLD STOP BUTTON TO CONCLUDE SESSION'),
+          findsOneWidget,
+        );
+        expect(find.text('Cadence'), findsNothing);
         expect(find.text('Take a step to trigger audio'), findsOneWidget);
         expect(audioEngine.activePackId, SoundPackId.lariNgacir);
         expect(audioEngine.isSessionActive, isTrue);
@@ -538,6 +548,26 @@ void main() {
           await tester.pumpAndSettle();
           expect(tester.takeException(), isNull);
         }
+
+        // Verify ActiveRunScreen also holds at 360x640 without overflow
+        await tester.binding.setSurfaceSize(const Size(360, 640));
+        await tester.pumpWidget(
+          MaterialApp(
+            home: ActiveRunScreen(
+              store: InMemoryRecordingStore(),
+              recordingService: _fakeSensorService(),
+              foregroundService: NoopForegroundNotificationService(),
+              audioEngine: StradioAudioEngine.noop(),
+              autoStart: true,
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull);
+        expect(
+          find.text('HOLD STOP BUTTON TO CONCLUDE SESSION'),
+          findsOneWidget,
+        );
         addTearDown(() => tester.binding.setSurfaceSize(null));
       },
     );
