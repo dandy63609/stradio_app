@@ -499,7 +499,7 @@ class _PostRunSummaryScreenState extends State<PostRunSummaryScreen> {
                                       ),
                                       const SizedBox(height: 10),
 
-                                      // 104px Bold Clipped Circular Harmonic Refraction Orb (Mockup 11)
+                                      // 104px Bold & Luminous Circular Harmonic Refraction Orb (Mockup 11)
                                       Container(
                                         key: const Key(
                                           'summary_hero_glass_circle',
@@ -509,20 +509,22 @@ class _PostRunSummaryScreenState extends State<PostRunSummaryScreen> {
                                         decoration: BoxDecoration(
                                           shape: BoxShape.circle,
                                           border: Border.all(
-                                            color: Colors.white,
-                                            width: 2.4,
+                                            color: Colors.white.withValues(
+                                              alpha: 0.96,
+                                            ),
+                                            width: 3.5,
                                           ),
                                           boxShadow: [
                                             BoxShadow(
                                               color: StradioColors.rhythmViolet
-                                                  .withValues(alpha: 0.40),
-                                              blurRadius: 20,
+                                                  .withValues(alpha: 0.42),
+                                              blurRadius: 22,
                                               spreadRadius: 2,
                                             ),
                                             BoxShadow(
                                               color: StradioColors.sonicCoral
-                                                  .withValues(alpha: 0.24),
-                                              blurRadius: 14,
+                                                  .withValues(alpha: 0.28),
+                                              blurRadius: 16,
                                               offset: const Offset(0, -3),
                                             ),
                                           ],
@@ -531,7 +533,7 @@ class _PostRunSummaryScreenState extends State<PostRunSummaryScreen> {
                                           child: Stack(
                                             alignment: Alignment.center,
                                             children: [
-                                              // All bold chromatic gradients & waves strictly inside the circle frame
+                                              // Luminous bright chromatic waves strictly inside circle frame
                                               const Positioned.fill(
                                                 child: RepaintBoundary(
                                                   child: CustomPaint(
@@ -541,12 +543,12 @@ class _PostRunSummaryScreenState extends State<PostRunSummaryScreen> {
                                                 ),
                                               ),
 
-                                              // Subtle frosted glass lens preserving rich bold color behind SYNC readout
+                                              // Bright frosted center pillow keeping black SYNC text high-contrast
                                               Positioned.fill(
                                                 child: BackdropFilter(
                                                   filter: ui.ImageFilter.blur(
-                                                    sigmaX: 5,
-                                                    sigmaY: 5,
+                                                    sigmaX: 4,
+                                                    sigmaY: 4,
                                                   ),
                                                   child: DecoratedBox(
                                                     decoration: BoxDecoration(
@@ -554,15 +556,15 @@ class _PostRunSummaryScreenState extends State<PostRunSummaryScreen> {
                                                         colors: [
                                                           Colors.white
                                                               .withValues(
-                                                                alpha: 0.46,
+                                                                alpha: 0.58,
                                                               ),
                                                           Colors.white
                                                               .withValues(
-                                                                alpha: 0.16,
+                                                                alpha: 0.26,
                                                               ),
                                                           Colors.white
                                                               .withValues(
-                                                                alpha: 0.04,
+                                                                alpha: 0.06,
                                                               ),
                                                         ],
                                                         stops: const [
@@ -895,7 +897,7 @@ class _CadenceStemChart extends StatelessWidget {
   }
 }
 
-/// Thick, bold layered chromatic bands rendered strictly inside the circular Harmonic Refraction orb.
+/// Bright yet vivid layered chromatic bands inside the circular Harmonic Refraction orb.
 class _HarmonicOrbPainter extends CustomPainter {
   const _HarmonicOrbPainter();
 
@@ -903,7 +905,7 @@ class _HarmonicOrbPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final rect = Offset.zero & size;
 
-    // 1. Rich luminous warm-to-violet base fill
+    // 1. Luminous warm-coral to pastel-violet base (bright for dark ink contrast)
     canvas.drawRect(
       rect,
       Paint()
@@ -911,16 +913,16 @@ class _HarmonicOrbPainter extends CustomPainter {
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
           colors: [
-            Color(0xFFFF9680), // bold top coral blush
-            Color(0xFFE9A0C4), // mid rose lilac
-            Color(0xFFA995DB), // Rhythm Violet
-            Color(0xFF6B5EAE), // deep violet anchor
+            Color(0xFFFFD6CB), // luminous top peach-coral
+            Color(0xFFF2C6DC), // bright blush lilac
+            Color(0xFFD2C2F5), // bright pastel lavender
+            Color(0xFFA995DB), // Rhythm Violet anchor
           ],
           stops: [0.0, 0.36, 0.72, 1.0],
         ).createShader(rect),
     );
 
-    // 2. Flowing bold Twilight Plum wave trough
+    // 2. Flowing bold pastel-violet wave trough
     final lowerWave = Path()
       ..moveTo(0, size.height * 0.62)
       ..cubicTo(
@@ -941,13 +943,13 @@ class _HarmonicOrbPainter extends CustomPainter {
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: [
-            StradioColors.rhythmViolet.withValues(alpha: 0.78),
-            StradioColors.twilightPlum.withValues(alpha: 0.92),
+            const Color(0xFFC3B2EE).withValues(alpha: 0.68),
+            StradioColors.rhythmViolet.withValues(alpha: 0.85),
           ],
         ).createShader(rect),
     );
 
-    // 3. Saturated Sonic Coral mid-band ribbon
+    // 3. Vivid luminous coral ribbon
     final coralBand = Path()
       ..moveTo(0, size.height * 0.46)
       ..cubicTo(
@@ -961,14 +963,14 @@ class _HarmonicOrbPainter extends CustomPainter {
     canvas.drawPath(
       coralBand,
       Paint()
-        ..color = StradioColors.sonicCoral.withValues(alpha: 0.88)
+        ..color = const Color(0xFFFF8A73).withValues(alpha: 0.72)
         ..style = PaintingStyle.stroke
-        ..strokeWidth = 10.0
+        ..strokeWidth = 9.0
         ..strokeCap = StrokeCap.round
         ..isAntiAlias = true,
     );
 
-    // 4. Crisp Rhythm Violet secondary ribbon crossing the orb
+    // 4. Crisp lavender secondary ribbon crossing the orb
     final violetBand = Path()
       ..moveTo(0, size.height * 0.58)
       ..cubicTo(
@@ -982,9 +984,9 @@ class _HarmonicOrbPainter extends CustomPainter {
     canvas.drawPath(
       violetBand,
       Paint()
-        ..color = const Color(0xFF7B6ED6).withValues(alpha: 0.78)
+        ..color = const Color(0xFFB8A4EE).withValues(alpha: 0.68)
         ..style = PaintingStyle.stroke
-        ..strokeWidth = 7.5
+        ..strokeWidth = 7.0
         ..strokeCap = StrokeCap.round
         ..isAntiAlias = true,
     );

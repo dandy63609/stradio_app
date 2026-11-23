@@ -233,6 +233,7 @@ class _ShareStudioScreenState extends State<ShareStudioScreen> {
   }
 
   Future<void> _openCustomColorSheet() async {
+    final s = StradioStrings.of(widget.language);
     var topColor =
         _customGradientColors?.first ?? PhotoBackdropPreset.customPaletteColors[4];
     var bottomColor =
@@ -276,7 +277,7 @@ class _ShareStudioScreenState extends State<ShareStudioScreen> {
                       ),
                       const SizedBox(height: 14),
                       Text(
-                        'Custom Gradient Backdrop',
+                        s.customGradientTitle,
                         style: StradioTypography.headingSmall(
                           fontSize: 18,
                           color: StradioColors.textOnDark,
@@ -300,7 +301,7 @@ class _ShareStudioScreenState extends State<ShareStudioScreen> {
                       ),
                       const SizedBox(height: 14),
                       Text(
-                        'TOP COLOR',
+                        s.topColorLabel,
                         style: StradioTypography.microCap(
                           color: Colors.white.withValues(alpha: 0.65),
                         ),
@@ -314,7 +315,7 @@ class _ShareStudioScreenState extends State<ShareStudioScreen> {
                       ),
                       const SizedBox(height: 14),
                       Text(
-                        'BOTTOM COLOR',
+                        s.bottomColorLabel,
                         style: StradioTypography.microCap(
                           color: Colors.white.withValues(alpha: 0.65),
                         ),
@@ -360,7 +361,7 @@ class _ShareStudioScreenState extends State<ShareStudioScreen> {
                             },
                             child: Center(
                               child: Text(
-                                'Apply Gradient',
+                                s.applyGradientAction,
                                 style: StradioTypography.pillBadge(
                                   color: StradioColors.textOnDark,
                                 ).copyWith(fontSize: 14),
@@ -697,7 +698,7 @@ class _ShareStudioScreenState extends State<ShareStudioScreen> {
                         child: Text(
                           _hasTransform
                               ? s.doubleTapResetHint
-                              : 'Drag to move · Pinch to resize',
+                              : s.dragPinchHint,
                           key: const Key('photo_glass_drag_hint'),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
@@ -783,6 +784,7 @@ class _ShareStudioScreenState extends State<ShareStudioScreen> {
 
     // Case A: Transparent PNG Export (Transparent Sticker mode OR Photo Glass "None")
     // Checkerboard stays strictly OUTSIDE RepaintBoundary so PNG export has true alpha!
+    // Vertical padding matches Case B in Photo Glass mode so "None" never shifts downward.
     if (_isTransparentExport) {
       return Stack(
         fit: StackFit.expand,
@@ -792,8 +794,13 @@ class _ShareStudioScreenState extends State<ShareStudioScreen> {
             child: CustomPaint(painter: _CheckerboardPainter()),
           ),
           Center(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 340, maxHeight: 480),
+            child: Padding(
+              padding: EdgeInsets.fromLTRB(
+                20,
+                96,
+                20,
+                isPhotoGlass ? 152 : 112,
+              ),
               child: draggableScalableCard,
             ),
           ),
@@ -883,7 +890,7 @@ class _ShareStudioScreenState extends State<ShareStudioScreen> {
           _CompactTextTile(
             key: const Key('backdrop_add_photo_button'),
             icon: Icons.add_photo_alternate_outlined,
-            label: 'Add',
+            label: s.backdropAddShort,
             selected: false,
             highContrast: highContrast,
             onTap: _showPhotoSourceChooser,
@@ -967,7 +974,7 @@ class _ShareStudioScreenState extends State<ShareStudioScreen> {
     required bool isPhotoGlass,
     required bool highContrast,
   }) {
-    final saveLabel = isPhotoGlass ? 'Save Photo' : s.saveLabel;
+    final saveLabel = isPhotoGlass ? s.savePhotoLabel : s.saveLabel;
 
     return Row(
       children: [
@@ -1061,7 +1068,7 @@ class _ShareStudioScreenState extends State<ShareStudioScreen> {
                       const SizedBox(width: 8),
                       Flexible(
                         child: Text(
-                          _busy ? s.renderingPng : 'Add to Story',
+                          _busy ? s.renderingPng : s.addToStoryAction,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: StradioTypography.pillBadge(

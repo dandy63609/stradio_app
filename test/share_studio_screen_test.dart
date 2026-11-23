@@ -276,7 +276,10 @@ void main() {
           findsOneWidget,
         );
 
-        // Switching to a curated preset works cleanly
+        // Switching to a curated preset keeps the Photo Glass card vertically synchronized with None
+        final noneCenter = tester.getCenter(
+          find.byKey(const Key('photo_glass_drag_handle')),
+        );
         final forestBtn = find.byKey(const Key('backdrop_option_forest_mist'));
         await tester.ensureVisible(forestBtn);
         await tester.tap(forestBtn);
@@ -285,6 +288,10 @@ void main() {
           find.byKey(const Key('photo_glass_custom_image')),
           findsNothing,
         );
+        final forestCenter = tester.getCenter(
+          find.byKey(const Key('photo_glass_drag_handle')),
+        );
+        expect((forestCenter.dy - noneCenter.dy).abs(), lessThan(2.0));
       },
     );
 

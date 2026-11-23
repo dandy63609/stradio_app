@@ -126,6 +126,29 @@ abstract class StradioStrings {
   String lockZoneRange(int minSpm, int maxSpm);
   String get backdropNone;
   String get backdropAdd;
+  String get backdropAddShort;
+  String get customGradientTitle;
+  String get topColorLabel;
+  String get bottomColorLabel;
+  String get applyGradientAction;
+  String get dragPinchHint;
+  String get savePhotoLabel;
+  String get addToStoryAction;
+  String get shareRunRhythmTitle;
+  String get quickShareHeading;
+  String get copyTextAction;
+  String get messagesAction;
+  String get shareRhythmCardAction;
+  String get storyExport916Action;
+  String get captionCopiedMessage;
+  String get messageReadyMessage;
+  String get paceTargetLabel;
+  String get distanceTargetLabel;
+  String get syncIntegrityLabel;
+  String get targetCalibrationTitle;
+  String get applyTargetsAction;
+  String get holdStopCaption;
+  String lockOptimalPaceLabel(String pace, String syncPct);
   String buildShareCaption({
     required int steps,
     required String distanceKm,

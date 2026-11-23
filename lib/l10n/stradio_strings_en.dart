@@ -371,4 +371,74 @@ class StradioStringsEn extends StradioStrings {
 
   @override
   String get historyClearedMessage => 'Workout history cleared.';
+
+  @override
+  String get backdropAddShort => 'Add';
+
+  @override
+  String get customGradientTitle => 'Custom Gradient Backdrop';
+
+  @override
+  String get topColorLabel => 'TOP COLOR';
+
+  @override
+  String get bottomColorLabel => 'BOTTOM COLOR';
+
+  @override
+  String get applyGradientAction => 'Apply Gradient';
+
+  @override
+  String get dragPinchHint => 'Drag to move · Pinch to resize';
+
+  @override
+  String get savePhotoLabel => 'Save Photo';
+
+  @override
+  String get addToStoryAction => 'Add to Story';
+
+  @override
+  String get shareRunRhythmTitle => 'Share Run Rhythm';
+
+  @override
+  String get quickShareHeading => 'QUICK SHARE';
+
+  @override
+  String get copyTextAction => 'Copy Text';
+
+  @override
+  String get messagesAction => 'Messages';
+
+  @override
+  String get shareRhythmCardAction => 'Share Rhythm Card';
+
+  @override
+  String get storyExport916Action => 'Story export 9:16';
+
+  @override
+  String get captionCopiedMessage => 'Caption copied';
+
+  @override
+  String get messageReadyMessage => 'Message ready to share';
+
+  @override
+  String get paceTargetLabel => 'Pace Target';
+
+  @override
+  String get distanceTargetLabel => 'Distance Target';
+
+  @override
+  String get syncIntegrityLabel => 'Sync Integrity';
+
+  @override
+  String get targetCalibrationTitle => 'Target Calibration';
+
+  @override
+  String get applyTargetsAction => 'Apply Targets';
+
+  @override
+  String get holdStopCaption => 'HOLD STOP BUTTON TO CONCLUDE SESSION';
+
+  @override
+  String lockOptimalPaceLabel(String pace, String syncPct) =>
+      'Lock Optimal Pace ($pace /km · $syncPct%)';
 }

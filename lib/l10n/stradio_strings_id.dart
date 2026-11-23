@@ -371,4 +371,74 @@ class StradioStringsId extends StradioStrings {
 
   @override
   String get historyClearedMessage => 'Riwayat lari dihapus.';
+
+  @override
+  String get backdropAddShort => 'Tambah';
+
+  @override
+  String get customGradientTitle => 'Latar Gradien Kustom';
+
+  @override
+  String get topColorLabel => 'WARNA ATAS';
+
+  @override
+  String get bottomColorLabel => 'WARNA BAWAH';
+
+  @override
+  String get applyGradientAction => 'Terapkan Gradien';
+
+  @override
+  String get dragPinchHint => 'Geser posisi · Cubit ubah ukuran';
+
+  @override
+  String get savePhotoLabel => 'Simpan Foto';
+
+  @override
+  String get addToStoryAction => 'Tambah ke Story';
+
+  @override
+  String get shareRunRhythmTitle => 'Bagikan Ritme Lari';
+
+  @override
+  String get quickShareHeading => 'BAGIKAN CEPAT';
+
+  @override
+  String get copyTextAction => 'Salin Teks';
+
+  @override
+  String get messagesAction => 'Pesan';
+
+  @override
+  String get shareRhythmCardAction => 'Bagikan Kartu Ritme';
+
+  @override
+  String get storyExport916Action => 'Ekspor Story 9:16';
+
+  @override
+  String get captionCopiedMessage => 'Caption disalin ke clipboard';
+
+  @override
+  String get messageReadyMessage => 'Teks siap dibagikan';
+
+  @override
+  String get paceTargetLabel => 'Target Pace';
+
+  @override
+  String get distanceTargetLabel => 'Target Jarak';
+
+  @override
+  String get syncIntegrityLabel => 'Sinkronisasi';
+
+  @override
+  String get targetCalibrationTitle => 'Kalibrasi Target';
+
+  @override
+  String get applyTargetsAction => 'Terapkan Target';
+
+  @override
+  String get holdStopCaption => 'TAHAN TOMBOL STOP UNTUK MENGAKHIRI SESI';
+
+  @override
+  String lockOptimalPaceLabel(String pace, String syncPct) =>
+      'Kunci Pace Optimal ($pace /km · $syncPct%)';
 }

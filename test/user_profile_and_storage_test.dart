@@ -24,6 +24,12 @@ void main() {
       expect(id.stepsCountLabel('2,450'), '2,450 langkah');
       expect(en.transparentStickerTab, 'Transparent Sticker');
       expect(id.transparentStickerTab, 'Stiker Transparan');
+      expect(en.addToStoryAction, 'Add to Story');
+      expect(id.addToStoryAction, 'Tambah ke Story');
+      expect(en.shareRunRhythmTitle, 'Share Run Rhythm');
+      expect(id.shareRunRhythmTitle, 'Bagikan Ritme Lari');
+      expect(en.holdStopCaption, 'HOLD STOP BUTTON TO CONCLUDE SESSION');
+      expect(id.holdStopCaption, 'TAHAN TOMBOL STOP UNTUK MENGAKHIRI SESI');
       expect(en.analyticsOptInSubtitle.contains('UU PDP'), isFalse);
       expect(id.analyticsOptInSubtitle.contains('UU PDP'), isFalse);
       expect(AppLanguageCode.parse('id'), AppLanguage.id);

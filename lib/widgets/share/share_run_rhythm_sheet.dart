@@ -52,6 +52,7 @@ class ShareRunRhythmSheet extends StatefulWidget {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
+      constraints: const BoxConstraints(maxWidth: double.infinity),
       builder: (_) => ShareRunRhythmSheet(
         metrics: metrics,
         soundPack: soundPack,
@@ -179,9 +180,9 @@ class _ShareRunRhythmSheetState extends State<ShareRunRhythmSheet> {
       Clipboard.setData(ClipboardData(text: caption)).catchError((_) {}),
     );
     if (!mounted) return;
-    final isId = widget.language == AppLanguage.id;
+    final s = StradioStrings.of(widget.language);
     setState(() {
-      _statusMessage = isId ? 'Caption disalin ke clipboard' : 'Caption copied';
+      _statusMessage = s.captionCopiedMessage;
       _statusIsError = false;
     });
   }
@@ -202,9 +203,9 @@ class _ShareRunRhythmSheetState extends State<ShareRunRhythmSheet> {
         await SharePlus.instance.share(ShareParams(text: caption));
       }
       if (!mounted) return;
-      final isId = widget.language == AppLanguage.id;
+      final s = StradioStrings.of(widget.language);
       setState(() {
-        _statusMessage = isId ? 'Teks siap dibagikan' : 'Message ready to share';
+        _statusMessage = s.messageReadyMessage;
         _statusIsError = false;
       });
     } on Object catch (error) {
@@ -275,30 +276,35 @@ class _ShareRunRhythmSheetState extends State<ShareRunRhythmSheet> {
   @override
   Widget build(BuildContext context) {
     final s = StradioStrings.of(widget.language);
-    final isId = widget.language == AppLanguage.id;
     final screenH = MediaQuery.sizeOf(context).height;
-    final carouselHeight = (screenH * 0.34).clamp(190.0, 300.0);
+    final bottomPadding = MediaQuery.paddingOf(context).bottom;
+    final carouselHeight = (screenH * 0.38).clamp(220.0, 325.0);
 
-    return SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(8, 12, 8, 8),
+    return ClipRRect(
+      borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
+      child: BackdropFilter(
+        filter: ui.ImageFilter.blur(sigmaX: 18, sigmaY: 18),
         child: Container(
           key: const Key('share_run_rhythm_sheet'),
+          width: double.infinity,
           decoration: BoxDecoration(
-            color: StradioColors.warmIvory,
-            borderRadius: BorderRadius.circular(28),
-            border: Border.all(color: StradioColors.borderSubtle),
+            color: StradioColors.surfaceCard.withValues(alpha: 0.88),
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
+            border: Border.all(
+              color: Colors.white.withValues(alpha: 0.90),
+              width: 1.2,
+            ),
             boxShadow: [
               BoxShadow(
                 color: StradioColors.midnight.withValues(alpha: 0.16),
                 blurRadius: 30,
-                offset: const Offset(0, 10),
+                offset: const Offset(0, -6),
               ),
             ],
           ),
           clipBehavior: Clip.antiAlias,
           child: SingleChildScrollView(
-            padding: const EdgeInsets.fromLTRB(18, 10, 18, 18),
+            padding: EdgeInsets.fromLTRB(18, 10, 18, 18 + bottomPadding),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -325,7 +331,7 @@ class _ShareRunRhythmSheetState extends State<ShareRunRhythmSheet> {
                         runSpacing: 4,
                         children: [
                           Text(
-                            isId ? 'Bagikan Ritme Lari' : 'Share Run Rhythm',
+                            s.shareRunRhythmTitle,
                             style: StradioTypography.headingSmall(fontSize: 19),
                           ),
                           Container(
@@ -334,7 +340,9 @@ class _ShareRunRhythmSheetState extends State<ShareRunRhythmSheet> {
                               vertical: 3,
                             ),
                             decoration: BoxDecoration(
-                              color: StradioColors.surfaceRecessed,
+                              color: StradioColors.surfaceRecessed.withValues(
+                                alpha: 0.85,
+                              ),
                               borderRadius: BorderRadius.circular(
                                 StradioRadii.full,
                               ),
@@ -354,7 +362,8 @@ class _ShareRunRhythmSheetState extends State<ShareRunRhythmSheet> {
                       onPressed: () => Navigator.of(context).pop(),
                       tooltip: s.closeLabel,
                       style: IconButton.styleFrom(
-                        backgroundColor: StradioColors.surfaceRecessed,
+                        backgroundColor: StradioColors.surfaceRecessed
+                            .withValues(alpha: 0.85),
                         minimumSize: const Size(38, 38),
                       ),
                       icon: const Icon(
@@ -383,20 +392,24 @@ class _ShareRunRhythmSheetState extends State<ShareRunRhythmSheet> {
                     ],
                   ),
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 10),
 
-                // Horizontal Carousel of the 3 Revamped Transparent Sticker Cards
+                // Centered Horizontal Carousel of the 3 Sticker Cards with generous top/bottom room
                 SizedBox(
                   height: carouselHeight,
                   child: PageView.builder(
                     controller: _pageController,
-                    padEnds: false,
+                    padEnds: true,
                     itemCount: _templates.length,
-                    onPageChanged: (index) => setState(() => _activeIndex = index),
+                    onPageChanged: (index) =>
+                        setState(() => _activeIndex = index),
                     itemBuilder: (_, index) {
                       final template = _templates[index];
                       return Padding(
-                        padding: const EdgeInsets.only(right: 12),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 14,
+                        ),
                         child: Center(
                           child: FittedBox(
                             fit: BoxFit.scaleDown,
@@ -414,7 +427,7 @@ class _ShareRunRhythmSheetState extends State<ShareRunRhythmSheet> {
                     },
                   ),
                 ),
-                const SizedBox(height: 10),
+                const SizedBox(height: 8),
 
                 // 3 Carousel Indicator Dots
                 Row(
@@ -472,7 +485,7 @@ class _ShareRunRhythmSheetState extends State<ShareRunRhythmSheet> {
 
                 // QUICK SHARE Section (3 Rounded-Square Pods matching Mockup 12, without IG Stories)
                 Text(
-                  isId ? 'BAGIKAN CEPAT' : 'QUICK SHARE',
+                  s.quickShareHeading,
                   style: StradioTypography.microCap(
                     color: StradioColors.textSecondary,
                   ),
@@ -484,7 +497,7 @@ class _ShareRunRhythmSheetState extends State<ShareRunRhythmSheet> {
                       child: _QuickSharePod(
                         podKey: const Key('share_rhythm_quick_save'),
                         icon: Icons.download_rounded,
-                        label: isId ? 'Simpan' : 'Save',
+                        label: s.saveLabel,
                         onTap: _handleSaveToGallery,
                       ),
                     ),
@@ -493,7 +506,7 @@ class _ShareRunRhythmSheetState extends State<ShareRunRhythmSheet> {
                       child: _QuickSharePod(
                         podKey: const Key('share_rhythm_quick_copy'),
                         icon: Icons.link_rounded,
-                        label: isId ? 'Salin Teks' : 'Copy Text',
+                        label: s.copyTextAction,
                         onTap: _handleCopyText,
                       ),
                     ),
@@ -502,7 +515,7 @@ class _ShareRunRhythmSheetState extends State<ShareRunRhythmSheet> {
                       child: _QuickSharePod(
                         podKey: const Key('share_rhythm_quick_messages'),
                         icon: Icons.chat_outlined,
-                        label: isId ? 'Pesan' : 'Messages',
+                        label: s.messagesAction,
                         onTap: _handleShareMessagesText,
                       ),
                     ),
@@ -526,9 +539,7 @@ class _ShareRunRhythmSheetState extends State<ShareRunRhythmSheet> {
                             ),
                           )
                         : const Icon(Icons.ios_share_rounded, size: 18),
-                    label: Text(
-                      isId ? 'Bagikan Kartu Ritme' : 'Share Rhythm Card',
-                    ),
+                    label: Text(s.shareRhythmCardAction),
                   ),
                 ),
                 const SizedBox(height: 10),
@@ -540,9 +551,13 @@ class _ShareRunRhythmSheetState extends State<ShareRunRhythmSheet> {
                     key: const Key('share_rhythm_open_studio_button'),
                     onPressed: _openStoryStudio916,
                     style: OutlinedButton.styleFrom(
-                      backgroundColor: StradioColors.surfaceCard,
+                      backgroundColor: StradioColors.surfaceCard.withValues(
+                        alpha: 0.78,
+                      ),
                       foregroundColor: StradioColors.textPrimary,
-                      side: const BorderSide(color: StradioColors.borderSubtle),
+                      side: BorderSide(
+                        color: Colors.white.withValues(alpha: 0.85),
+                      ),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(StradioRadii.full),
                       ),
@@ -553,7 +568,7 @@ class _ShareRunRhythmSheetState extends State<ShareRunRhythmSheet> {
                       color: StradioColors.textSecondary,
                     ),
                     label: Text(
-                      isId ? 'Ekspor Story 9:16' : 'Story export 9:16',
+                      s.storyExport916Action,
                       style: StradioTypography.pillBadge(
                         color: StradioColors.textSecondary,
                       ),

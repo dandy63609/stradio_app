@@ -628,9 +628,7 @@ class _PreRunIgnitionScreenState extends State<PreRunIgnitionScreen>
                                         children: [
                                           Expanded(
                                             child: _BottomTargetMetricColumn(
-                                              label: isId
-                                                  ? 'Target Pace'
-                                                  : 'Pace Target',
+                                              label: s.paceTargetLabel,
                                               value:
                                                   StradioSoundPack.formatPace(
                                                     _targetPaceSec,
@@ -649,9 +647,7 @@ class _PreRunIgnitionScreenState extends State<PreRunIgnitionScreen>
                                           ),
                                           Expanded(
                                             child: _BottomTargetMetricColumn(
-                                              label: isId
-                                                  ? 'Target Jarak'
-                                                  : 'Distance Target',
+                                              label: s.distanceTargetLabel,
                                               value: _targetDistanceKm
                                                   .toStringAsFixed(1),
                                               unit: 'km',
@@ -668,9 +664,7 @@ class _PreRunIgnitionScreenState extends State<PreRunIgnitionScreen>
                                           ),
                                           Expanded(
                                             child: _BottomTargetMetricColumn(
-                                              label: isId
-                                                  ? 'Sinkronisasi'
-                                                  : 'Sync Integrity',
+                                              label: s.syncIntegrityLabel,
                                               value: syncIntegrity
                                                   .toStringAsFixed(1),
                                               unit: '%',

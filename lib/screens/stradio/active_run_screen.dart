@@ -1013,7 +1013,6 @@ class _ActiveRunScreenState extends State<ActiveRunScreen>
   @override
   Widget build(BuildContext context) {
     final s = StradioStrings.of(widget.language);
-    final isId = widget.language == AppLanguage.id;
     final steps = _primaryDetections.length;
     final liveSpm = _currentLiveCadenceSpm();
     final hasCadence = liveSpm > 0;
@@ -1756,10 +1755,7 @@ class _ActiveRunScreenState extends State<ActiveRunScreen>
                           ),
                           const SizedBox(height: 10),
                           Text(
-                            _holdHintText ??
-                                (isId
-                                    ? 'TAHAN TOMBOL STOP UNTUK MENGAKHIRI SESI'
-                                    : 'HOLD STOP BUTTON TO CONCLUDE SESSION'),
+                            _holdHintText ?? s.holdStopCaption,
                             key: const Key('active_run_hold_caption'),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,

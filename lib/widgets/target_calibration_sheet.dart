@@ -139,9 +139,7 @@ class _TargetCalibrationSheetState extends State<TargetCalibrationSheet> {
                             runSpacing: 4,
                             children: [
                               Text(
-                                isId
-                                    ? 'Kalibrasi Target'
-                                    : 'Target Calibration',
+                                s.targetCalibrationTitle,
                                 style: StradioTypography.headingSmall(
                                   fontSize: 18,
                                 ),
@@ -201,7 +199,7 @@ class _TargetCalibrationSheetState extends State<TargetCalibrationSheet> {
                               ),
                               const SizedBox(width: 6),
                               Text(
-                                isId ? 'Target Pace' : 'Pace Target',
+                                s.paceTargetLabel,
                                 style: StradioTypography.pillBadge(),
                               ),
                             ],
@@ -271,7 +269,7 @@ class _TargetCalibrationSheetState extends State<TargetCalibrationSheet> {
                               ),
                               const SizedBox(width: 6),
                               Text(
-                                isId ? 'Target Jarak' : 'Distance Target',
+                                s.distanceTargetLabel,
                                 style: StradioTypography.pillBadge(),
                               ),
                             ],
@@ -342,7 +340,7 @@ class _TargetCalibrationSheetState extends State<TargetCalibrationSheet> {
                               ),
                               const SizedBox(width: 6),
                               Text(
-                                isId ? 'Sinkronisasi Lagu' : 'Sync Integrity',
+                                s.syncIntegrityLabel,
                                 style: StradioTypography.pillBadge(),
                               ),
                             ],
@@ -396,9 +394,10 @@ class _TargetCalibrationSheetState extends State<TargetCalibrationSheet> {
                           label: FittedBox(
                             fit: BoxFit.scaleDown,
                             child: Text(
-                              isId
-                                  ? 'Kunci Pace Optimal (${StradioSoundPack.formatPace(optimalPace)} /km · ${optimalSync.toStringAsFixed(1)}%)'
-                                  : 'Lock Optimal Pace (${StradioSoundPack.formatPace(optimalPace)} /km · ${optimalSync.toStringAsFixed(1)}%)',
+                              s.lockOptimalPaceLabel(
+                                StradioSoundPack.formatPace(optimalPace),
+                                optimalSync.toStringAsFixed(1),
+                              ),
                             ),
                           ),
                         ),
@@ -427,9 +426,7 @@ class _TargetCalibrationSheetState extends State<TargetCalibrationSheet> {
                             widget.onApply(_paceSec, _distanceKm);
                             Navigator.of(context).pop();
                           },
-                          child: Text(
-                            isId ? 'Terapkan Target' : 'Apply Targets',
-                          ),
+                          child: Text(s.applyTargetsAction),
                         ),
                       ),
                     ),
