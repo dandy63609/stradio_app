@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:math' as math;
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 
@@ -10,8 +11,6 @@ import '../../models/sound_pack.dart';
 import '../../services/posthog_service.dart';
 import '../../services/recording_repository.dart';
 import '../../theme/stradio_theme.dart';
-import '../../widgets/liquid_glass_lens.dart';
-import '../../widgets/sonic_ribbon_painter.dart';
 import 'share_studio_screen.dart';
 
 enum _StemFilter { all, active, walking }
@@ -503,89 +502,152 @@ class _PostRunSummaryScreenState extends State<PostRunSummaryScreen> {
                                       ),
                                       const SizedBox(height: 10),
 
-                                      // 96px Circular Harmonic Refraction Orb (sole LiquidGlassLens on Surface 3)
-                                      SizedBox(
+                                      // 104px Bold Clipped Circular Harmonic Refraction Orb (Mockup 11)
+                                      Container(
+                                        key: const Key(
+                                          'summary_hero_glass_circle',
+                                        ),
                                         width: 104,
                                         height: 104,
-                                        child: Stack(
-                                          alignment: Alignment.center,
-                                          children: [
-                                            // Subsurface Chromatic Ribbon Orb Underlay
-                                            Container(
-                                              width: 98,
-                                              height: 98,
-                                              decoration: BoxDecoration(
-                                                shape: BoxShape.circle,
-                                                gradient: const LinearGradient(
-                                                  begin: Alignment.bottomLeft,
-                                                  end: Alignment.topRight,
-                                                  colors: [
-                                                    StradioColors.twilightPlum,
-                                                    StradioColors.rhythmViolet,
-                                                    StradioColors.sonicCoral,
-                                                  ],
-                                                ),
-                                                boxShadow: [
-                                                  BoxShadow(
-                                                    color: StradioColors
-                                                        .rhythmViolet
-                                                        .withValues(
-                                                          alpha: 0.36,
-                                                        ),
-                                                    blurRadius: 16,
-                                                    spreadRadius: 2,
-                                                  ),
-                                                ],
-                                              ),
-                                              clipBehavior: Clip.antiAlias,
-                                              child: const CustomPaint(
-                                                painter: SonicRibbonPainter(
-                                                  phase: 1.15,
-                                                  amplitude: 0.75,
-                                                  strokeWidth: 4.5,
-                                                ),
-                                              ),
+                                        decoration: BoxDecoration(
+                                          shape: BoxShape.circle,
+                                          border: Border.all(
+                                            color: Colors.white,
+                                            width: 2.4,
+                                          ),
+                                          boxShadow: [
+                                            BoxShadow(
+                                              color: StradioColors.rhythmViolet
+                                                  .withValues(alpha: 0.40),
+                                              blurRadius: 20,
+                                              spreadRadius: 2,
                                             ),
-
-                                            // Foreground Specular Liquid Glass Lens
-                                            LiquidGlassLens(
-                                              key: const Key(
-                                                'summary_hero_glass_circle',
+                                            BoxShadow(
+                                              color: StradioColors.sonicCoral
+                                                  .withValues(alpha: 0.24),
+                                              blurRadius: 14,
+                                              offset: const Offset(0, -3),
+                                            ),
+                                          ],
+                                        ),
+                                        child: ClipOval(
+                                          child: Stack(
+                                            alignment: Alignment.center,
+                                            children: [
+                                              // All bold chromatic gradients & waves strictly inside the circle frame
+                                              const Positioned.fill(
+                                                child: RepaintBoundary(
+                                                  child: CustomPaint(
+                                                    painter:
+                                                        _HarmonicOrbPainter(),
+                                                  ),
+                                                ),
                                               ),
-                                              shape: LiquidGlassShape.circle,
-                                              width: 96,
-                                              height: 96,
-                                              edgeIntensity: 0.055,
-                                              rippleEffect: 0.16,
-                                              child: Column(
+
+                                              // Subtle frosted glass lens preserving rich bold color behind SYNC readout
+                                              Positioned.fill(
+                                                child: BackdropFilter(
+                                                  filter: ui.ImageFilter.blur(
+                                                    sigmaX: 5,
+                                                    sigmaY: 5,
+                                                  ),
+                                                  child: DecoratedBox(
+                                                    decoration: BoxDecoration(
+                                                      gradient: RadialGradient(
+                                                        colors: [
+                                                          Colors.white
+                                                              .withValues(
+                                                                alpha: 0.46,
+                                                              ),
+                                                          Colors.white
+                                                              .withValues(
+                                                                alpha: 0.16,
+                                                              ),
+                                                          Colors.white
+                                                              .withValues(
+                                                                alpha: 0.04,
+                                                              ),
+                                                        ],
+                                                        stops: const [
+                                                          0.0,
+                                                          0.62,
+                                                          1.0,
+                                                        ],
+                                                      ),
+                                                    ),
+                                                  ),
+                                                ),
+                                              ),
+
+                                              // Crisp top-left specular glass arc highlight
+                                              Positioned(
+                                                top: 5,
+                                                left: 20,
+                                                right: 20,
+                                                child: Container(
+                                                  height: 3.5,
+                                                  decoration: BoxDecoration(
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                          StradioRadii.full,
+                                                        ),
+                                                    gradient: LinearGradient(
+                                                      colors: [
+                                                        Colors.white.withValues(
+                                                          alpha: 0.0,
+                                                        ),
+                                                        Colors.white.withValues(
+                                                          alpha: 0.92,
+                                                        ),
+                                                        Colors.white.withValues(
+                                                          alpha: 0.0,
+                                                        ),
+                                                      ],
+                                                    ),
+                                                  ),
+                                                ),
+                                              ),
+
+                                              // High-contrast SYNC telemetry text
+                                              Column(
                                                 mainAxisAlignment:
                                                     MainAxisAlignment.center,
                                                 children: [
                                                   Text(
                                                     'SYNC',
-                                                    style: StradioTypography.microCap(
-                                                      color: StradioColors
-                                                          .textSecondary,
-                                                    ),
+                                                    style:
+                                                        StradioTypography.microCap(
+                                                          color: StradioColors
+                                                              .midnight
+                                                              .withValues(
+                                                                alpha: 0.72,
+                                                              ),
+                                                        ),
                                                   ),
                                                   Text(
                                                     '$syncPercent%',
-                                                    style: StradioTypography.headingSmall(
-                                                      fontSize: 19,
-                                                    ),
+                                                    style:
+                                                        StradioTypography.headingSmall(
+                                                          fontSize: 20,
+                                                          color: StradioColors
+                                                              .midnight,
+                                                        ),
                                                   ),
                                                   Text(
                                                     'Groove',
                                                     style:
                                                         StradioTypography.metricLabel(
                                                           color: StradioColors
-                                                              .textSecondary,
+                                                              .midnight
+                                                              .withValues(
+                                                                alpha: 0.72,
+                                                              ),
                                                         ),
                                                   ),
                                                 ],
                                               ),
-                                            ),
-                                          ],
+                                            ],
+                                          ),
                                         ),
                                       ),
                                       const SizedBox(height: 10),
@@ -628,51 +690,64 @@ class _PostRunSummaryScreenState extends State<PostRunSummaryScreen> {
                   ),
                 ),
 
-                // Mockup 11 Bottom Action Capsule: Midnight Pill ("Start new run") with white circular arrow disc
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(24, 6, 24, 18),
-                  child: Material(
-                    color: StradioColors.midnight,
-                    borderRadius: BorderRadius.circular(StradioRadii.full),
-                    child: InkWell(
-                      key: const Key('start_new_run_button'),
-                      borderRadius: BorderRadius.circular(StradioRadii.full),
-                      onTap: _saving ? null : _saveAndStartNewRun,
-                      child: Container(
-                        height: 56,
-                        padding: const EdgeInsets.symmetric(horizontal: 14),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Padding(
-                              padding: const EdgeInsets.only(left: 8),
-                              child: Text(
-                                _saving
-                                    ? s.savingRunAction
-                                    : s.startNewRunAction,
-                                style: StradioTypography.buttonLabel(
-                                  color: StradioColors.textOnDark,
-                                ),
-                              ),
-                            ),
-                            Container(
-                              width: 38,
-                              height: 38,
-                              decoration: const BoxDecoration(
-                                shape: BoxShape.circle,
-                                color: StradioColors.surfaceCard,
-                              ),
-                              child: const Icon(
-                                Icons.arrow_forward_rounded,
-                                size: 18,
-                                color: StradioColors.textPrimary,
-                              ),
-                            ),
-                          ],
+                // Mockup 11 Bottom Action Capsule over 2 Edge-to-Edge Flowing Orange & Blue Ribbon Lines
+                Stack(
+                  children: [
+                    const Positioned.fill(
+                      child: IgnorePointer(
+                        child: CustomPaint(
+                          painter: _SummaryBottomRibbonsPainter(),
                         ),
                       ),
                     ),
-                  ),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(24, 6, 24, 18),
+                      child: Material(
+                        color: StradioColors.midnight,
+                        borderRadius: BorderRadius.circular(StradioRadii.full),
+                        child: InkWell(
+                          key: const Key('start_new_run_button'),
+                          borderRadius: BorderRadius.circular(
+                            StradioRadii.full,
+                          ),
+                          onTap: _saving ? null : _saveAndStartNewRun,
+                          child: Container(
+                            height: 56,
+                            padding: const EdgeInsets.symmetric(horizontal: 14),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Padding(
+                                  padding: const EdgeInsets.only(left: 8),
+                                  child: Text(
+                                    _saving
+                                        ? s.savingRunAction
+                                        : s.startNewRunAction,
+                                    style: StradioTypography.buttonLabel(
+                                      color: StradioColors.textOnDark,
+                                    ),
+                                  ),
+                                ),
+                                Container(
+                                  width: 38,
+                                  height: 38,
+                                  decoration: const BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    color: StradioColors.surfaceCard,
+                                  ),
+                                  child: const Icon(
+                                    Icons.arrow_forward_rounded,
+                                    size: 18,
+                                    color: StradioColors.textPrimary,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -821,4 +896,150 @@ class _CadenceStemChart extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Thick, bold layered chromatic bands rendered strictly inside the circular Harmonic Refraction orb.
+class _HarmonicOrbPainter extends CustomPainter {
+  const _HarmonicOrbPainter();
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final rect = Offset.zero & size;
+
+    // 1. Rich luminous warm-to-violet base fill
+    canvas.drawRect(
+      rect,
+      Paint()
+        ..shader = const LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            Color(0xFFFF9680), // bold top coral blush
+            Color(0xFFE9A0C4), // mid rose lilac
+            Color(0xFFA995DB), // Rhythm Violet
+            Color(0xFF6B5EAE), // deep violet anchor
+          ],
+          stops: [0.0, 0.36, 0.72, 1.0],
+        ).createShader(rect),
+    );
+
+    // 2. Flowing bold Twilight Plum wave trough
+    final lowerWave = Path()
+      ..moveTo(0, size.height * 0.62)
+      ..cubicTo(
+        size.width * 0.28,
+        size.height * 0.44,
+        size.width * 0.66,
+        size.height * 0.80,
+        size.width,
+        size.height * 0.56,
+      )
+      ..lineTo(size.width, size.height)
+      ..lineTo(0, size.height)
+      ..close();
+    canvas.drawPath(
+      lowerWave,
+      Paint()
+        ..shader = LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            StradioColors.rhythmViolet.withValues(alpha: 0.78),
+            StradioColors.twilightPlum.withValues(alpha: 0.92),
+          ],
+        ).createShader(rect),
+    );
+
+    // 3. Saturated Sonic Coral mid-band ribbon
+    final coralBand = Path()
+      ..moveTo(0, size.height * 0.46)
+      ..cubicTo(
+        size.width * 0.32,
+        size.height * 0.68,
+        size.width * 0.64,
+        size.height * 0.28,
+        size.width,
+        size.height * 0.44,
+      );
+    canvas.drawPath(
+      coralBand,
+      Paint()
+        ..color = StradioColors.sonicCoral.withValues(alpha: 0.88)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 10.0
+        ..strokeCap = StrokeCap.round
+        ..isAntiAlias = true,
+    );
+
+    // 4. Crisp Rhythm Violet secondary ribbon crossing the orb
+    final violetBand = Path()
+      ..moveTo(0, size.height * 0.58)
+      ..cubicTo(
+        size.width * 0.35,
+        size.height * 0.34,
+        size.width * 0.72,
+        size.height * 0.72,
+        size.width,
+        size.height * 0.48,
+      );
+    canvas.drawPath(
+      violetBand,
+      Paint()
+        ..color = const Color(0xFF7B6ED6).withValues(alpha: 0.78)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 7.5
+        ..strokeCap = StrokeCap.round
+        ..isAntiAlias = true,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
+/// Two smooth edge-to-edge flowing coral & twilight-blue curves behind the bottom CTA (Mockup 11).
+class _SummaryBottomRibbonsPainter extends CustomPainter {
+  const _SummaryBottomRibbonsPainter();
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final coralPaint = Paint()
+      ..color = StradioColors.sonicCoral.withValues(alpha: 0.34)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2.0
+      ..strokeCap = StrokeCap.round
+      ..isAntiAlias = true;
+    final coralPath = Path()
+      ..moveTo(0, size.height * 0.36)
+      ..cubicTo(
+        size.width * 0.24,
+        size.height * 0.20,
+        size.width * 0.62,
+        size.height * 0.78,
+        size.width,
+        size.height * 0.38,
+      );
+    canvas.drawPath(coralPath, coralPaint);
+
+    final bluePaint = Paint()
+      ..color = StradioColors.twilightPlum.withValues(alpha: 0.28)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.8
+      ..strokeCap = StrokeCap.round
+      ..isAntiAlias = true;
+    final bluePath = Path()
+      ..moveTo(0, size.height * 0.64)
+      ..cubicTo(
+        size.width * 0.30,
+        size.height * 0.76,
+        size.width * 0.66,
+        size.height * 0.30,
+        size.width,
+        size.height * 0.56,
+      );
+    canvas.drawPath(bluePath, bluePaint);
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
