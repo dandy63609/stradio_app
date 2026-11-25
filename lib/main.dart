@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import 'models/experiment_models.dart';
@@ -16,10 +18,21 @@ Future<void> main() async {
   await StradioPreferencesService.init();
 
   final cachedApiKey = StradioPreferencesService.getPostHogApiKey();
+  final resolvedApiKey =
+      (cachedApiKey != null && cachedApiKey.trim().isNotEmpty)
+      ? cachedApiKey.trim()
+      : null;
   final initialProfile = StradioPreferencesService.loadUserProfile();
+  final labSettings = StradioPreferencesService.loadLabSettings();
   final postHogService = PostHogTelemetryService(
-    apiKey: cachedApiKey ?? '',
+    apiKey: resolvedApiKey,
     enabled: initialProfile.analyticsEnabled,
+  );
+  unawaited(
+    postHogService.captureAppOpened(
+      distinctId: labSettings.participantId,
+      developerOverlayEnabled: initialProfile.developerModeEnabled,
+    ),
   );
   final initialPackId = StradioPreferencesService.loadActiveSoundPackId();
 

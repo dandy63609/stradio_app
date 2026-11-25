@@ -140,18 +140,74 @@ void main() {
         recording: recording,
         metrics: metrics,
         health: health,
+        soundPackCode: 'BREAKBEAT_FVNKY',
       );
 
       // 1 run_completed + 4 algorithm_benchmark_evaluated (A1, A2, B1, B2)
       expect(records.length, 5);
       expect(sentPayloads.length, 5);
       expect(sentPayloads.first['event'], 'run_completed');
+      expect(
+        (sentPayloads.first['properties']
+            as Map<String, Object?>)['sfx_pack_selected'],
+        'BREAKBEAT_FVNKY',
+      );
 
       final benchmarkVariants = sentPayloads
           .skip(1)
           .map((p) => (p['properties'] as Map<String, Object?>)['variant_code'])
           .toList();
       expect(benchmarkVariants, ['A1', 'A2', 'B1', 'B2']);
+    });
+
+    test('includes sfx_pack_selected in run_started and fails silently offline', () async {
+      final sentPayloads = <Map<String, Object?>>[];
+      final service = PostHogTelemetryService(
+        apiKey: 'phc_live_key',
+        enabled: true,
+        transport: (uri, payload) async {
+          sentPayloads.add(payload);
+          return 200;
+        },
+      );
+
+      const config = ExperimentConfig(
+        participantId: 'P03',
+        activity: Activity.jogging,
+        phonePlacement: PhonePlacement.hand,
+        placementDetail: 'Right hand',
+        trialNumber: 1,
+        targetSteps: 100,
+      );
+
+      await service.captureRunStarted(
+        recordingId: 'REC_002',
+        config: config,
+        targetBpm: 160,
+        soundPackCode: 'LARI_NGACIR',
+      );
+
+      expect(sentPayloads, hasLength(1));
+      expect(sentPayloads.first['event'], 'run_started');
+      expect(
+        (sentPayloads.first['properties']
+            as Map<String, Object?>)['sfx_pack_selected'],
+        'LARI_NGACIR',
+      );
+
+      final offlineService = PostHogTelemetryService(
+        apiKey: 'phc_live_key',
+        enabled: true,
+        transport: (uri, payload) async => throw Exception('No internet'),
+      );
+      final record = await offlineService.captureRunStarted(
+        recordingId: 'REC_003',
+        config: config,
+        targetBpm: 160,
+        soundPackCode: 'SQUID',
+      );
+      expect(record.delivered, isFalse);
+      expect(offlineService.lastError, contains('No internet'));
     });
   });
 }

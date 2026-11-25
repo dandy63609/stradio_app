@@ -198,6 +198,7 @@ class PostHogTelemetryService {
     required String recordingId,
     required ExperimentConfig config,
     required int targetBpm,
+    String? soundPackCode,
   }) => capture(
     event: 'run_started',
     distinctId: config.participantId,
@@ -211,6 +212,8 @@ class PostHogTelemetryService {
       'target_steps': config.targetSteps,
       'target_bpm': targetBpm,
       'primary_algorithm': config.primaryLiveAlgorithm.value,
+      if (soundPackCode != null && soundPackCode.isNotEmpty)
+        'sfx_pack_selected': soundPackCode,
     },
   );
 
@@ -251,6 +254,7 @@ class PostHogTelemetryService {
     required SavedRecording recording,
     required RunSummaryMetrics metrics,
     required SensorHealthReport health,
+    String? soundPackCode,
   }) async {
     final sent = <PostHogEventRecord>[];
     final config = recording.config;
@@ -265,6 +269,8 @@ class PostHogTelemetryService {
         'activity': config.activity.value,
         'phone_placement': config.phonePlacement.value,
         'placement_detail': config.placementDetail,
+        if (soundPackCode != null && soundPackCode.isNotEmpty)
+          'sfx_pack_selected': soundPackCode,
         'duration_seconds': double.parse(
           metrics.activeDurationSeconds.toStringAsFixed(2),
         ),

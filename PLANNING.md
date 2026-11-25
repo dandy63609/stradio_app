@@ -89,8 +89,8 @@ Dokumen ini merangkum rencana tindak lanjut (**follow-up refactor**) setelah mig
 
 - [ ] Uji di HP Android fisik (tangan & saku celana, layar mati, TWS Bluetooth) untuk memverifikasi latensi deteksi <30 ms, latensi audio <50 ms, dan 0 *false steps* saat diam.
 - [ ] Verifikasi *gapless loop* `.mp3` `LARI_NGACIR` di HP Android fisik (jika ada klik/padding, convert master `.wav` di `assets/audio/_raw_sources/` ke `.ogg`, lalu pindahkan `_raw_sources/` ke cloud storage tim).
-- [ ] Uji rendering shader GPU `shaders/liquid_glass.frag`, `image_picker` (Galeri/Kamera), dan `gal` (`Save to Gallery`) di HP Android fisik.
-- [ ] Uji alur CI/CD rilis otomatis dengan tag `v*` di `.github/workflows/auto-release.yml` dan verifikasi ukuran APK split-ABI (`stradio-v*-arm64-v8a.apk` & `armeabi-v7a.apk`).
+- [ ] Uji `gal` (`Save to Gallery`) di HP Android fisik *(catatan: `image_picker` Galeri/Kamera sudah terverifikasi berjalan; shader GPU `shaders/liquid_glass.frag` saat ini N/A karena seluruh permukaan kaca memakai `BackdropFilter` native Flutter)*.
+- [x] Uji alur CI/CD rilis otomatis dengan tag `v*` di `.github/workflows/auto-release.yml` dan verifikasi ukuran APK split-ABI (`stradio-v*-arm64-v8a.apk` & `armeabi-v7a.apk`).
 - [ ] Siapkan dokumen **Privacy Policy** dan pengisian **Google Play Data Safety** (jika dipublikasikan ke Play Store).
 
 ---

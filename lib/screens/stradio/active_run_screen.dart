@@ -609,6 +609,7 @@ class _ActiveRunScreenState extends State<ActiveRunScreen>
           recordingId: _recordingId,
           config: _labSettings.toExperimentConfig(),
           targetBpm: _labSettings.targetBpm,
+          soundPackCode: _audioEngine.activePack.code,
         ),
       );
     } else {

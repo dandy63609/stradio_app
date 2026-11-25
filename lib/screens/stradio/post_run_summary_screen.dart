@@ -101,6 +101,7 @@ class _PostRunSummaryScreenState extends State<PostRunSummaryScreen> {
             recording: widget.recording,
             metrics: widget.metrics,
             health: widget.sensorHealth,
+            soundPackCode: StradioSoundPack.byId(widget.soundPackId).code,
           ),
         );
         _saved = true;
