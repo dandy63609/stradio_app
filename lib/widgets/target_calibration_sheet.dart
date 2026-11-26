@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -120,30 +119,33 @@ class _TargetCalibrationSheetState extends State<TargetCalibrationSheet> {
     final optimalPace = widget.activePack.optimalPaceSecondsPerKm;
     final bottomPadding = MediaQuery.paddingOf(context).bottom;
 
-    return ClipRRect(
-      borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
-      child: BackdropFilter(
-        filter: ui.ImageFilter.blur(sigmaX: 18, sigmaY: 18),
-        child: Container(
-          key: const Key('target_calibration_sheet'),
-          width: double.infinity,
-          padding: EdgeInsets.fromLTRB(20, 12, 20, 20 + bottomPadding),
-          decoration: BoxDecoration(
-            color: StradioColors.surfaceCard.withValues(alpha: 0.90),
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
-            border: Border.all(
-              color: Colors.white.withValues(alpha: 0.92),
-              width: 1.2,
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: StradioColors.midnight.withValues(alpha: 0.14),
-                blurRadius: 28,
-                offset: const Offset(0, -6),
-              ),
-            ],
+    return Container(
+      key: const Key('target_calibration_sheet'),
+      width: double.infinity,
+      padding: EdgeInsets.fromLTRB(20, 12, 20, 20 + bottomPadding),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            StradioColors.surfaceCard.withValues(alpha: 0.98),
+            StradioColors.warmIvory.withValues(alpha: 0.96),
+          ],
+        ),
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.95),
+          width: 1.2,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: StradioColors.midnight.withValues(alpha: 0.14),
+            blurRadius: 24,
+            offset: const Offset(0, -6),
           ),
-          child: SingleChildScrollView(
+        ],
+      ),
+      child: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -583,9 +585,7 @@ class _TargetCalibrationSheetState extends State<TargetCalibrationSheet> {
               ],
             ),
           ),
-        ),
-      ),
-    );
+        );
   }
 }
 

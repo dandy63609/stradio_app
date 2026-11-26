@@ -165,55 +165,65 @@ class _PreRunIgnitionScreenState extends State<PreRunIgnitionScreen>
   }
 
   Future<void> _openSettings() async {
-    await DaylightSettingsSheet.show(
-      context,
-      profile: _profile,
-      onUpdateProfile: (updated) {
-        setState(() => _profile = updated);
-        _postHogService.setEnabled(updated.analyticsEnabled);
-        unawaited(StradioPreferencesService.saveUserProfile(updated));
-      },
-      onShowEarphoneGuide: () {
-        if (!mounted) return;
-        unawaited(
-          EarphonesRecommendationModal.show(
-            context,
-            language: _profile.language,
-            onDismissed: () {
-              unawaited(
-                StradioPreferencesService.setHasSeenAudioRecommendation(true),
-              );
-            },
-          ),
-        );
-      },
-      onClearHistory: () async {
-        await _store.clearAll();
-      },
-    );
+    _orbitController.stop();
+    try {
+      await DaylightSettingsSheet.show(
+        context,
+        profile: _profile,
+        onUpdateProfile: (updated) {
+          setState(() => _profile = updated);
+          _postHogService.setEnabled(updated.analyticsEnabled);
+          unawaited(StradioPreferencesService.saveUserProfile(updated));
+        },
+        onShowEarphoneGuide: () {
+          if (!mounted) return;
+          unawaited(
+            EarphonesRecommendationModal.show(
+              context,
+              language: _profile.language,
+              onDismissed: () {
+                unawaited(
+                  StradioPreferencesService.setHasSeenAudioRecommendation(true),
+                );
+              },
+            ),
+          );
+        },
+        onClearHistory: () async {
+          await _store.clearAll();
+        },
+      );
+    } finally {
+      if (mounted && !_isTestBinding) _orbitController.repeat();
+    }
   }
 
   Future<void> _openTargetCalibration() async {
     final activePack = StradioSoundPack.byId(_selectedPackId);
-    await TargetCalibrationSheet.show(
-      context,
-      initialPaceSecondsPerKm: _targetPaceSec,
-      initialDistanceKm: _targetDistanceKm,
-      initialAdaptiveTempoScaling: _adaptiveTempoScaling,
-      activePack: activePack,
-      language: _profile.language,
-      onAdaptiveTempoScalingChanged: (enabled) {
-        _adaptiveTempoScaling = enabled;
-        _audioEngine.setAdaptiveTempoScaling(enabled);
-      },
-      onApply: (paceSec, distanceKm) {
-        if (!mounted) return;
-        setState(() {
-          _targetPaceSec = paceSec;
-          _targetDistanceKm = distanceKm;
-        });
-      },
-    );
+    _orbitController.stop();
+    try {
+      await TargetCalibrationSheet.show(
+        context,
+        initialPaceSecondsPerKm: _targetPaceSec,
+        initialDistanceKm: _targetDistanceKm,
+        initialAdaptiveTempoScaling: _adaptiveTempoScaling,
+        activePack: activePack,
+        language: _profile.language,
+        onAdaptiveTempoScalingChanged: (enabled) {
+          _adaptiveTempoScaling = enabled;
+          _audioEngine.setAdaptiveTempoScaling(enabled);
+        },
+        onApply: (paceSec, distanceKm) {
+          if (!mounted) return;
+          setState(() {
+            _targetPaceSec = paceSec;
+            _targetDistanceKm = distanceKm;
+          });
+        },
+      );
+    } finally {
+      if (mounted && !_isTestBinding) _orbitController.repeat();
+    }
   }
 
   Future<void> _startRun() async {
@@ -319,11 +329,11 @@ class _PreRunIgnitionScreenState extends State<PreRunIgnitionScreen>
                         ),
                       ),
 
-                      // Runner's legs cutout composited seamlessly into Warm Ivory
+                      // Runner's legs cutout composited seamlessly into Warm Ivory (full legs & shoes visible)
                       Positioned.fill(
                         child: Image.asset(
                           _runnerHeroAsset,
-                          fit: BoxFit.cover,
+                          fit: BoxFit.contain,
                           alignment: Alignment.topCenter,
                           color: StradioColors.warmIvory,
                           colorBlendMode: BlendMode.multiply,
@@ -331,12 +341,12 @@ class _PreRunIgnitionScreenState extends State<PreRunIgnitionScreen>
                         ),
                       ),
 
-                      // Soft bottom vignette fading runner legs into Warm Ivory canvas
+                      // Subtle bottom vignette fading base into Warm Ivory without hiding shoes
                       Positioned(
                         left: 0,
                         right: 0,
                         bottom: 0,
-                        height: 88,
+                        height: 36,
                         child: IgnorePointer(
                           child: DecoratedBox(
                             decoration: BoxDecoration(
@@ -348,9 +358,8 @@ class _PreRunIgnitionScreenState extends State<PreRunIgnitionScreen>
                                     alpha: 0.0,
                                   ),
                                   StradioColors.warmIvory.withValues(
-                                    alpha: 0.78,
+                                    alpha: 0.85,
                                   ),
-                                  StradioColors.warmIvory,
                                 ],
                               ),
                             ),
@@ -1078,90 +1087,105 @@ class _SwipeToStartPill extends StatelessWidget {
           child: Container(
             height: height,
             decoration: BoxDecoration(
-              color: StradioColors.midnight,
               borderRadius: BorderRadius.circular(StradioRadii.full),
               boxShadow: [
                 BoxShadow(
                   color: StradioColors.midnight.withValues(alpha: 0.24),
-                  blurRadius: 18,
+                  blurRadius: 20,
                   offset: const Offset(0, 8),
                 ),
               ],
             ),
-            child: Stack(
-              alignment: Alignment.center,
-              children: [
-                // Subtle coral sweep as runner drags slider
-                Positioned.fill(
-                  child: ClipRRect(
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(StradioRadii.full),
+              child: BackdropFilter(
+                filter: ui.ImageFilter.blur(sigmaX: 14, sigmaY: 14),
+                child: Container(
+                  decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(StradioRadii.full),
-                    child: FractionallySizedBox(
-                      alignment: Alignment.centerLeft,
-                      widthFactor: progress.clamp(0.0, 1.0),
-                      child: DecoratedBox(
-                        decoration: BoxDecoration(
-                          color: StradioColors.sonicCoral.withValues(
-                            alpha: 0.25,
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        const Color(0xFF2B2B3A).withValues(alpha: 0.84),
+                        const Color(0xFF191923).withValues(alpha: 0.92),
+                      ],
+                    ),
+                    border: Border.all(
+                      color: Colors.white.withValues(alpha: 0.26),
+                      width: 1.25,
+                    ),
+                  ),
+                  child: Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      // Subtle top glass specular catchlight highlight
+                      Positioned(
+                        top: 1,
+                        left: 24,
+                        right: 24,
+                        child: IgnorePointer(
+                          child: Container(
+                            height: 1.5,
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                colors: [
+                                  Colors.white.withValues(alpha: 0.0),
+                                  Colors.white.withValues(alpha: 0.34),
+                                  Colors.white.withValues(alpha: 0.0),
+                                ],
+                              ),
+                            ),
                           ),
                         ),
                       ),
-                    ),
-                  ),
-                ),
 
-                // Centered Label
-                Text(
-                  label,
-                  style: StradioTypography.buttonLabel(
-                    color: StradioColors.textOnDark.withValues(
-                      alpha: (1.0 - progress * 0.5).clamp(0.4, 1.0),
-                    ),
-                  ),
-                ),
-
-                // Right Pulsing Sonic Coral Live Sensor Ring
-                Positioned(
-                  right: 12,
-                  child: Container(
-                    width: 28,
-                    height: 28,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      border: Border.all(
-                        color: StradioColors.sonicCoral.withValues(alpha: 0.45),
-                        width: 1.5,
+                      // Subtle coral sweep as runner drags slider
+                      Positioned.fill(
+                        child: FractionallySizedBox(
+                          alignment: Alignment.centerLeft,
+                          widthFactor: progress.clamp(0.0, 1.0),
+                          child: DecoratedBox(
+                            decoration: BoxDecoration(
+                              color: StradioColors.sonicCoral.withValues(
+                                alpha: 0.28,
+                              ),
+                            ),
+                          ),
+                        ),
                       ),
-                    ),
-                    alignment: Alignment.center,
-                    child: Container(
-                      width: 8,
-                      height: 8,
-                      decoration: const BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: StradioColors.sonicCoral,
-                      ),
-                    ),
-                  ),
-                ),
 
-                // Left Draggable Alabaster Slider Knob
-                Positioned(
-                  left: inset + travel * progress,
-                  child: Container(
-                    width: knobSize,
-                    height: knobSize,
-                    decoration: const BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: StradioColors.surfaceCard,
-                    ),
-                    child: const Icon(
-                      Icons.chevron_right_rounded,
-                      size: 22,
-                      color: StradioColors.midnight,
-                    ),
+                      // Centered Label
+                      Text(
+                        label,
+                        style: StradioTypography.buttonLabel(
+                          color: StradioColors.textOnDark.withValues(
+                            alpha: (1.0 - progress * 0.5).clamp(0.4, 1.0),
+                          ),
+                        ),
+                      ),
+
+                      // Left Draggable Alabaster Slider Knob
+                      Positioned(
+                        left: inset + travel * progress,
+                        child: Container(
+                          width: knobSize,
+                          height: knobSize,
+                          decoration: const BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: StradioColors.surfaceCard,
+                          ),
+                          child: const Icon(
+                            Icons.chevron_right_rounded,
+                            size: 22,
+                            color: StradioColors.midnight,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-              ],
+              ),
             ),
           ),
         );

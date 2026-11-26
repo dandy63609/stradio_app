@@ -974,109 +974,144 @@ class _ShareStudioScreenState extends State<ShareStudioScreen> {
     required bool isPhotoGlass,
     required bool highContrast,
   }) {
-    final saveLabel = isPhotoGlass ? s.savePhotoLabel : s.saveLabel;
+    final saveLabel = s.saveLabel;
 
     return Row(
       children: [
-        // Left: Dark Smoked Black Glass Save Button
-        _DarkGlassContainer(
-          highContrast: highContrast,
-          fillColor: const Color(0xFF14141C).withValues(alpha: 0.86),
+        // Left: Smoked Obsidian Glassmorphism "Save" Button
+        ClipRRect(
           borderRadius: BorderRadius.circular(StradioRadii.full),
-          padding: EdgeInsets.zero,
-          child: InkWell(
-            key: const Key('share_save_gallery_button'),
-            borderRadius: BorderRadius.circular(StradioRadii.full),
-            onTap: _busy ? null : _handleSaveToGallery,
-            child: Container(
-              height: 50,
-              padding: const EdgeInsets.symmetric(horizontal: 18),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(
-                    Icons.download_rounded,
-                    size: 18,
-                    color: StradioColors.textOnDark,
-                  ),
-                  const SizedBox(width: 7),
-                  Flexible(
-                    child: Text(
-                      saveLabel,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: StradioTypography.pillBadge(
-                        color: StradioColors.textOnDark,
-                      ),
+          child: BackdropFilter(
+            filter: ui.ImageFilter.blur(
+              sigmaX: highContrast ? 0 : 14,
+              sigmaY: highContrast ? 0 : 14,
+            ),
+            child: Material(
+              color: Colors.transparent,
+              child: InkWell(
+                key: const Key('share_save_gallery_button'),
+                borderRadius: BorderRadius.circular(StradioRadii.full),
+                onTap: _busy ? null : _handleSaveToGallery,
+                child: Container(
+                  height: 50,
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(StradioRadii.full),
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        const Color(0xFF2B2B3A).withValues(
+                          alpha: highContrast ? 0.96 : 0.72,
+                        ),
+                        const Color(0xFF191923).withValues(
+                          alpha: highContrast ? 0.98 : 0.84,
+                        ),
+                      ],
+                    ),
+                    border: Border.all(
+                      color: Colors.white.withValues(alpha: 0.34),
+                      width: 1.25,
                     ),
                   ),
-                ],
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(
+                        Icons.download_rounded,
+                        size: 18,
+                        color: StradioColors.textOnDark,
+                      ),
+                      const SizedBox(width: 7),
+                      Flexible(
+                        child: Text(
+                          saveLabel,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: StradioTypography.pillBadge(
+                            color: StradioColors.textOnDark,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               ),
             ),
           ),
         ),
         const SizedBox(width: 10),
 
-        // Right: Coral-to-Violet Gradient "Add to Story" Button
+        // Right: Translucent Coral-to-Violet Glassmorphism "Add to Story" Button
         Expanded(
-          child: Container(
-            height: 50,
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                begin: Alignment.centerLeft,
-                end: Alignment.centerRight,
-                colors: [
-                  StradioColors.sonicCoral,
-                  StradioColors.rhythmViolet,
-                ],
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(StradioRadii.full),
+            child: BackdropFilter(
+              filter: ui.ImageFilter.blur(
+                sigmaX: highContrast ? 0 : 14,
+                sigmaY: highContrast ? 0 : 14,
               ),
-              borderRadius: BorderRadius.circular(StradioRadii.full),
-              boxShadow: [
-                BoxShadow(
-                  color: StradioColors.sonicCoral.withValues(alpha: 0.28),
-                  blurRadius: 16,
-                  offset: const Offset(0, 6),
-                ),
-              ],
-            ),
-            child: Material(
-              color: Colors.transparent,
-              child: InkWell(
-                key: const Key('share_export_png_button'),
-                borderRadius: BorderRadius.circular(StradioRadii.full),
-                onTap: _busy ? null : _handleShare,
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      if (_busy)
-                        const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: StradioColors.textOnDark,
-                          ),
-                        )
-                      else
-                        const Icon(
-                          Icons.send_rounded,
-                          size: 17,
-                          color: StradioColors.textOnDark,
-                        ),
-                      const SizedBox(width: 8),
-                      Flexible(
-                        child: Text(
-                          _busy ? s.renderingPng : s.addToStoryAction,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: StradioTypography.pillBadge(
-                            color: StradioColors.textOnDark,
-                          ).copyWith(fontSize: 14),
-                        ),
+              child: Container(
+                height: 50,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.centerLeft,
+                    end: Alignment.centerRight,
+                    colors: [
+                      StradioColors.sonicCoral.withValues(
+                        alpha: highContrast ? 0.96 : 0.78,
+                      ),
+                      StradioColors.rhythmViolet.withValues(
+                        alpha: highContrast ? 0.96 : 0.78,
                       ),
                     ],
+                  ),
+                  borderRadius: BorderRadius.circular(StradioRadii.full),
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.44),
+                    width: 1.25,
+                  ),
+                ),
+                child: Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    key: const Key('share_export_png_button'),
+                    borderRadius: BorderRadius.circular(StradioRadii.full),
+                    onTap: _busy ? null : _handleShare,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          if (_busy)
+                            const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: StradioColors.textOnDark,
+                              ),
+                            )
+                          else
+                            const Icon(
+                              Icons.send_rounded,
+                              size: 17,
+                              color: StradioColors.textOnDark,
+                            ),
+                          const SizedBox(width: 8),
+                          Flexible(
+                            child: Text(
+                              _busy ? s.renderingPng : s.addToStoryAction,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: StradioTypography.pillBadge(
+                                color: StradioColors.textOnDark,
+                              ).copyWith(fontSize: 14),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
                 ),
               ),
@@ -1094,18 +1129,16 @@ class _DarkGlassContainer extends StatelessWidget {
     required this.borderRadius,
     required this.padding,
     required this.child,
-    this.fillColor,
   });
 
   final bool highContrast;
   final BorderRadius borderRadius;
   final EdgeInsetsGeometry padding;
   final Widget child;
-  final Color? fillColor;
 
   @override
   Widget build(BuildContext context) {
-    final bg = fillColor ?? const Color(0xFF14141E).withValues(alpha: 0.72);
+    final bg = const Color(0xFF14141E).withValues(alpha: 0.72);
     final inner = Container(
       padding: padding,
       decoration: BoxDecoration(

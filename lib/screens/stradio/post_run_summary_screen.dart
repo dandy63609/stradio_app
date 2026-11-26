@@ -702,46 +702,132 @@ class _PostRunSummaryScreenState extends State<PostRunSummaryScreen> {
                     ),
                     Padding(
                       padding: const EdgeInsets.fromLTRB(24, 6, 24, 18),
-                      child: Material(
-                        color: StradioColors.midnight,
-                        borderRadius: BorderRadius.circular(StradioRadii.full),
-                        child: InkWell(
-                          key: const Key('start_new_run_button'),
+                      child: Container(
+                        decoration: BoxDecoration(
                           borderRadius: BorderRadius.circular(
                             StradioRadii.full,
                           ),
-                          onTap: _saving ? null : _saveAndStartNewRun,
-                          child: Container(
-                            height: 56,
-                            padding: const EdgeInsets.symmetric(horizontal: 14),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Padding(
-                                  padding: const EdgeInsets.only(left: 8),
-                                  child: Text(
-                                    _saving
-                                        ? s.savingRunAction
-                                        : s.startNewRunAction,
-                                    style: StradioTypography.buttonLabel(
-                                      color: StradioColors.textOnDark,
+                          boxShadow: [
+                            BoxShadow(
+                              color: StradioColors.midnight.withValues(
+                                alpha: 0.22,
+                              ),
+                              blurRadius: 18,
+                              offset: const Offset(0, 8),
+                            ),
+                          ],
+                        ),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(
+                            StradioRadii.full,
+                          ),
+                          child: BackdropFilter(
+                            filter: ui.ImageFilter.blur(
+                              sigmaX: 14,
+                              sigmaY: 14,
+                            ),
+                            child: Material(
+                              color: Colors.transparent,
+                              child: InkWell(
+                                key: const Key('start_new_run_button'),
+                                borderRadius: BorderRadius.circular(
+                                  StradioRadii.full,
+                                ),
+                                onTap: _saving ? null : _saveAndStartNewRun,
+                                child: Container(
+                                  height: 56,
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 14,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    borderRadius: BorderRadius.circular(
+                                      StradioRadii.full,
+                                    ),
+                                    gradient: LinearGradient(
+                                      begin: Alignment.topCenter,
+                                      end: Alignment.bottomCenter,
+                                      colors: [
+                                        const Color(0xFF2B2B3A).withValues(
+                                          alpha: 0.84,
+                                        ),
+                                        const Color(0xFF191923).withValues(
+                                          alpha: 0.92,
+                                        ),
+                                      ],
+                                    ),
+                                    border: Border.all(
+                                      color: Colors.white.withValues(
+                                        alpha: 0.26,
+                                      ),
+                                      width: 1.25,
                                     ),
                                   ),
-                                ),
-                                Container(
-                                  width: 38,
-                                  height: 38,
-                                  decoration: const BoxDecoration(
-                                    shape: BoxShape.circle,
-                                    color: StradioColors.surfaceCard,
+                                  child: Stack(
+                                    alignment: Alignment.center,
+                                    children: [
+                                      Positioned(
+                                        top: 0,
+                                        left: 16,
+                                        right: 16,
+                                        child: IgnorePointer(
+                                          child: Container(
+                                            height: 1.5,
+                                            decoration: BoxDecoration(
+                                              gradient: LinearGradient(
+                                                colors: [
+                                                  Colors.white.withValues(
+                                                    alpha: 0.0,
+                                                  ),
+                                                  Colors.white.withValues(
+                                                    alpha: 0.34,
+                                                  ),
+                                                  Colors.white.withValues(
+                                                    alpha: 0.0,
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                      Row(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.spaceBetween,
+                                        children: [
+                                          Padding(
+                                            padding: const EdgeInsets.only(
+                                              left: 8,
+                                            ),
+                                            child: Text(
+                                              _saving
+                                                  ? s.savingRunAction
+                                                  : s.startNewRunAction,
+                                              style:
+                                                  StradioTypography.buttonLabel(
+                                                    color: StradioColors
+                                                        .textOnDark,
+                                                  ),
+                                            ),
+                                          ),
+                                          Container(
+                                            width: 38,
+                                            height: 38,
+                                            decoration: const BoxDecoration(
+                                              shape: BoxShape.circle,
+                                              color: StradioColors.surfaceCard,
+                                            ),
+                                            child: const Icon(
+                                              Icons.arrow_forward_rounded,
+                                              size: 18,
+                                              color: StradioColors.textPrimary,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ],
                                   ),
-                                  child: const Icon(
-                                    Icons.arrow_forward_rounded,
-                                    size: 18,
-                                    color: StradioColors.textPrimary,
-                                  ),
                                 ),
-                              ],
+                              ),
                             ),
                           ),
                         ),

@@ -102,6 +102,7 @@ class _ActiveRunScreenState extends State<ActiveRunScreen>
   String? _sensorErrorText;
   String? _holdHintText;
   bool _stepPulseActive = false;
+  double _pulseStartEnergy = 0.0;
   bool _hasStartedRun = false;
   bool _isFinishing = false;
   bool _isFlushingCache = false;
@@ -150,11 +151,11 @@ class _ActiveRunScreenState extends State<ActiveRunScreen>
 
     _ribbonController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 850),
+      duration: const Duration(milliseconds: 1000),
     );
     _continuousWaveController = AnimationController(
       vsync: this,
-      duration: const Duration(seconds: 12),
+      duration: const Duration(seconds: 9),
     );
     _holdController = AnimationController(
       vsync: this,
@@ -483,15 +484,33 @@ class _ActiveRunScreenState extends State<ActiveRunScreen>
     }
   }
 
+  /// Smooth attack (~150ms) + release (~850ms) envelope starting from the
+  /// previous energy level so consecutive steps blend fluidly without snapping.
+  double _computeWaveEnergy() {
+    if (!_stepPulseActive) return 0.0;
+    final t = _ribbonController.value.clamp(0.0, 1.0);
+    const attackEnd = 0.15;
+    if (t < attackEnd) {
+      final up = Curves.easeOutCubic.transform(t / attackEnd);
+      return _pulseStartEnergy + (1.0 - _pulseStartEnergy) * up;
+    }
+    final down = (t - attackEnd) / (1.0 - attackEnd);
+    return (1.0 - Curves.easeInOutSine.transform(down)).clamp(0.0, 1.0);
+  }
+
   void _triggerStepRefractionPulse() {
+    _pulseStartEnergy = _computeWaveEnergy();
     _stepPulseActive = true;
     if (mounted && !MediaQuery.disableAnimationsOf(context)) {
       _ribbonController.forward(from: 0.0);
     }
     _stepPulseTimer?.cancel();
-    _stepPulseTimer = Timer(const Duration(milliseconds: 850), () {
+    _stepPulseTimer = Timer(const Duration(milliseconds: 1000), () {
       if (mounted) {
-        setState(() => _stepPulseActive = false);
+        setState(() {
+          _stepPulseActive = false;
+          _pulseStartEnergy = 0.0;
+        });
       }
     });
   }
@@ -820,32 +839,35 @@ class _ActiveRunScreenState extends State<ActiveRunScreen>
       constraints: const BoxConstraints(maxWidth: double.infinity),
       builder: (sheetContext) {
         final bottomPadding = MediaQuery.paddingOf(sheetContext).bottom;
-        return ClipRRect(
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
-          child: BackdropFilter(
-            filter: ui.ImageFilter.blur(sigmaX: 18, sigmaY: 18),
-            child: Container(
-              key: const Key('sound_pack_picker_sheet'),
-              width: double.infinity,
-              padding: EdgeInsets.fromLTRB(20, 14, 20, 20 + bottomPadding),
-              decoration: BoxDecoration(
-                color: StradioColors.surfaceCard.withValues(alpha: 0.86),
-                borderRadius: const BorderRadius.vertical(
-                  top: Radius.circular(32),
-                ),
-                border: Border.all(
-                  color: Colors.white.withValues(alpha: 0.90),
-                  width: 1.2,
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: StradioColors.midnight.withValues(alpha: 0.14),
-                    blurRadius: 28,
-                    offset: const Offset(0, -6),
-                  ),
-                ],
+        return Container(
+          key: const Key('sound_pack_picker_sheet'),
+          width: double.infinity,
+          padding: EdgeInsets.fromLTRB(20, 14, 20, 20 + bottomPadding),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [
+                StradioColors.surfaceCard.withValues(alpha: 0.98),
+                StradioColors.warmIvory.withValues(alpha: 0.96),
+              ],
+            ),
+            borderRadius: const BorderRadius.vertical(
+              top: Radius.circular(32),
+            ),
+            border: Border.all(
+              color: Colors.white.withValues(alpha: 0.95),
+              width: 1.2,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: StradioColors.midnight.withValues(alpha: 0.14),
+                blurRadius: 24,
+                offset: const Offset(0, -6),
               ),
-              child: SingleChildScrollView(
+            ],
+          ),
+          child: SingleChildScrollView(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -956,9 +978,7 @@ class _ActiveRunScreenState extends State<ActiveRunScreen>
                   ],
                 ),
               ),
-            ),
-          ),
-        );
+            );
       },
     );
   }
@@ -1263,7 +1283,7 @@ class _ActiveRunScreenState extends State<ActiveRunScreen>
                             child: Stack(
                               alignment: Alignment.center,
                               children: [
-                                // Step-Triggered Acoustic Wave (idle flat ~1.5px -> surges on footstep)
+                                // Step-Triggered Acoustic Wave (smooth attack/decay, max ~32px amplitude)
                                 Positioned.fill(
                                   child: RepaintBoundary(
                                     child: AnimatedBuilder(
@@ -1272,13 +1292,9 @@ class _ActiveRunScreenState extends State<ActiveRunScreen>
                                         _continuousWaveController,
                                       ]),
                                       builder: (_, _) {
-                                        final energy =
-                                            (_stepPulseActive && !reducedMotion)
-                                            ? Curves.easeOut.transform(
-                                                (1.0 - _ribbonController.value)
-                                                    .clamp(0.0, 1.0),
-                                              )
-                                            : 0.0;
+                                        final energy = reducedMotion
+                                            ? 0.0
+                                            : _computeWaveEnergy();
                                         return CustomPaint(
                                           painter: SonicRibbonPainter(
                                             phase: reducedMotion
@@ -1286,11 +1302,11 @@ class _ActiveRunScreenState extends State<ActiveRunScreen>
                                                 : _continuousWaveController
                                                           .value *
                                                       math.pi *
-                                                      2,
-                                            amplitude: 0.03 + energy * 0.85,
-                                            pulseBoost: energy,
-                                            strokeWidth: 1.6 + energy * 1.4,
-                                            opacity: 0.35 + energy * 0.65,
+                                                      6,
+                                            amplitude: 0.025 + energy * 0.40,
+                                            pulseBoost: energy * 0.35,
+                                            strokeWidth: 1.45 + energy * 0.85,
+                                            opacity: 0.34 + energy * 0.66,
                                           ),
                                         );
                                       },
@@ -1309,11 +1325,9 @@ class _ActiveRunScreenState extends State<ActiveRunScreen>
                                         _ribbonController,
                                       ]),
                                       builder: (_, _) {
-                                        final energy =
-                                            (_stepPulseActive && !reducedMotion)
-                                            ? (1.0 - _ribbonController.value)
-                                                  .clamp(0.0, 1.0)
-                                            : 0.0;
+                                        final energy = reducedMotion
+                                            ? 0.0
+                                            : _computeWaveEnergy();
                                         return CustomPaint(
                                           painter: _CompassMonolithDialPainter(
                                             orbitAngle: reducedMotion
@@ -1514,16 +1528,15 @@ class _ActiveRunScreenState extends State<ActiveRunScreen>
                             key: const Key('active_run_bottom_dock'),
                             height: 56,
                             decoration: BoxDecoration(
-                              color: StradioColors.midnight,
                               borderRadius: BorderRadius.circular(
                                 StradioRadii.full,
                               ),
                               boxShadow: [
                                 BoxShadow(
                                   color: StradioColors.midnight.withValues(
-                                    alpha: 0.22,
+                                    alpha: 0.24,
                                   ),
-                                  blurRadius: 18,
+                                  blurRadius: 20,
                                   offset: const Offset(0, 8),
                                 ),
                               ],
@@ -1532,68 +1545,131 @@ class _ActiveRunScreenState extends State<ActiveRunScreen>
                               borderRadius: BorderRadius.circular(
                                 StradioRadii.full,
                               ),
-                              child: Stack(
-                                alignment: Alignment.center,
-                                children: [
-                                  // Horizontal Sonic Coral Progress Sweep (0% -> 100%)
-                                  Positioned.fill(
-                                    child: FractionallySizedBox(
-                                      alignment: Alignment.centerLeft,
-                                      widthFactor: progress.clamp(0.0, 1.0),
-                                      child: const DecoratedBox(
-                                        decoration: BoxDecoration(
-                                          color: StradioColors.sonicCoral,
-                                        ),
-                                      ),
+                              child: BackdropFilter(
+                                filter: ui.ImageFilter.blur(
+                                  sigmaX: 14,
+                                  sigmaY: 14,
+                                ),
+                                child: Container(
+                                  decoration: BoxDecoration(
+                                    borderRadius: BorderRadius.circular(
+                                      StradioRadii.full,
                                     ),
-                                  ),
-                                  Padding(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 6,
-                                    ),
-                                    child: Row(
-                                      children: [
-                                        Container(
-                                          width: 44,
-                                          height: 44,
-                                          decoration: const BoxDecoration(
-                                            shape: BoxShape.circle,
-                                            color: StradioColors.surfaceCard,
-                                          ),
-                                          child: const Icon(
-                                            Icons.stop_rounded,
-                                            size: 20,
-                                            color: StradioColors.textAccentDeep,
-                                          ),
+                                    gradient: LinearGradient(
+                                      begin: Alignment.topCenter,
+                                      end: Alignment.bottomCenter,
+                                      colors: [
+                                        const Color(0xFF2B2B3A).withValues(
+                                          alpha: 0.84,
                                         ),
-                                        Expanded(
-                                          child: Text(
-                                            label,
-                                            textAlign: TextAlign.center,
-                                            maxLines: 1,
-                                            overflow: TextOverflow.ellipsis,
-                                            style:
-                                                StradioTypography.buttonLabel(
-                                                  color:
-                                                      StradioColors.textOnDark,
-                                                ),
-                                          ),
-                                        ),
-                                        SizedBox(
-                                          width: 44,
-                                          child: Text(
-                                            '1.5s',
-                                            textAlign: TextAlign.center,
-                                            style: StradioTypography.metricLabel(
-                                              color: StradioColors.textOnDark
-                                                  .withValues(alpha: 0.55),
-                                            ),
-                                          ),
+                                        const Color(0xFF191923).withValues(
+                                          alpha: 0.92,
                                         ),
                                       ],
                                     ),
+                                    border: Border.all(
+                                      color: Colors.white.withValues(
+                                        alpha: 0.26,
+                                      ),
+                                      width: 1.25,
+                                    ),
                                   ),
-                                ],
+                                  child: Stack(
+                                    alignment: Alignment.center,
+                                    children: [
+                                      // Subtle top glass specular catchlight highlight
+                                      Positioned(
+                                        top: 1,
+                                        left: 24,
+                                        right: 24,
+                                        child: IgnorePointer(
+                                          child: Container(
+                                            height: 1.5,
+                                            decoration: BoxDecoration(
+                                              gradient: LinearGradient(
+                                                colors: [
+                                                  Colors.white.withValues(
+                                                    alpha: 0.0,
+                                                  ),
+                                                  Colors.white.withValues(
+                                                    alpha: 0.34,
+                                                  ),
+                                                  Colors.white.withValues(
+                                                    alpha: 0.0,
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+
+                                      // Horizontal Sonic Coral Progress Sweep (0% -> 100%)
+                                      Positioned.fill(
+                                        child: FractionallySizedBox(
+                                          alignment: Alignment.centerLeft,
+                                          widthFactor: progress.clamp(0.0, 1.0),
+                                          child: const DecoratedBox(
+                                            decoration: BoxDecoration(
+                                              color: StradioColors.sonicCoral,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                      Padding(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 6,
+                                        ),
+                                        child: Row(
+                                          children: [
+                                            Container(
+                                              width: 44,
+                                              height: 44,
+                                              decoration: const BoxDecoration(
+                                                shape: BoxShape.circle,
+                                                color: StradioColors.surfaceCard,
+                                              ),
+                                              child: const Icon(
+                                                Icons.stop_rounded,
+                                                size: 20,
+                                                color: StradioColors
+                                                    .textAccentDeep,
+                                              ),
+                                            ),
+                                            Expanded(
+                                              child: Text(
+                                                label,
+                                                textAlign: TextAlign.center,
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                                style: StradioTypography
+                                                    .buttonLabel(
+                                                      color: StradioColors
+                                                          .textOnDark,
+                                                    ),
+                                              ),
+                                            ),
+                                            SizedBox(
+                                              width: 44,
+                                              child: Text(
+                                                '1.5s',
+                                                textAlign: TextAlign.center,
+                                                style: StradioTypography
+                                                    .metricLabel(
+                                                      color: StradioColors
+                                                          .textOnDark
+                                                          .withValues(
+                                                            alpha: 0.55,
+                                                          ),
+                                                    ),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
                               ),
                             ),
                           );

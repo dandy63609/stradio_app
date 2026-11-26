@@ -173,12 +173,21 @@ class _ShareRunRhythmSheetState extends State<ShareRunRhythmSheet> {
     final navigator = Navigator.of(context);
     navigator.pop();
     navigator.push<void>(
-      MaterialPageRoute<void>(
-        builder: (_) => ShareStudioScreen(
+      PageRouteBuilder<void>(
+        transitionDuration: const Duration(milliseconds: 220),
+        reverseTransitionDuration: const Duration(milliseconds: 180),
+        pageBuilder: (_, _, _) => ShareStudioScreen(
           metrics: widget.metrics,
           soundPack: widget.soundPack,
           initialMode: ShareExportMode.photoGlass,
           language: widget.language,
+        ),
+        transitionsBuilder: (_, animation, _, child) => FadeTransition(
+          opacity: CurvedAnimation(
+            parent: animation,
+            curve: Curves.easeOutCubic,
+          ),
+          child: child,
         ),
       ),
     );
@@ -191,30 +200,33 @@ class _ShareRunRhythmSheetState extends State<ShareRunRhythmSheet> {
     final bottomPadding = MediaQuery.paddingOf(context).bottom;
     final carouselHeight = (screenH * 0.42).clamp(240.0, 350.0);
 
-    return ClipRRect(
-      borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
-      child: BackdropFilter(
-        filter: ui.ImageFilter.blur(sigmaX: 18, sigmaY: 18),
-        child: Container(
-          key: const Key('share_run_rhythm_sheet'),
-          width: double.infinity,
-          decoration: BoxDecoration(
-            color: StradioColors.surfaceCard.withValues(alpha: 0.90),
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
-            border: Border.all(
-              color: Colors.white.withValues(alpha: 0.90),
-              width: 1.2,
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: StradioColors.midnight.withValues(alpha: 0.16),
-                blurRadius: 30,
-                offset: const Offset(0, -6),
-              ),
-            ],
+    return Container(
+      key: const Key('share_run_rhythm_sheet'),
+      width: double.infinity,
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            StradioColors.surfaceCard.withValues(alpha: 0.98),
+            StradioColors.warmIvory.withValues(alpha: 0.96),
+          ],
+        ),
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.95),
+          width: 1.2,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: StradioColors.midnight.withValues(alpha: 0.16),
+            blurRadius: 26,
+            offset: const Offset(0, -6),
           ),
-          clipBehavior: Clip.antiAlias,
-          child: ScrollConfiguration(
+        ],
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: ScrollConfiguration(
             behavior: ScrollConfiguration.of(context).copyWith(
               scrollbars: false,
             ),
@@ -448,8 +460,8 @@ class _ShareRunRhythmSheetState extends State<ShareRunRhythmSheet> {
                       ),
                       label: Text(
                         widget.language == AppLanguage.id
-                            ? 'Ekspor story Instagram 9:16'
-                            : 'Instagram story export 9:16',
+                            ? 'Ekspor story 9:16'
+                            : 'Story export 9:16',
                         style: StradioTypography.pillBadge(
                           color: StradioColors.textSecondary,
                         ),
@@ -460,9 +472,7 @@ class _ShareRunRhythmSheetState extends State<ShareRunRhythmSheet> {
               ),
             ),
           ),
-        ),
-      ),
-    );
+        );
   }
 }
 
@@ -495,29 +505,13 @@ class _TemplatePillChip extends StatelessWidget {
                   : StradioColors.borderSubtle,
             ),
           ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (selected) ...[
-                Container(
-                  width: 6,
-                  height: 6,
-                  decoration: const BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: StradioColors.sonicCoral,
-                  ),
-                ),
-                const SizedBox(width: 6),
-              ],
-              Text(
-                label,
-                style: StradioTypography.metricLabel(
-                  color: selected
-                      ? StradioColors.textOnDark
-                      : StradioColors.textPrimary,
-                ),
-              ),
-            ],
+          child: Text(
+            label,
+            style: StradioTypography.metricLabel(
+              color: selected
+                  ? StradioColors.textOnDark
+                  : StradioColors.textPrimary,
+            ),
           ),
         ),
       ),

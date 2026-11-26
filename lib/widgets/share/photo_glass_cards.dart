@@ -96,46 +96,37 @@ class _FrostedSurface extends StatelessWidget {
       );
     }
 
-    // Multi-layer transparent optical glassmorphism: lets the underlying photo glow
-    // vividly through the pane with a directional sheen + diagonal specular highlight.
-    final tint = Color.lerp(Colors.white, fill, 0.32) ?? Colors.white;
-    return Container(
-      width: width,
-      height: height,
-      decoration: BoxDecoration(
-        borderRadius: borderRadius,
-        boxShadow: [
-          BoxShadow(
-            color: const Color(0xFF080C16).withValues(alpha: 0.40),
-            blurRadius: 34,
-            offset: const Offset(0, 16),
+    // Luminous daylight transparent glassmorphism (no dark shadow behind BackdropFilter,
+    // so dark #191923 text stays crisp even over dark gallery photos while the photo glows through).
+    final tint = Color.lerp(Colors.white, fill, 0.22) ?? Colors.white;
+    return ClipRRect(
+      borderRadius: borderRadius,
+      child: BackdropFilter(
+        filter: ui.ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+        child: Container(
+          width: width,
+          height: height,
+          decoration: BoxDecoration(
+            borderRadius: borderRadius,
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              stops: const [0.0, 0.45, 0.78, 1.0],
+              colors: [
+                Colors.white.withValues(alpha: 0.62),
+                tint.withValues(alpha: 0.44),
+                tint.withValues(alpha: 0.36),
+                Colors.white.withValues(alpha: 0.54),
+              ],
+            ),
+            border: Border.all(
+              color: Colors.white.withValues(alpha: 0.80),
+              width: 1.35,
+            ),
           ),
-        ],
-      ),
-      child: ClipRRect(
-        borderRadius: borderRadius,
-        child: BackdropFilter(
-          filter: ui.ImageFilter.blur(sigmaX: 16, sigmaY: 16),
           child: Stack(
+            alignment: Alignment.center,
             children: [
-              Positioned.fill(
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    borderRadius: borderRadius,
-                    gradient: LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      stops: const [0.0, 0.42, 0.72, 1.0],
-                      colors: [
-                        tint.withValues(alpha: 0.42),
-                        tint.withValues(alpha: 0.16),
-                        tint.withValues(alpha: 0.06),
-                        tint.withValues(alpha: 0.24),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
               Positioned.fill(
                 child: IgnorePointer(
                   child: DecoratedBox(
@@ -143,11 +134,11 @@ class _FrostedSurface extends StatelessWidget {
                       borderRadius: borderRadius,
                       gradient: LinearGradient(
                         begin: Alignment.topLeft,
-                        end: const Alignment(0.4, 0.5),
+                        end: const Alignment(0.45, 0.55),
                         stops: const [0.0, 0.45, 1.0],
                         colors: [
-                          Colors.white.withValues(alpha: 0.40),
-                          Colors.white.withValues(alpha: 0.10),
+                          Colors.white.withValues(alpha: 0.36),
+                          Colors.white.withValues(alpha: 0.08),
                           Colors.white.withValues(alpha: 0.0),
                         ],
                       ),
@@ -155,17 +146,7 @@ class _FrostedSurface extends StatelessWidget {
                   ),
                 ),
               ),
-              Container(
-                padding: padding,
-                decoration: BoxDecoration(
-                  borderRadius: borderRadius,
-                  border: Border.all(
-                    color: Colors.white.withValues(alpha: 0.62),
-                    width: 1.25,
-                  ),
-                ),
-                child: child,
-              ),
+              Padding(padding: padding, child: child),
             ],
           ),
         ),
@@ -802,12 +783,12 @@ class _WhiteTelemetryPod extends StatelessWidget {
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: [
+            Colors.white.withValues(alpha: 0.64),
             Colors.white.withValues(alpha: 0.46),
-            Colors.white.withValues(alpha: 0.22),
           ],
         ),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.62)),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.78)),
       ),
       child: Column(
         children: [
@@ -858,12 +839,12 @@ class _TopoBentoPod extends StatelessWidget {
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: [
+            Colors.white.withValues(alpha: 0.64),
             Colors.white.withValues(alpha: 0.46),
-            Colors.white.withValues(alpha: 0.22),
           ],
         ),
         borderRadius: BorderRadius.zero,
-        border: Border.all(color: Colors.white.withValues(alpha: 0.62)),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.78)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

@@ -101,14 +101,14 @@ void main() {
         expect(find.text('118-162 spm Lock Zone'), findsOneWidget);
         expect(find.text('CADENCE RANGE CONSISTENCY'), findsOneWidget);
 
-        // Switch to Mode 2: Photo Glass (3 templates + Save Photo / Add to Story)
+        // Switch to Mode 2: Photo Glass (3 templates + Save / Add to Story)
         await tester.tap(find.byKey(const Key('share_mode_photo_glass_tab')));
         await tester.pumpAndSettle();
         expect(
           find.byKey(const Key('photo_glass_classic_wave')),
           findsOneWidget,
         );
-        expect(find.text('Save Photo'), findsOneWidget);
+        expect(find.text('Save'), findsOneWidget);
         expect(find.text('Add to Story'), findsOneWidget);
 
         await tester.tap(find.byKey(const Key('share_template_orbitalNexus')));
