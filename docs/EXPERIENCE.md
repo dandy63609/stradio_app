@@ -29,21 +29,24 @@ The STRADIO MVP architecture is deliberately flat: a single continuous session l
 
 ```
 ┌────────────────────────────────────────────────────────┐
-│                   SURFACE 1: PRE-RUN                   │
-│   - Minimal top brand mark (STRADIO)                   │
-│   - Central runner/sonic hero visual                   │
-│   - 6 Sound Pack Cards (Breakbeat, Lari Ngacir, GBA,   │
-│     Squid, Sponge, Rubber Bouncy)                      │
-│   - Solid Midnight Pill CTA: [ ->  Swipe to start  o ] │
+│           SURFACE 1: PRE-RUN (SUSPENDED DECK)          │
+│   - Floating frosted brand halo + EQ & Tune buttons    │
+│   - Editorial runner legs hero + orbital cadence dial  │
+│   - Suspended Liquid Glass Tray:                       │
+│     • Sound Engine Capsule + Audition EQ + Popover     │
+│     • Hero Metrics: SPM Target (172) | Pace Sync (5:12)│
+│     • Micro Telemetry: Impulse Damp & Harmonic Lock    │
+│   - Midnight Obsidian Pill: [ >  Swipe to start  o ]   │
 └───────────────────────────┬────────────────────────────┘
                             │ Trigger Start
                             ▼
 ┌────────────────────────────────────────────────────────┐
-│                  SURFACE 2: ACTIVE RUN                 │
-│   - Dual-Tone Stacked Header: Stride / Rhythm          │
-│   - 280px Circular Acoustic Dial (visualizer-dial)     │
-│   - 2 Borderless Metrics: Steps & Cadence (spm)        │
-│   - Bottom Dock Cradle: [ Sound ] [ Active Stride ] [■]│
+│          SURFACE 2: ACTIVE RUN (CADENCE MONOLITH)      │
+│   - Minimal header: Stradio + [ ● LIVE • 32:14 ] pill  │
+│   - Heroic 72px Cadence Monolith (164 SPM)             │
+│   - 256px Acoustic Compass Dial + Coral/Violet Ribbons │
+│   - Frosted 3-Metric Bar: Distance | Pace | Steps      │
+│   - Obsidian Pill: [ ■  Hold to finish  1.5s ]         │
 └──────────────┬───────────────────────────┬─────────────┘
                │ Screen Locked             │ Hold 1.5s
                ▼                           ▼
@@ -61,10 +64,10 @@ The STRADIO MVP architecture is deliberately flat: a single continuous session l
 | Surface | Reached From | Primary Purpose | Visual Focal Point | Primary Actions |
 | :--- | :--- | :--- | :--- | :--- |
 | **First-Launch Immersion Modal** | Initial Cold App Launch (`has_seen_audio_recommendation == false`) | Guide runner to wear headphones or earphones for full adaptive audio immersion. | Daylight dialog card (`340px`) with 3D floating headphones and kinetic soundwaves over `6px` blurred Pre-Run canvas | 1. Tap `I'm Wearing Earphones`<br>2. Tap `Maybe later`<br>3. Tap `X` close |
-| **Surface 1: Pre-Run** | Cold App Launch / Modal Dismiss | Choose sound character and start session immediately without friction. | Central sonic visual framed by two `{colors.surface-card}` sound pack tiles | 1. Select Sound Pack tile<br>2. Trigger `Swipe to start` pill |
-| **Surface 2: Active Run** | Pre-Run Start Pill | Deliver real-time kinetic audio-visual synchrony and two glanceable stats. | `280px` circular `{colors.surface-recessed}` acoustic dial (`visualizer-dial`) | 1. Glance at dial & borderless metrics<br>2. Tap left dock button to swap sound<br>3. Hold right dock button `1.5s` to end |
+| **Surface 1: Pre-Run (Suspended Glass Deck)** | Cold App Launch / Modal Dismiss | Audition sound engines, inspect target cadence/pace, and start session without friction. | Editorial runner monolith over orbital dial + Suspended Liquid Glass Tray (`a65e9b77ea57478893da48c0d41e1e93`) | 1. Tap `Audition` or open Sound Engine popover<br>2. Tap EQ / Calibration top buttons<br>3. Trigger `Swipe to start` pill |
+| **Surface 2: Active Run (Cadence Monolith)** | Pre-Run Start Pill | Deliver real-time kinetic audio-visual synchrony with a single heroic SPM readout and pocket-safe finish control. | `72px` Cadence Monolith (`164 SPM`) + `256px` acoustic compass dial over coral/violet waves (`241f03f82b5a46f199cf058b98dc356b`) | 1. Glance at Monolith SPM, compass dial & 3-metric glass bar<br>2. Press & hold `Hold to finish` pill for `1.5s` to end |
 | **Background Pocket Mode** | Screen Lock / Home | Maintain uninterrupted step detection, stem layering, and audio SFX in pocket. | System Notification Shade (Lockscreen) | 1. Lockscreen notification `Stop run` action |
-| **Surface 3: Run Summary** | Active Run Hold-to-End | Reflect on rhythm consistency and cadence flow before exit or restart. | Open `{colors.warm-ivory}` stem chart (`visualizer-stems`, `3px` bars) | 1. Inspect cadence stems & sync cards<br>2. Tap `Start new run` |
+| **Surface 3: Run Summary** | Active Run Hold-to-End | Reflect on rhythm consistency and cadence flow before exit, share, or restart. | Open `{colors.warm-ivory}` stem chart (`visualizer-stems`, `3px` bars) | 1. Inspect cadence stems & sync cards<br>2. Open Share Rhythm Modal (`Share Rhythm Card` with bundled caption for WhatsApp/messaging, or `Instagram story export 9:16`)<br>3. Tap `Start new run` |
 
 ---
 
@@ -85,34 +88,32 @@ STRADIO speaks like a calm, precise studio instrument. Short, natural sentence c
 
 ## Component Patterns
 
-### 1. Primary Ignition Pill (`button-primary`)
-- **Location:** Surface 1 (Pre-Run), bottom thumb-zone dock.
+### 1. Suspended Glass Deck & Primary Ignition Pill (`liquid-glass-tray` + `button-primary`)
+- **Location:** Surface 1 (Pre-Run), lower 55% Suspended Glass Deck and bottom thumb-zone pill.
 - **Behavior:**
-  - Triggering the solid `{colors.midnight}` pill fires an immediate haptic click (`HapticFeedback.mediumImpact`).
-  - Layer 1 background music stem initiates immediately with a `200 ms` fade-in.
-  - Sensor stream begins sampling raw accelerometer at `100 Hz`.
-  - Transitions viewport smoothly to Surface 2 (Active Run).
+  - Tapping the Sound Engine capsule opens an upward frosted popover (`Midnight Pulse`, `Velvet Stride`, `Cartoon Squeak`) with match scores.
+  - Tapping **`Audition`** plays a live 10-second loop preview at the target tempo (`172 BPM`), turning the button Sonic Coral with animated 3-bar EQ bounce.
+  - Swiping the Deep Midnight Obsidian pill (`Swipe to start`) fires an immediate haptic click (`HapticFeedback.mediumImpact`), fades in Layer 1 background stem over `200 ms`, begins `100 Hz` raw accelerometer sampling, and transitions smoothly to Surface 2 (Active Run: Cadence Monolith).
 
-### 2. Active Dock & Hold-to-End Control (`dock-pill` + `button-icon-circle`)
-- **Location:** Surface 2 (Active Run), bottom recessed pill cradle (`{colors.surface-recessed}`).
+### 2. Hold-to-Finish Obsidian Pill & Frosted Running Metrics Bar (Surface 2)
+- **Location:** Surface 2 (Active Run), bottom thumb zone.
 - **Anatomy:**
-  - Left `48px` circle button: Hot-swaps the active Sound Pack (Breakbeat, Lari Ngacir, GBA, Squid, Sponge, Rubber Bouncy).
-  - Center solid `{colors.midnight}` pill: Displays `Active Stride` with a `5px` `{colors.sonic-coral}` status dot.
-  - Right `48px` circle button: Hold-to-end session control (`■`).
+  - Upper frosted glass bar (`rounded-3xl`, `bg-surface-glass`): Displays `Distance` (`km`), `Pace` (`/km`), and `Steps` (live cumulative step count) in tabular Sora numerals separated by micro dot dividers.
+  - Bottom `56px` Deep Midnight Obsidian pill (`lg-obsidian-surface`): Left `44px` circular alabaster Stop badge (`■` in Deep Coral), centered `Hold to finish` label, and right `1.5s` duration hint.
 - **Behavior (Anti-Accidental-Trigger):**
-  - Instant taps on the stop circle do *not* end the run; the status line whispers `Hold 1.5s to end`.
-  - Pressing and holding fills the `48px` circular border stroke with `{colors.sonic-coral}` over **1.5 seconds**, accompanied by light haptic ticks every `300 ms`.
-  - Reaching `1.5 seconds` triggers heavy haptic confirmation, fades Layer 1 audio over `500 ms`, and transitions to Surface 3 (Run Summary).
-  - Releasing early snaps the ring back to `0` without interrupting audio.
+  - Instant taps do *not* end the run; the pill requires a continuous **1.5-second** press-and-hold.
+  - Holding sweeps a horizontal `{colors.sonic-coral}` progress fill from `0%` to `100%` while the label updates to `Finishing...`, accompanied by light haptic ticks every `300 ms`.
+  - Reaching `1.5 seconds` triggers heavy haptic confirmation (`Run Saved ✓`), fades Layer 1 audio over `500 ms`, and transitions to Surface 3 (Run Summary).
+  - Releasing early snaps the fill bar back to `0%` without interrupting audio.
 
-### 3. Circular Acoustic Dial & Liquid Glass Core Lens (`visualizer-dial` + `liquid-glass-lens`)
-- **Location:** Center of Surface 2 (`256px` recessed circle in `{colors.surface-recessed}` housing a `136px` `{components.liquid-glass-lens}`).
+### 3. Cadence Monolith & Acoustic Compass Dial (`visualizer-dial` + `liquid-glass-lens`)
+- **Location:** Upper-center (`72px` to `76px` `164 SPM` Cadence Monolith) and middle (`256px` acoustic compass dial) of Surface 2.
 - **Optical Shader Engine:**
   - Powered by `dashersw/liquid-glass-js` in web prototypes and `shaders/liquid_glass.frag` (`FragmentProgram` + `BackdropFilter`) in Flutter.
-  - Uses `circleDistance` SDF normals (`u_edgeIntensity: 0.032`, `u_rimIntensity: 0.095`, `u_rippleEffect: 0.08`, `u_blurRadius: 7.0`, `u_tintOpacity: 0.22`) to refract the multi-layered Sonic Coral and Twilight Plum waveforms passing underneath the lens.
+  - Uses `circleDistance` SDF normals (`u_edgeIntensity: 0.032`, `u_rimIntensity: 0.095`, `u_rippleEffect: 0.08`, `u_blurRadius: 7.0`, `u_tintOpacity: 0.22`) over the `144px` optical core ring to refract the drifting Sonic Coral and Rhythm Violet acoustic ribbon waves.
 - **Behavior:**
-  - **Idle State:** When stationary, the central sonic ribbon breathes gently behind the glass lens.
-  - **Footstrike Refraction Pulse:** Within `<30 ms` of foot contact, `u_rippleEffect` surges from `0.08` to `0.24` and `u_edgeIntensity` surges from `0.032` to `0.065` for `180 ms`, causing the liquid glass rim to physically bend and magnify the Sonic Coral wave on impact.
+  - **Idle State (No Steps Detected):** When stationary, the three acoustic ribbon waves rest at a calm, nearly flat baseline (`~1.5px` amplitude, `35%` opacity) and the strike node stays still.
+  - **Step-Detected Active Surge:** Within `<30 ms` of foot contact, the acoustic wave springs alive (amplitude surging up to `36px`, `100%` opacity), the central coral strike node emits an expanding shockwave ring, and `u_rippleEffect` spikes from `0.08` to `0.24` (`u_edgeIntensity` to `0.065`) for `180 ms`. As long as the runner keeps stepping, the wave flows continuously; when steps pause, it smoothly decays back to the calm baseline within `~850 ms`.
   - **Reduced Motion & Transparency:** When `prefers-reduced-motion: reduce` is enabled, radial expansion is replaced by a calm opacity cross-fade. When `prefers-reduced-transparency: reduce` is enabled, the shader yields to a solid `{colors.surface-card}` (`#FAF7F2`) surface.
 
 ### 4. Minimal Cadence Stem Chart (`visualizer-stems`)
@@ -179,17 +180,17 @@ STRADIO speaks like a calm, precise studio instrument. Short, natural sentence c
 *Alex is a 27-year-old developer going for a 5K jog before sunset to clear their head.*
 
 1. **Preparation & First-Launch Guidance:** Alex steps outside and opens STRADIO for the first time. The app presents the Daylight Immersion Dialog: `"Use Earphones for Full Immersion"`. Alex connects wireless earbuds and taps **`"I'm Wearing Earphones"`**. The dialog smoothly scales away in `180 ms`, saving the preference to device cache.
-2. **Ignition:** Surface 1 opens on a calm Warm Ivory canvas. The `BREAKBEAT FVNKY` card shows `Ready • 98% sync`. Alex triggers the solid Midnight bottom pill: **`[ ->  Swipe to start  o ]`**.
-3. **Stride Lock:** A warm synth pad fades in. Surface 2 appears with the dual-tone header **`Stride / Rhythm`** and the `280px` circular dial. On the third step, Alex's foot strikes the pavement: a deep sub-kick fires in the earbuds within `28 ms` while the dial pulses softly in Sonic Coral.
-4. **Acceleration:** Alex settles into a `154 spm` rhythm. The borderless metric pair below the dial updates smoothly in tabular numerals (`154 spm`, `28 ms`).
-5. **The Climax Beat:** As cadence holds above `130 spm`, the background stem cross-fades into a driving rhythm. Alex locks the phone, slips it into a pocket, and runs eyes-free for 24 minutes as every footfall drives the beat.
-6. **Finish:** Back at the doorstep, Alex unlocks the phone and holds the right circular stop button in the bottom dock for `1.5 seconds`. The coral ring completes, audio fades out, and Surface 3 (`Cadence / Flow`) displays the clean `3px` vertical cadence stems alongside `3,620` steps and `94%` rhythm sync.
+2. **Ignition:** Surface 1 (Suspended Glass Deck) opens on a calm Warm Ivory canvas. Alex taps **`Audition`** on `Midnight Pulse` (`98% Match`) to preview the `172 BPM` pulse, then swipes the Deep Midnight Obsidian pill: **`[ >  Swipe to start  o ]`**.
+3. **Stride Lock:** A warm synth pad fades in. Surface 2 (Cadence Monolith) appears with the `LIVE • 00:01` pill, the `72px` **Cadence Monolith** (`164 SPM`), and the `256px` acoustic compass dial. On the third step, Alex's foot strikes the pavement: a deep sub-kick fires in the earbuds within `28 ms` while the central strike node pulses in Sonic Coral.
+4. **Acceleration:** Alex settles into a `164 spm` rhythm. The frosted 3-metric bar below the dial updates smoothly in tabular numerals (`5.42 km`, `5:08 /km`, `4,820` steps).
+5. **The Climax Beat:** As cadence holds above `130 spm`, the background stem cross-fades into a driving rhythm. Alex locks the phone, slips it into a pocket, and runs eyes-free for 32 minutes as every footfall drives the beat.
+6. **Finish:** Back at the doorstep, Alex unlocks the phone and presses and holds the bottom **`Hold to finish`** (`1.5s`) Obsidian pill. The horizontal Sonic Coral fill sweeps across (`Finishing...` -> `Run Saved ✓`), audio fades out, and Surface 3 (`Cadence / Flow`) displays the clean `3px` vertical cadence stems alongside `156 spm` average and `98%` harmonic sync.
 
 ---
 
 ### Flow 2: Jordan, Recovery Jog with Friends
 *Jordan is a 21-year-old student taking an easy recovery jog and wants playful audio feedback.*
 
-1. **Selection:** Jordan launches STRADIO on Surface 1, taps the `SQUID` card (`Playful • Squidward Clunk`), and triggers **`Swipe to start`**.
-2. **In-Run Swap:** Halfway through the jog on Surface 2, Jordan taps the left `48px` circular sound-pack button in the bottom dock to toggle between `SQUID`, `SPONGE`, and `BREAKBEAT FVNKY` without dropping a beat.
-3. **Wrap Up:** Jordan taps `[ Stop run ]` directly from the Android lockscreen notification and reviews the session summary.
+1. **Selection:** Jordan launches STRADIO on Surface 1, opens the Sound Engine popover inside the Suspended Glass Deck, selects `Cartoon Squeak` (`92% match`), taps **`Audition`** for a quick preview, and swipes **`Swipe to start`**.
+2. **Active Run:** During the jog on Surface 2, Jordan glances at the `72px` Cadence Monolith and the frosted `Distance / Pace / Steps` bar without distractions.
+3. **Wrap Up:** Jordan either holds **`Hold to finish`** (`1.5s`) or taps `[ Stop run ]` directly from the Android lockscreen notification and reviews the session summary.

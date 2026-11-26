@@ -233,13 +233,13 @@ STRADIO pairs **Sora** and **Inter** with deliberate restraint, replacing heavy 
 STRADIO uses an 8-point spatial scale with a 4px half-step (`4 / 8 / 12 / 16 / 20 / 24 / 32 / 40 / 48 / 64 px`), designed so at least **60% of the viewport remains open Warm Ivory canvas**:
 
 - **Screen Padding:** `24px` (`{spacing.6}`) horizontal margin on compact phones (`<600px`), expanding to a centered `480px` max-width column with `32px` gutters on tablets and foldables (`600px` to `1024px`).
-- **Top Bar & Stacked Title Zone (Top 18%):** Small centered brand mark (`Stradio`) on Surface 1, or the top-left dual-tone stacked title (`Stride / Rhythm`) balanced by a single `48px` circular sensor button on the right.
+- **Top Bar & Stacked Title Zone (Top 18%):** Floating frosted brand halo (`Stradio`) with `36px` Equalizer (`graphic_eq`) and Calibration (`tune`) action buttons on Surface 1; minimal `Stradio` lockup paired with a live duration pill (`LIVE • 32:14`) on Surface 2; or the dual-tone stacked title (`Cadence / Flow`) on Surface 3.
 - **Central Instrument Zone (Middle 52%):** Dedicated to a single focal visualizer:
-  - *Surface 1 (Pre-Run):* Central 100 Hz IMU waveform profile overlapped at its base by the `liquid-glass-tray` (`type: 'rounded'`, `borderRadius: 24px`) holding the `Pulse` and `Squeak` cards.
-  - *Surface 2 (Active Run):* A `256px` recessed circular dial (`{colors.surface-recessed}`) with a `136px` central `liquid-glass-lens` (`type: 'circle'`) that refracts the live sonic waveform passing underneath.
+  - *Surface 1 (Pre-Run: Suspended Glass Deck, `a65e9b77ea57478893da48c0d41e1e93`):* Top 46% Hero Monolith featuring an editorial runner's legs photographic cutout bleeding completely flush into the absolute top edge of the viewport (`y = 0`, zero top gap behind the status bar) over an ambient orbital cadence dial (`STRIDE NORTH 0°` / `180° PHASE`) and floating `100 Hz IMU • 168 Stride` coordinate pill, flowing directly into the lower 54% Suspended Curved Liquid Glass Tray (`rounded-[32px]`).
+  - *Surface 2 (Active Run: Cadence Monolith, `241f03f82b5a46f199cf058b98dc356b`):* Giant `72px` to `76px` Sora Medium focal `164 SPM` Cadence Monolith above a `256px` acoustic compass calibration dial (`0° / N`, `90°`, `180° / S`, `270°`, `208px` rotating dashed ring, `144px` frosted optical core ring) layered over animated Sonic Coral and Rhythm Violet acoustic ribbon waves.
   - *Surface 3 (Summary):* Wide-spaced `3.5px` vertical pill stems (`14px` gap) showing cadence rhythm over time with `min. 118 spm` and `max. 164 spm` whispered below.
-- **Borderless Metric Strip (Lower-Middle 15%):** Two clean metric pairs aligned left and right directly on the canvas (`Pace sync` on the left, `Step latency` on the right), eliminating boxy card grids during active running.
-- **Thumb-Zone Dock (Bottom 15%):** Solid `{colors.midnight}` pill CTA on Surface 1, or the `liquid-glass-dock` capsule (`type: 'pill'`) on Surface 2 housing the `48px` circular controls and solid Midnight status pill.
+- **Running Metrics Strip (Lower-Middle 15%):** On Surface 2, a single whisper-quiet frosted glass bar (`rounded-3xl`, `bg-surface-glass`) aligns three balanced metrics separated by micro dot dividers (`Distance 5.42 km`, `Pace 5:08 /km`, `Steps 4,820`), eliminating dense stat grids mid-stride.
+- **Thumb-Zone Anchor Pill (Bottom 15%):** A single `56px` (`h-14`) Deep Midnight Obsidian pill anchors the thumb arc on both Surface 1 (`Swipe to start`) and Surface 2 (`Hold to finish • 1.5s` with horizontal Sonic Coral progress fill).
 
 ## Elevation & Depth
 
@@ -263,27 +263,27 @@ The three shape primitives of `dashersw/liquid-glass-js` map 1:1 to STRADIO's co
 
 ## Components
 
-### 1. Liquid Glass Sound-Pack Tray (`liquid-glass-tray` on Surface 1)
-- **Purpose:** Overlaps the lower edge of the Pre-Run sonic waveform hero so the runner sees the live audio waves refracting through the tray before starting (`R-10`: sole glass element on Surface 1).
-- **Shader Configuration (`dashersw/liquid-glass-js`):** `type: 'rounded'`, `borderRadius: 24`, `tintOpacity: 0.22`, `edgeIntensity: 0.032`, `rimIntensity: 0.095`, `cornerBoost: 0.045`.
-- **Nested Children:** Houses the two interactive sound-pack cards (`Pulse 98%` and `Squeak 94%`) with high-contrast `#191923` and `#625D72` typography (`>= 5.00:1` WCAG AA).
+### 1. Suspended Liquid Glass Deck (`liquid-glass-tray` on Surface 1 • Stitch ID `a65e9b77ea57478893da48c0d41e1e93`)
+- **Purpose:** Sits directly beneath the editorial runner monolith and orbital cadence ring (`R-10`: sole glass element on Surface 1), uniting sound engine selection, live auditioning, and pre-run cadence targets in one sculpted floating deck.
+- **Shader & Surface Configuration:** `type: 'rounded'`, `borderRadius: 32`, `backdrop-filter: blur(28px) saturate(190%)`, `1.5px` specular white rim (`rgba(255, 255, 255, 0.95)`), `tintOpacity: 0.22`, `edgeIntensity: 0.032`, `rimIntensity: 0.095`, `cornerBoost: 0.045`.
+- **Nested Anatomy:**
+  - *Sound Engine Selection Capsule:* Displays active sound engine (`Midnight Pulse`, `98% Match`, `Sound Engine • Adaptive Synth 28ms`) with an interactive **`Audition`** pill button (3-bar animated EQ that shifts to Sonic Coral `172 BPM` while auditioning) and floating upward popover selector (`Midnight Pulse`, `Velvet Stride`, `Cartoon Squeak`).
+  - *Typographic Cadence & Pace Hero Pair:* Split two-column `46px` Sora Bold readouts (`SPM TARGET: 172 spm` and `PACE SYNC: 5:12 /km`) separated by a subtle hairline divider.
+  - *Micro Telemetry Strip:* `142ms Impulse Damp` (Twilight Plum dot) and `99.4% Harmonic Lock` (Sonic Coral dot).
 
 ### 2. Primary Ignition Pill (`button-primary` on Surface 1)
 - **Purpose:** Provides an unmistakable, high-contrast start control (`Swipe to start`) in the bottom thumb zone.
-- **Visuals:** Solid `{colors.midnight}` (`#191923`) pill, `56px` height, sentence-case `{typography.button-label}` in `{colors.text-on-dark}` (`#F5F0E8`), flanked by a `38px` subtle inner circle icon (`→`) on the left and a ring indicator on the right.
+- **Visuals:** Deep Midnight Obsidian (`lg-obsidian-pill`) capsule, `56px` height, sentence-case `{typography.button-label}` in `{colors.text-on-dark}` (`#F5F0E8`), flanked by a `44px` alabaster circular thumb slider (`chevron_right`) on the left and a pulsing Sonic Coral sensor live ring on the right.
 
-### 3. Circular Acoustic Dial with Liquid Glass Core Lens (`visualizer-dial` + `liquid-glass-lens` on Surface 2)
-- **Purpose:** Translates real-time step detection (`<30 ms`) into an optical refraction pulse at the center of Surface 2 (`R-10`: glass element 1 of 2 on Surface 2).
-- **Anatomy:** Outer `256px` circle in `{colors.surface-recessed}` (`#EAE4DC`) with four cardinal dot markers (`kick •`, `stem •`, `bass •`, `sync •`). Inside sits a `136px` `liquid-glass-lens` (`type: 'circle'`, `warp: true`) positioned directly over the animated Sonic Coral / Twilight Plum ribbon waves.
-- **Footstep Refraction Pulse:** On every confirmed step, `u_rippleEffect` surges from `0.08` to `0.24` and `u_edgeIntensity` surges from `0.032` to `0.065` for `180 ms`, causing the liquid glass lens to physically ripple and magnify the waveform on foot impact.
+### 3. Cadence Monolith & Acoustic Compass Dial (`visualizer-dial` + `liquid-glass-lens` on Surface 2 • Stitch ID `241f03f82b5a46f199cf058b98dc356b`)
+- **Purpose:** Eliminates mid-run visual noise by pairing a giant `72px` to `76px` Sora Medium **Cadence Monolith** (`164 SPM`) with a live acoustic compass dial (`R-10`: glass element 1 of 2 on Surface 2).
+- **Anatomy:** Outer `256px` cardinal orbit ring (`0° / N`, `90°`, `180° / S`, `270°`) with ultra-fine crosshairs, middle `208px` rotating dashed calibration ring with Sonic Coral and Twilight Plum cadence notches, and an inner `144px` frosted optical core ring housing a step-triggered Sonic Coral strike node. Multi-layered SVG acoustic ribbon waves (`#FF765F` / `#B53D28` coral and `#46509E` / `#8C79BD` violet) sit behind the dial.
+- **Step-Reactive Wave Physics:** The acoustic ribbon wave does **not** oscillate continuously while stationary. When idle (zero steps detected), all three ribbons rest as a calm, low-amplitude baseline (`~1.5px`, `35%` opacity). On every confirmed footstrike (`<30 ms`), wave energy spikes to `1.0` (amplitude expanding up to `36px`, opacity `100%`), an expanding Sonic Coral shockwave ring radiates from the center strike node, and `u_rippleEffect` surges from `0.08` to `0.24` (`u_edgeIntensity` to `0.065`) for `180 ms`. If no subsequent step arrives, the wave decays smoothly back to the calm resting baseline over `~850 ms`.
 
-### 4. Liquid Glass Bottom Dock Cradle (`liquid-glass-dock` on Surface 2)
-- **Purpose:** Floating capsule cradle in the bottom thumb arc (`R-10`: glass element 2 of 2 on Surface 2).
-- **Shader Configuration:** `type: 'pill'`, `borderRadius: 30`, `tintOpacity: 0.22`, sampling the warm ivory and subtle sonic bloom behind the dock.
-- **Nested Controls:**
-  - Left `48px` circular button: Hot-swaps Sound Pack (`Midnight Pulse` vs `Cartoon Squeak`).
-  - Center solid `{colors.midnight}` pill: Displays `Stride Rhythm` with a `6px` `{colors.sonic-coral}` status dot.
-  - Right `48px` circular Hold-to-End button (`■`): Holding for `1.5 seconds` fills its circular border in `{colors.sonic-coral}` before ending the session.
+### 4. Frosted Running Metrics Bar & Hold-to-Finish Obsidian Pill (Surface 2)
+- **Purpose:** Replaces the legacy 3-button dock with a calmer, pocket-safe two-tier bottom layout (`R-10`: glass element 2 of 2 on Surface 2).
+- **Frosted Running Metrics Bar:** Full-width `rounded-3xl` translucent glass capsule (`bg-surface-glass`, `border-surface-glass-rim`, `backdrop-blur-md`) displaying three glanceable tabular metrics separated by micro dot dividers: **Distance** (`5.42 km`), **Pace** (`5:08 /km`), and **Steps** (`4,820` live cumulative step count).
+- **Hold-to-Finish Obsidian Pill:** Single `56px` Deep Midnight Obsidian pill (`lg-obsidian-surface`) with a left `44px` circular alabaster stop badge (`stop` in Deep Coral), centered `Hold to finish` label, and right `1.5s` hint. Pressing and holding sweeps a horizontal Sonic Coral progress fill across the pill over `1.5 seconds` (`Finishing...` -> `Run Saved ✓`), preventing accidental sweat or pocket stops.
 
 ### 5. Minimal Cadence Stem Chart & Sync Lens (`visualizer-stems` on Surface 3)
 - **Purpose:** Answers "How steady was my running rhythm across the session?" on Surface 3 without spreadsheet tables.
@@ -295,8 +295,15 @@ The three shape primitives of `dashersw/liquid-glass-js` map 1:1 to STRADIO's co
 ### 7. Graphic Ribbon Wave System (Brand Graphic Language)
 - **Purpose:** Supplies the high-contrast multi-layered soundwave curves (`assets/design/stradio_ribbon_vector.svg`, `ribbon_tight_duo.png`) that pass behind the Liquid Glass lenses so the SDF edge refraction has rich chromatic contours to bend.
 
-### 8. Shareable Running Result 9:16 Story Card Suite (`story_06` to `story_14` for Instagram Story Export)
+### 8. Share Rhythm Modal & 9:16 Story Card Suite (`7b5582113012427782ee0b7b0f91e01a`, `story_06` to `story_14`)
+- **Share Rhythm Modal (`7b5582113012427782ee0b7b0f91e01a`):** Clean, streamlined frosted share sheet constrained strictly to the `390px` mobile viewport (`overflow-x: hidden`, zero right-edge button or text clipping) displaying a scrollbar-free proportional card preview carousel (`244px` cards: `Aura Wave`, `Sonic Dial`, `Minimal Stride`) directly above **only two primary actions** (no redundant `Quick Share` icon grid):
+  1. **`Share Rhythm Card`** (solid Midnight pill): Triggers the native OS share sheet (`share_plus` / Android Intent / iOS `UIActivityViewController`) with **both** the rendered Rhythm Card image **and** a pre-composed run summary message/caption automatically included so sharing to WhatsApp, Telegram, or Messages works in one tap.
+  2. **`Instagram story export 9:16`** (light pill): Opens the full 9:16 Story Export suite (`Transparent Sticker` / `Photo Glass`).
 - **Purpose:** Lets the runner switch between **Transparent Sticker / Liquid Glass** and **Photo Glass** in the top 2-option navbar pill (`Transparent Sticker | Photo Glass`), plus toggle card themes in the sub-navbar below.
+- **Photo Glass Optical Glassmorphism Spec (`story_12` to `story_14`):** Rejects flat milky blur boxes (`bg-white/70`) in favor of true multi-layer optical glassmorphism:
+  - *Directional Translucent Glass Body:* 4-stop diagonal gradient (`rgba(255,255,255,0.44)` -> `0.16` -> `0.06` -> `0.26`) paired with `backdrop-filter: blur(16px) saturate(220%) brightness(1.08)` so background photo colors glow vividly through the glass.
+  - *Specular Catchlight & Rim:* `1.25px` translucent white rim (`rgba(255,255,255,0.62)`), top-left inset catchlight (`0 1.5px 1.5px rgba(255,255,255,0.92)`), and a subtle diagonal corner reflection overlay (`125deg`, `46%` to `0%` white).
+  - *Sub-Tiles & Depth:* Inner telemetry pods use lighter crystal glass (`46%` to `20%` white gradient, `12px` blur) floating above deep ambient shadows (`0 24px 52px -12px rgba(8,12,22,0.48)`).
 - **Transparent Sticker & Liquid Glass Series:**
   - `story_06_aura_wave` (`16178858045008238785`): Frosted Alabaster sticker with 20 cadence stem bars and bottom acoustic ribbon wave.
   - `story_07_sonic_dial` (`0d39adbba7224c97bea508340ae544d0`): Smoked Obsidian sticker with circular Cadence Resonance Dial (`156 SPM`).
@@ -306,7 +313,7 @@ The three shape primitives of `dashersw/liquid-glass-js` map 1:1 to STRADIO's co
   - Selecting `Photo Glass` reveals the Photo Glass options (`Classic Wave | Orbital Nexus | Topo Shard`) and the bottom **Horizontal Photo Carousel Strip** (`None`, `+ Add` custom photo upload, active photo thumbnail with `#FF765F` ring, and preset backdrops).
   - `story_13_pg_orbital_nexus` (`4e36334cee174834858424800e50a2e3` Canonical Google Stitch Liquid Glass): Circular `316px` frosted radar orb with 3D elevation stride ribbons and `156 spm / Stride Resonance Lock` hub, interlocking seamlessly into the lower `344px` capsule dock housing the triple frosted telemetry pods (`5.42 km`, `32:40`, `5:12 /km`). Header brand mark and timestamps are cleanly excised per design review.
   - `story_12_pg_classic_wave` (`7915119495940639354` Forest Trail Dynamic Tint Glass): Rounded `36px` frosted card with 4 corner anchor dots, 20 cadence stems, and bottom dual-wave SVG ribbon.
-  - `story_14_pg_topo_shard` (`cf875846d06d41a3a0c188ccfabaecdf` Topo Shard): Sharp-edged architectural frosted glass matrix card featuring a faceted topographic ridge graph and 3 metric tiles (`DST 5.42`, `TIME 32:40`, `TEMPO 5:12`).
+  - `story_14_pg_topo_shard` (`cf875846d06d41a3a0c188ccfabaecdf` Topo Shard): Strict **90-degree sharp architectural corners** (`borderRadius: 0` on the outer glass plate and inner metric tiles, zero chamfer/rounding) featuring a faceted topographic ridge graph and 3 crisp square-edge glass tiles (`DST 5.42`, `TIME 32:40`, `TEMPO 5:12`).
   - Uploading any photo via `+ Add` (or choosing a preset) samples its RGB palette on a 2D Canvas (`--pg-r`, `--pg-g`, `--pg-b`) and dynamically tints all three Photo Glass themes (`Classic Wave`, `Orbital Nexus`, `Topo Shard`) while preserving `#191923` Midnight and `#4A4658` Slate typography (`>= 4.5:1` contrast) and `prefers-reduced-transparency: reduce` fallback.
 
 ### 9. First-Launch Audio Device Recommendation Modal (`modal_first_launch_audio` • Stitch ID `d2a348197ade4542b9cb973d00d90655`)
@@ -317,7 +324,7 @@ The three shape primitives of `dashersw/liquid-glass-js` map 1:1 to STRADIO's co
   - Dismissing via either button or the top-right close icon writes `has_seen_audio_recommendation = true` so returning runners land directly on Pre-Run Ignition without friction.
 - **Card Anatomy & Layout Tokens:**
   - **Outer Container:** Floating dialog card with `max-w-[340px]`, `24px` corner radius (`rounded-3xl`), `95%` opacity Surface Card fill (`#FAF7F2/95`), crisp `1px` translucent white rim (`rgba(255, 255, 255, 0.90)`), and soft ambient elevation (`shadow-2xl`).
-  - **Hero Illustration Header:** `176px` height (`h-44`) top banner framed by an inner warm recessed ivory background (`#EAE4DC`), showcasing a floating daylight studio render of minimalist over-ear headphones encircled by kinetic coral and violet acoustic soundwave ribbons.
+  - **Hero Illustration Header:** `176px` height (`h-44`) top banner framed by an inner warm recessed ivory background (`#EAE4DC`), showcasing a floating daylight studio render of minimalist over-ear headphones encircled by kinetic coral and violet acoustic soundwave ribbons (Stitch asset ID `0ec12181bbb946bc8244cae5770ef349`).
   - **Top-Right Dismiss Button:** `28px` circular floating blur pill (`w-7 h-7 rounded-full bg-black/20 hover:bg-black/35 backdrop-blur-md`) with centered `15px` white `close` icon.
   - **Title & Badge:** `18px` Sora semibold (`font-title-stacked-primary`, `#191923`, line-height `1.35`) headline reading `"Use Earphones for Full Immersion"`, flanked by a soft coral status badge `"Recommended"` (`bg-secondary-container/15 text-text-accent-deep`, `#B53D28`, `11px` font weight `600`).
   - **Instructional Microcopy:** `13px` Inter regular (`font-body-subtle`, `#625D72`, line-height `1.5`) reading: `"For a better experience, please use your earphones or headphones so you can clearly hear adaptive tempo soundscapes and stride feedback."`
@@ -348,5 +355,7 @@ The three shape primitives of `dashersw/liquid-glass-js` map 1:1 to STRADIO's co
 - **Why integrate `dashersw/liquid-glass-js` (and `shaders/liquid_glass.frag`) on 1 to 2 lenses per screen?** Gives the acoustic waves a physical, optical lens that ripples on footstrike (`<30 ms`) and refracts the sound-pack tray edges (`image.png` Screen 1 & 2) while strictly obeying the `R-10` glass dose cap.
 - **Why solid Midnight (`#191923`) for the bottom pill dock?** Mirrors the reference's grounded dark bottom pill (`Swipe to start`, `Stride Rhythm`) and guarantees `15.37:1` contrast in outdoor sunlight.
 - **Why Sora `500`/`600` + Inter `400`/`500` in sentence case?** Eliminates loud fitness-app shouting so the typography feels quiet, precise, and effortless to scan in under a second.
-- **Why a `256px` circular dial and `3.5px` wide-spaced stem bars?** Gives each screen a single sculptural focal point with generous whitespace instead of a generic dashboard card grid.
-- **Why borderless metric pairs on the Active Run screen?** Reduces visual boxes so the runner's eye reads two numbers (`Pace sync` and `Step latency`) immediately below the dial.
+- **Why add editorial running imagery to Pre-Run Ignition and step-triggered waves to Active Run (Design Review Feedback from Mas Zay)?** The earlier ultra-clean layout risked looking too abstract at first glance, making first-time users unsure what category of app Stradio is. Pinning the striding runner cutout flush to the top of Pre-Run Ignition communicates "running" in under 0.5 seconds, while making the Active Run acoustic wave stay calm until an actual footstep triggers it gives immediate visual confirmation that the motion sensor is actively working.
+- **Why a `256px` acoustic compass dial and `72px` Cadence Monolith on Active Run?** Elevates live SPM into an unmistakable focal monolith while the compass ring and step-triggered coral/violet ribbons communicate live sensor detection at a split-second glance.
+- **Why a single `Hold to finish` (`1.5s`) Obsidian pill instead of a 3-button Active Run dock?** Removes mid-stride tap ambiguity and accidental pocket stops, while the frosted 3-metric bar above (`Distance`, `Pace`, `Steps`) keeps essential telemetry whisper-quiet and balanced.
+- **Why the Suspended Glass Deck with built-in `Audition` on Pre-Run Ignition?** Lets runners hear and switch sound engines (`Midnight Pulse`, `Velvet Stride`, `Cartoon Squeak`) right next to their `SPM TARGET` and `PACE SYNC` before swiping to start.
