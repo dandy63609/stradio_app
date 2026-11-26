@@ -1,7 +1,7 @@
 import 'dart:async';
 
-import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter_soloud/flutter_soloud.dart';
 
 import '../models/sound_pack.dart';
 
@@ -17,6 +17,8 @@ abstract class AudioLoopBackend {
   });
 
   Future<void> setVolume(double volume);
+
+  Future<void> fadeVolume(double volume, Duration duration);
 
   Future<void> setPlaybackRate(double rate);
 
@@ -38,48 +40,113 @@ abstract class StepSfxBackend {
   Future<void> dispose();
 }
 
-/// Production Layer 1 backend powered by `audioplayers`.
-class AudioplayersLoopBackend implements AudioLoopBackend {
-  AudioplayersLoopBackend({this.requestAudioFocus = false});
+/// Shared single-flight initializer for the global native SoLoud C++ mixer.
+class _SoLoudRuntime {
+  static Future<void>? _initFuture;
 
-  final bool requestAudioFocus;
-  AudioPlayer? _player;
+  static Future<SoLoud> ensureInitialized() async {
+    final soloud = SoLoud.instance;
+    if (soloud.isInitialized) return soloud;
+    _initFuture ??= soloud.init().catchError((Object error) {
+      _initFuture = null;
+      throw error;
+    });
+    await _initFuture;
+    return soloud;
+  }
+}
+
+/// Production Layer 1 backend powered by `flutter_soloud` (single C++ audio mixer,
+/// gapless `.ogg`/`.mp3` looping, native audio-thread `fadeVolume`, and Voice Group sync).
+class SoLoudLoopBackend implements AudioLoopBackend {
+  SoLoudLoopBackend();
+
+  AudioSource? _source;
+  String? _loadedAssetPath;
+  SoundHandle? _handle;
   bool _isStarted = false;
-  double _lastRate = 1.0;
 
-  Future<AudioPlayer> _ensurePlayer() async {
-    final existing = _player;
-    if (existing != null) return existing;
-
-    final player = AudioPlayer();
-    // Prevent audioplayers FramePositionUpdater from scheduling 60fps getCurrentPosition loops.
-    player.positionUpdater = null;
-    await player.setReleaseMode(ReleaseMode.loop);
-    await player.setAudioContext(
-      AudioContext(
-        android: AudioContextAndroid(
-          isSpeakerphoneOn: false,
-          stayAwake: false,
-          contentType: AndroidContentType.music,
-          usageType: AndroidUsageType.media,
-          audioFocus: requestAudioFocus
-              ? AndroidAudioFocus.gain
-              : AndroidAudioFocus.none,
-        ),
-        iOS: AudioContextIOS(
-          category: AVAudioSessionCategory.playback,
-          options: const {AVAudioSessionOptions.mixWithOthers},
-        ),
-      ),
-    );
-    _player = player;
-    return player;
+  Future<AudioSource> _ensureLoaded(SoLoud soloud, String assetPath) async {
+    if (_source != null && _loadedAssetPath == assetPath) {
+      return _source!;
+    }
+    await _releaseSource(soloud);
+    final loaded = await soloud.loadAsset(assetPath, mode: LoadMode.memory);
+    _source = loaded;
+    _loadedAssetPath = assetPath;
+    return loaded;
   }
 
-  String _normalizeAssetPath(String assetPath) =>
-      assetPath.startsWith('assets/')
-          ? assetPath.substring('assets/'.length)
-          : assetPath;
+  Future<void> _releaseSource(SoLoud soloud) async {
+    final handle = _handle;
+    _handle = null;
+    _isStarted = false;
+    if (handle != null && soloud.isInitialized) {
+      try {
+        await soloud.stop(handle);
+      } on Object catch (error) {
+        debugPrint('SoLoudLoopBackend.stop error: $error');
+      }
+    }
+    final source = _source;
+    _source = null;
+    _loadedAssetPath = null;
+    if (source != null && soloud.isInitialized) {
+      try {
+        await soloud.disposeSource(source);
+      } on Object catch (error) {
+        debugPrint('SoLoudLoopBackend.disposeSource error: $error');
+      }
+    }
+  }
+
+  /// Starts two [SoLoudLoopBackend] stems on the exact same sample clock using a
+  /// native SoLoud Voice Group (`FR-3.4` LARI_NGACIR dual-stem synchronization).
+  static Future<void> startSyncedPair({
+    required SoLoudLoopBackend primary,
+    required SoLoudLoopBackend secondary,
+    required String primaryAsset,
+    required String secondaryAsset,
+    required double primaryVolume,
+    required double secondaryVolume,
+  }) async {
+    try {
+      final soloud = await _SoLoudRuntime.ensureInitialized();
+      await Future.wait([primary.stop(), secondary.stop()]);
+      final sources = await Future.wait([
+        primary._ensureLoaded(soloud, primaryAsset),
+        secondary._ensureLoaded(soloud, secondaryAsset),
+      ]);
+
+      final h1 = soloud.play(
+        sources[0],
+        volume: primaryVolume.clamp(0.0, 1.0),
+        paused: true,
+        looping: true,
+      );
+      final h2 = soloud.play(
+        sources[1],
+        volume: secondaryVolume.clamp(0.0, 1.0),
+        paused: true,
+        looping: true,
+      );
+
+      final group = soloud.createVoiceGroup();
+      try {
+        soloud.addVoicesToGroup(group, [h1, h2]);
+        soloud.setPause(group, false);
+      } finally {
+        soloud.destroyVoiceGroup(group);
+      }
+
+      primary._handle = h1;
+      primary._isStarted = true;
+      secondary._handle = h2;
+      secondary._isStarted = true;
+    } on Object catch (error) {
+      debugPrint('SoLoudLoopBackend.startSyncedPair error: $error');
+    }
+  }
 
   @override
   Future<void> startLoop(
@@ -88,153 +155,136 @@ class AudioplayersLoopBackend implements AudioLoopBackend {
     double playbackRate = 1.0,
   }) async {
     try {
-      final player = await _ensurePlayer();
-      await player.setVolume(volume.clamp(0.0, 1.0));
-      await player.play(AssetSource(_normalizeAssetPath(assetPath)));
-      if ((playbackRate - _lastRate).abs() > 0.001 ||
-          (playbackRate - 1.0).abs() > 0.001) {
-        await player.setPlaybackRate(playbackRate);
-      }
-      _lastRate = playbackRate;
+      final soloud = await _SoLoudRuntime.ensureInitialized();
+      await stop();
+      final source = await _ensureLoaded(soloud, assetPath);
+      _handle = soloud.play(
+        source,
+        volume: volume.clamp(0.0, 1.0),
+        looping: true,
+        scale: playbackRate,
+      );
       _isStarted = true;
     } on Object catch (error) {
-      debugPrint('AudioplayersLoopBackend.startLoop error ($assetPath): $error');
+      debugPrint('SoLoudLoopBackend.startLoop error ($assetPath): $error');
     }
   }
 
   @override
   Future<void> setVolume(double volume) async {
-    final player = _player;
-    if (player == null) return;
+    final handle = _handle;
+    if (handle == null || !_isStarted || !SoLoud.instance.isInitialized) return;
     try {
-      await player.setVolume(volume.clamp(0.0, 1.0));
+      SoLoud.instance.setVolume(handle, volume.clamp(0.0, 1.0));
     } on Object catch (error) {
-      debugPrint('AudioplayersLoopBackend.setVolume error: $error');
+      debugPrint('SoLoudLoopBackend.setVolume error: $error');
+    }
+  }
+
+  @override
+  Future<void> fadeVolume(double volume, Duration duration) async {
+    final handle = _handle;
+    if (handle == null || !_isStarted || !SoLoud.instance.isInitialized) return;
+    try {
+      final clamped = volume.clamp(0.0, 1.0);
+      if (duration <= Duration.zero) {
+        SoLoud.instance.setVolume(handle, clamped);
+      } else {
+        SoLoud.instance.fadeVolume(handle, clamped, duration);
+      }
+    } on Object catch (error) {
+      debugPrint('SoLoudLoopBackend.fadeVolume error: $error');
     }
   }
 
   @override
   Future<void> setPlaybackRate(double rate) async {
-    final player = _player;
-    if (player == null || !_isStarted) return;
+    final handle = _handle;
+    if (handle == null || !_isStarted || !SoLoud.instance.isInitialized) return;
     try {
-      await player.setPlaybackRate(rate);
-      _lastRate = rate;
+      SoLoud.instance.setRelativePlaySpeed(handle, rate);
     } on Object catch (error) {
-      debugPrint('AudioplayersLoopBackend.setPlaybackRate error: $error');
+      debugPrint('SoLoudLoopBackend.setPlaybackRate error: $error');
     }
   }
 
   @override
   Future<void> pause() async {
-    final player = _player;
-    if (player == null || !_isStarted) return;
+    final handle = _handle;
+    if (handle == null || !_isStarted || !SoLoud.instance.isInitialized) return;
     try {
-      await player.pause();
+      SoLoud.instance.setPause(handle, true);
     } on Object catch (error) {
-      debugPrint('AudioplayersLoopBackend.pause error: $error');
+      debugPrint('SoLoudLoopBackend.pause error: $error');
     }
   }
 
   @override
   Future<void> resume() async {
-    final player = _player;
-    if (player == null || !_isStarted) return;
+    final handle = _handle;
+    if (handle == null || !_isStarted || !SoLoud.instance.isInitialized) return;
     try {
-      await player.resume();
+      SoLoud.instance.setPause(handle, false);
     } on Object catch (error) {
-      debugPrint('AudioplayersLoopBackend.resume error: $error');
+      debugPrint('SoLoudLoopBackend.resume error: $error');
     }
   }
 
   @override
   Future<void> stop() async {
-    final player = _player;
+    final handle = _handle;
+    _handle = null;
     _isStarted = false;
-    if (player == null) return;
+    if (handle == null || !SoLoud.instance.isInitialized) return;
     try {
-      await player.stop();
+      await SoLoud.instance.stop(handle);
     } on Object catch (error) {
-      debugPrint('AudioplayersLoopBackend.stop error: $error');
+      debugPrint('SoLoudLoopBackend.stop error: $error');
     }
   }
 
   @override
   Future<void> dispose() async {
-    final player = _player;
-    _player = null;
-    _isStarted = false;
-    if (player == null) return;
-    try {
-      await player.dispose();
-    } on Object catch (error) {
-      debugPrint('AudioplayersLoopBackend.dispose error: $error');
+    if (!SoLoud.instance.isInitialized) {
+      _handle = null;
+      _source = null;
+      _loadedAssetPath = null;
+      _isStarted = false;
+      return;
     }
+    await _releaseSource(SoLoud.instance);
   }
 }
 
-/// Production Layer 2 backend powered by `audioplayers` in `PlayerMode.lowLatency`
-/// (uses native Android `SoundPool` under the hood without the discontinued `soundpool` plugin).
-class AudioplayersSfxBackend implements StepSfxBackend {
-  AudioplayersSfxBackend();
+/// Production Layer 2 backend powered by `flutter_soloud` (preloaded in-memory PCM
+/// triggered via synchronous Dart FFI with native polyphony and pitch scaling).
+class SoLoudSfxBackend implements StepSfxBackend {
+  SoLoudSfxBackend();
 
-  static const int _voicesPerAsset = 2;
+  final Map<String, AudioSource> _sources = {};
 
-  final Map<String, List<AudioPlayer>> _playerPools = {};
-  final Map<String, int> _poolCursor = {};
-  final Map<AudioPlayer, double> _lastRates = {};
-  final Map<AudioPlayer, double> _lastVolumes = {};
-
-  String _normalizeAssetPath(String assetPath) =>
-      assetPath.startsWith('assets/')
-          ? assetPath.substring('assets/'.length)
-          : assetPath;
-
-  Future<AudioPlayer> _createPreloadedVoice(String assetPath) async {
-    final player = AudioPlayer();
-    // SoundPool does not support getCurrentPosition and FramePositionUpdater leaks frame callbacks.
-    player.positionUpdater = null;
-    await player.setPlayerMode(PlayerMode.lowLatency);
-    await player.setReleaseMode(ReleaseMode.stop);
-    await player.setAudioContext(
-      AudioContext(
-        android: const AudioContextAndroid(
-          isSpeakerphoneOn: false,
-          stayAwake: false,
-          contentType: AndroidContentType.sonification,
-          usageType: AndroidUsageType.game,
-          audioFocus: AndroidAudioFocus.none,
-        ),
-        iOS: AudioContextIOS(
-          category: AVAudioSessionCategory.playback,
-          options: const {AVAudioSessionOptions.mixWithOthers},
-        ),
-      ),
-    );
-    await player.setSourceAsset(_normalizeAssetPath(assetPath));
-    return player;
-  }
-
-  Future<List<AudioPlayer>> _ensurePreloadedPool(String assetPath) async {
-    final existing = _playerPools[assetPath];
-    if (existing != null && existing.isNotEmpty) return existing;
-
-    final pool = <AudioPlayer>[];
-    for (var i = 0; i < _voicesPerAsset; i++) {
-      pool.add(await _createPreloadedVoice(assetPath));
-    }
-    _playerPools[assetPath] = pool;
-    return pool;
+  Future<AudioSource> _ensureLoaded(SoLoud soloud, String assetPath) async {
+    final existing = _sources[assetPath];
+    if (existing != null) return existing;
+    final loaded = await soloud.loadAsset(assetPath, mode: LoadMode.memory);
+    _sources[assetPath] = loaded;
+    return loaded;
   }
 
   @override
   Future<void> preload(List<String> assetPaths) async {
-    for (final path in assetPaths) {
-      try {
-        await _ensurePreloadedPool(path);
-      } on Object catch (error) {
-        debugPrint('AudioplayersSfxBackend.preload error ($path): $error');
+    if (assetPaths.isEmpty) return;
+    try {
+      final soloud = await _SoLoudRuntime.ensureInitialized();
+      for (final path in assetPaths) {
+        try {
+          await _ensureLoaded(soloud, path);
+        } on Object catch (error) {
+          debugPrint('SoLoudSfxBackend.preload error ($path): $error');
+        }
       }
+    } on Object catch (error) {
+      debugPrint('SoLoudSfxBackend.preload init error: $error');
     }
   }
 
@@ -245,44 +295,24 @@ class AudioplayersSfxBackend implements StepSfxBackend {
     double volume = 1.0,
   }) async {
     try {
-      final pool = await _ensurePreloadedPool(assetPath);
-      final cursor = _poolCursor[assetPath] ?? 0;
-      final player = pool[cursor % pool.length];
-      _poolCursor[assetPath] = (cursor + 1) % pool.length;
-
-      final clampedVol = volume.clamp(0.0, 1.0);
-      final prevVol = _lastVolumes[player];
-      if (prevVol == null || (clampedVol - prevVol).abs() > 0.01) {
-        await player.setVolume(clampedVol);
-        _lastVolumes[player] = clampedVol;
-      }
-      final prevRate = _lastRates[player] ?? 1.0;
-      if ((rate - prevRate).abs() > 0.001) {
-        await player.setPlaybackRate(rate);
-        _lastRates[player] = rate;
-      }
-      // Reset WrappedPlayer/SoundPoolPlayer playing state (SoundPool never emits onCompletion).
-      await player.stop();
-      await player.resume();
+      final soloud = await _SoLoudRuntime.ensureInitialized();
+      final source = await _ensureLoaded(soloud, assetPath);
+      soloud.play(source, volume: volume.clamp(0.0, 1.0), scale: rate);
     } on Object catch (error) {
-      debugPrint('AudioplayersSfxBackend.play error ($assetPath): $error');
+      debugPrint('SoLoudSfxBackend.play error ($assetPath): $error');
     }
   }
 
   @override
   Future<void> dispose() async {
-    final allPlayers = [
-      for (final pool in _playerPools.values) ...pool,
-    ];
-    _playerPools.clear();
-    _poolCursor.clear();
-    _lastRates.clear();
-    _lastVolumes.clear();
-    for (final player in allPlayers) {
+    final allSources = _sources.values.toList();
+    _sources.clear();
+    if (!SoLoud.instance.isInitialized) return;
+    for (final source in allSources) {
       try {
-        await player.dispose();
+        await SoLoud.instance.disposeSource(source);
       } on Object catch (error) {
-        debugPrint('AudioplayersSfxBackend.dispose error: $error');
+        debugPrint('SoLoudSfxBackend.dispose error: $error');
       }
     }
   }
@@ -299,6 +329,9 @@ class NoopAudioLoopBackend implements AudioLoopBackend {
 
   @override
   Future<void> setVolume(double volume) async {}
+
+  @override
+  Future<void> fadeVolume(double volume, Duration duration) async {}
 
   @override
   Future<void> setPlaybackRate(double rate) async {}
@@ -343,13 +376,13 @@ class StradioAudioEngine {
     AudioClock? clockMs,
     this.fadeDuration = const Duration(milliseconds: 800),
     this.fadeStepInterval = const Duration(milliseconds: 40),
-  }) : _primaryLoop = primaryLoopBackend ?? AudioplayersLoopBackend(),
-       _secondaryLoop = secondaryLoopBackend ?? AudioplayersLoopBackend(),
-       _sfx = sfxBackend ?? AudioplayersSfxBackend(),
+  }) : _primaryLoop = primaryLoopBackend ?? SoLoudLoopBackend(),
+       _secondaryLoop = secondaryLoopBackend ?? SoLoudLoopBackend(),
+       _sfx = sfxBackend ?? SoLoudSfxBackend(),
        _activePack = StradioSoundPack.byId(initialPack),
        _clockMs = clockMs ?? (() => DateTime.now().millisecondsSinceEpoch);
 
-  /// Safe test/headless constructor that performs no platform-channel calls.
+  /// Safe test/headless constructor that performs no platform-channel/FFI calls.
   factory StradioAudioEngine.noop({
     SoundPackId initialPack = SoundPackId.breakbeatFvnky,
     AudioClock? clockMs,
@@ -384,10 +417,10 @@ class StradioAudioEngine {
   double _primaryVolume = 0.0;
   double _secondaryVolume = 0.0;
   int? _dualStemStartedAtMs;
+  int _lifecycleToken = 0;
 
-  Timer? _primaryFadeTimer;
-  Timer? _secondaryFadeTimer;
   Timer? _barAlignTimer;
+  Timer? _lifecycleFadeTimer;
   Timer? _previewProgressTimer;
   Timer? _previewStepTimer;
   bool _isPreviewing = false;
@@ -423,6 +456,8 @@ class StradioAudioEngine {
   }) async {
     if (_isSessionActive) return;
     await stopPreview();
+    _lifecycleToken++;
+    _cancelTimers();
 
     if (packId != null && _activePack.id != packId) {
       _activePack = StradioSoundPack.byId(packId);
@@ -453,10 +488,12 @@ class StradioAudioEngine {
         if (walkAsset != null && jogAsset != null) {
           _primaryVolume = 0.95;
           _secondaryVolume = 0.85;
-          await Future.wait([
-            _primaryLoop.startLoop(walkAsset, volume: _primaryVolume),
-            _secondaryLoop.startLoop(jogAsset, volume: _secondaryVolume),
-          ]);
+          await _startDualStems(
+            walkAsset: walkAsset,
+            jogAsset: jogAsset,
+            primaryVolume: _primaryVolume,
+            secondaryVolume: _secondaryVolume,
+          );
         }
       case BackgroundLayerMode.continuousTempoScaled:
         final asset = _activePack.primaryLoopAsset;
@@ -554,6 +591,7 @@ class StradioAudioEngine {
   /// Starts audio layers for a new running session.
   Future<void> startSession({double initialCadenceSpm = 0.0}) async {
     await stopPreview();
+    _lifecycleToken++;
     _cancelTimers();
     _isSessionActive = true;
     _isPaused = false;
@@ -566,37 +604,76 @@ class StradioAudioEngine {
     await _startLayersForActivePack();
   }
 
-  /// Pauses active Layer 1 loops cleanly and suppresses step SFX until resumed.
+  /// Pauses active Layer 1 loops with an 800 ms smooth fadeout (`OQ-3`) and
+  /// suppresses step SFX until resumed.
   Future<void> pauseSession() async {
     if (!_isSessionActive || _isPaused) return;
     _isPaused = true;
+    final token = ++_lifecycleToken;
     _cancelTimers();
-    await _primaryLoop.pause();
-    await _secondaryLoop.pause();
+
+    final hasAudibleLoop = _primaryVolume > 0.001 || _secondaryVolume > 0.001;
+    if (fadeDuration > Duration.zero && hasAudibleLoop) {
+      if (_primaryVolume > 0.001) {
+        _fadePrimaryTo(0.0);
+      }
+      if (_secondaryVolume > 0.001) {
+        _fadeSecondaryTo(0.0);
+      }
+      _lifecycleFadeTimer = Timer(fadeDuration, () {
+        if (_lifecycleToken != token || !_isPaused) return;
+        unawaited(_primaryLoop.pause());
+        unawaited(_secondaryLoop.pause());
+      });
+    } else {
+      await _primaryLoop.pause();
+      await _secondaryLoop.pause();
+    }
   }
 
   /// Resumes a paused running session without resetting step parity or pack state.
   Future<void> resumeSession() async {
     if (!_isSessionActive || !_isPaused) return;
     _isPaused = false;
+    _lifecycleToken++;
+    _cancelTimers();
     await _primaryLoop.resume();
     await _secondaryLoop.resume();
     _applyCurrentZoneVolumes(immediate: false);
   }
 
-  /// Stops all active loops and timers at session end.
+  /// Stops all active loops and timers at session end with an 800 ms smooth fadeout (`OQ-3`).
   Future<void> stopSession() async {
+    final hadAudibleLoop = _primaryVolume > 0.001 || _secondaryVolume > 0.001;
+    final token = ++_lifecycleToken;
     _cancelTimers();
     _isSessionActive = false;
     _isPaused = false;
     _inJoggingZone = false;
     _belowExitSinceMs = null;
     _dualStemStartedAtMs = null;
-    _primaryVolume = 0.0;
-    _secondaryVolume = 0.0;
     _currentPlaybackRate = 1.0;
-    await _primaryLoop.stop();
-    await _secondaryLoop.stop();
+
+    if (fadeDuration > Duration.zero && hadAudibleLoop) {
+      if (_primaryVolume > 0.001) {
+        _fadePrimaryTo(0.0);
+      }
+      if (_secondaryVolume > 0.001) {
+        _fadeSecondaryTo(0.0);
+      }
+      _lifecycleFadeTimer = Timer(fadeDuration, () {
+        if (_lifecycleToken != token || _isSessionActive || _isPreviewing) {
+          return;
+        }
+        unawaited(_primaryLoop.stop());
+        unawaited(_secondaryLoop.stop());
+      });
+    } else {
+      _primaryVolume = 0.0;
+      _secondaryVolume = 0.0;
+      await _primaryLoop.stop();
+      await _secondaryLoop.stop();
+    }
   }
 
   /// Switches to another Sound Pack immediately with zero session interruption
@@ -612,6 +689,7 @@ class StradioAudioEngine {
 
     if (!_isSessionActive) return;
 
+    _lifecycleToken++;
     _cancelTimers();
     await _primaryLoop.stop();
     await _secondaryLoop.stop();
@@ -704,6 +782,31 @@ class StradioAudioEngine {
     }
   }
 
+  Future<void> _startDualStems({
+    required String walkAsset,
+    required String jogAsset,
+    required double primaryVolume,
+    required double secondaryVolume,
+  }) async {
+    final p = _primaryLoop;
+    final s = _secondaryLoop;
+    if (p is SoLoudLoopBackend && s is SoLoudLoopBackend) {
+      await SoLoudLoopBackend.startSyncedPair(
+        primary: p,
+        secondary: s,
+        primaryAsset: walkAsset,
+        secondaryAsset: jogAsset,
+        primaryVolume: primaryVolume,
+        secondaryVolume: secondaryVolume,
+      );
+      return;
+    }
+    await Future.wait([
+      _primaryLoop.startLoop(walkAsset, volume: primaryVolume),
+      _secondaryLoop.startLoop(jogAsset, volume: secondaryVolume),
+    ]);
+  }
+
   Future<void> _startLayersForActivePack() async {
     switch (_activePack.backgroundMode) {
       case BackgroundLayerMode.silent:
@@ -727,10 +830,12 @@ class StradioAudioEngine {
         _secondaryVolume = _inJoggingZone ? 1.0 : 0.0;
         _currentPlaybackRate = 1.0;
         _dualStemStartedAtMs = _clockMs();
-        await Future.wait([
-          _primaryLoop.startLoop(walkAsset, volume: _primaryVolume),
-          _secondaryLoop.startLoop(jogAsset, volume: _secondaryVolume),
-        ]);
+        await _startDualStems(
+          walkAsset: walkAsset,
+          jogAsset: jogAsset,
+          primaryVolume: _primaryVolume,
+          secondaryVolume: _secondaryVolume,
+        );
 
       case BackgroundLayerMode.continuousTempoScaled:
         final asset = _activePack.primaryLoopAsset;
@@ -778,23 +883,35 @@ class StradioAudioEngine {
   }
 
   void _applyCurrentZoneVolumes({required bool immediate}) {
-    if (_activePack.backgroundMode == BackgroundLayerMode.joggingZoneOnly) {
-      final target = _inJoggingZone ? 1.0 : 0.0;
-      if (immediate) {
-        _primaryVolume = target;
-        unawaited(_primaryLoop.setVolume(target));
-      } else {
-        _fadePrimaryTo(target);
-      }
-    } else if (_activePack.backgroundMode ==
-        BackgroundLayerMode.dualStemBarAligned) {
-      final target = _inJoggingZone ? 1.0 : 0.0;
-      if (immediate) {
-        _secondaryVolume = target;
-        unawaited(_secondaryLoop.setVolume(target));
-      } else {
-        _fadeSecondaryTo(target);
-      }
+    switch (_activePack.backgroundMode) {
+      case BackgroundLayerMode.silent:
+        return;
+      case BackgroundLayerMode.joggingZoneOnly:
+        final target = _inJoggingZone ? 1.0 : 0.0;
+        if (immediate) {
+          _primaryVolume = target;
+          unawaited(_primaryLoop.setVolume(target));
+        } else {
+          _fadePrimaryTo(target);
+        }
+      case BackgroundLayerMode.dualStemBarAligned:
+        final secondaryTarget = _inJoggingZone ? 1.0 : 0.0;
+        if (immediate) {
+          _primaryVolume = 1.0;
+          _secondaryVolume = secondaryTarget;
+          unawaited(_primaryLoop.setVolume(1.0));
+          unawaited(_secondaryLoop.setVolume(secondaryTarget));
+        } else {
+          _fadePrimaryTo(1.0);
+          _fadeSecondaryTo(secondaryTarget);
+        }
+      case BackgroundLayerMode.continuousTempoScaled:
+        if (immediate) {
+          _primaryVolume = 1.0;
+          unawaited(_primaryLoop.setVolume(1.0));
+        } else {
+          _fadePrimaryTo(1.0);
+        }
     }
   }
 
@@ -809,64 +926,28 @@ class StradioAudioEngine {
   }
 
   void _fadePrimaryTo(double target) {
-    _primaryFadeTimer?.cancel();
-    _primaryFadeTimer = _runFade(
-      from: _primaryVolume,
-      to: target,
-      onStep: (v) {
-        _primaryVolume = v;
-        unawaited(_primaryLoop.setVolume(v));
-      },
-    );
+    _primaryVolume = target;
+    if (fadeDuration <= Duration.zero) {
+      unawaited(_primaryLoop.setVolume(target));
+    } else {
+      unawaited(_primaryLoop.fadeVolume(target, fadeDuration));
+    }
   }
 
   void _fadeSecondaryTo(double target) {
-    _secondaryFadeTimer?.cancel();
-    _secondaryFadeTimer = _runFade(
-      from: _secondaryVolume,
-      to: target,
-      onStep: (v) {
-        _secondaryVolume = v;
-        unawaited(_secondaryLoop.setVolume(v));
-      },
-    );
-  }
-
-  Timer? _runFade({
-    required double from,
-    required double to,
-    required void Function(double volume) onStep,
-  }) {
-    if ((from - to).abs() < 0.001 || fadeDuration <= Duration.zero) {
-      onStep(to);
-      return null;
+    _secondaryVolume = target;
+    if (fadeDuration <= Duration.zero) {
+      unawaited(_secondaryLoop.setVolume(target));
+    } else {
+      unawaited(_secondaryLoop.fadeVolume(target, fadeDuration));
     }
-
-    final totalSteps = (fadeDuration.inMilliseconds /
-            fadeStepInterval.inMilliseconds)
-        .round()
-        .clamp(1, 200);
-    var currentStep = 0;
-
-    return Timer.periodic(fadeStepInterval, (timer) {
-      currentStep++;
-      if (currentStep >= totalSteps) {
-        timer.cancel();
-        onStep(to);
-        return;
-      }
-      final t = currentStep / totalSteps;
-      onStep(from + (to - from) * t);
-    });
   }
 
   void _cancelTimers() {
-    _primaryFadeTimer?.cancel();
-    _primaryFadeTimer = null;
-    _secondaryFadeTimer?.cancel();
-    _secondaryFadeTimer = null;
     _barAlignTimer?.cancel();
     _barAlignTimer = null;
+    _lifecycleFadeTimer?.cancel();
+    _lifecycleFadeTimer = null;
     _previewProgressTimer?.cancel();
     _previewProgressTimer = null;
     _previewStepTimer?.cancel();
@@ -874,6 +955,7 @@ class StradioAudioEngine {
   }
 
   Future<void> dispose() async {
+    _lifecycleToken++;
     await stopPreview();
     _cancelTimers();
     await _primaryLoop.dispose();

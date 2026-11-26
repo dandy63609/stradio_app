@@ -231,7 +231,7 @@ class AlgorithmParameters {
   const AlgorithmParameters({
     this.smoothingSamples = 7,
     this.windowDurationMs = 1000,
-    this.minimumStepIntervalMs = 310,
+    this.minimumStepIntervalMs = 260,
     this.k = 1.5,
     this.minWindowSpreadMps2 = 2.2,
     this.minPeakProminenceMps2 = 0.45,
@@ -280,7 +280,7 @@ class AlgorithmParameters {
       smoothingSamples: (map['smoothing_samples'] as num?)?.toInt() ?? 7,
       windowDurationMs: (map['window_duration_ms'] as num?)?.toInt() ?? 1000,
       minimumStepIntervalMs:
-          (map['minimum_step_interval_ms'] as num?)?.toInt() ?? 310,
+          (map['minimum_step_interval_ms'] as num?)?.toInt() ?? 260,
       k: (map['k'] as num?)?.toDouble() ?? 1.5,
       minWindowSpreadMps2:
           (map['min_window_spread_mps2'] as num?)?.toDouble() ?? 2.2,

@@ -765,6 +765,25 @@ class _ActiveRunScreenState extends State<ActiveRunScreen>
       samples: healthSamples,
     );
 
+    // Persist locally and emit run_completed immediately on finish (FR-6.1) so
+    // exporting a story and closing the app never loses the run or telemetry.
+    var savedOk = false;
+    try {
+      await _store.save(recording.toSummaryOnly());
+      await _store.clearActiveSessionCache();
+      savedOk = true;
+    } on Object catch (error) {
+      debugPrint('Auto-save on finish failed (will allow retry on summary): $error');
+    }
+    unawaited(
+      _postHogService.captureWorkoutAndBenchmarks(
+        recording: recording,
+        metrics: metrics,
+        health: health,
+        soundPackCode: _audioEngine.activePack.code,
+      ),
+    );
+
     if (!mounted) return;
     final completed = await Navigator.of(context).push<bool>(
       MaterialPageRoute<bool>(
@@ -776,17 +795,18 @@ class _ActiveRunScreenState extends State<ActiveRunScreen>
           postHogService: _postHogService,
           soundPackId: _audioEngine.activePackId,
           language: widget.language,
+          alreadySaved: savedOk,
         ),
       ),
     );
 
     if (!mounted) return;
-    if (completed == true && Navigator.of(context).canPop()) {
+    if ((savedOk || completed == true) && Navigator.of(context).canPop()) {
       Navigator.of(context).pop();
       return;
     }
 
-    // If user backed out of Summary without finishing, return ready to resume.
+    // If save failed and user backed out without retrying, return ready to resume.
     _isFinishing = false;
     _holdController.reset();
     await _startSensorStream();

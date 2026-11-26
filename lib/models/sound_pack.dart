@@ -200,8 +200,8 @@ class StradioSoundPack {
       tagline: 'Dual-stem 140 BPM progression, bar-aligned jog drums',
       backgroundMode: BackgroundLayerMode.dualStemBarAligned,
       stepSfxMode: StepSfxMode.off,
-      primaryLoopAsset: 'assets/audio/lari_ngacir/lari_ngacir_layer1_walk.mp3',
-      secondaryLoopAsset: 'assets/audio/lari_ngacir/lari_ngacir_layer2_jog.mp3',
+      primaryLoopAsset: 'assets/audio/lari_ngacir/lari_ngacir_layer1_walk.ogg',
+      secondaryLoopAsset: 'assets/audio/lari_ngacir/lari_ngacir_layer2_jog.ogg',
       baseBpm: 140.0,
     ),
     StradioSoundPack(
@@ -213,7 +213,7 @@ class StradioSoundPack {
       tagline: 'Tempo-scaled coastal loop + crunchy sand footsteps',
       backgroundMode: BackgroundLayerMode.continuousTempoScaled,
       stepSfxMode: StepSfxMode.roundRobin,
-      primaryLoopAsset: 'assets/audio/gba_sand_hop/hoenn_island_loop.mp4',
+      primaryLoopAsset: 'assets/audio/gba_sand_hop/hoenn_island_loop.ogg',
       stepSfxAssets: [
         'assets/audio/gba_sand_hop/gba_sand_01.mp3',
         'assets/audio/gba_sand_hop/gba_sand_02.mp3',

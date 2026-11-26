@@ -176,6 +176,47 @@ void main() {
       final runSecPerKm = 3600.0 / runSpeed;
       expect(runSecPerKm, inInclusiveRange(280.0, 340.0));
     });
+
+    test('rollingCadenceSpm drops to 0.0 promptly when runner stops and decays on slowdown', () {
+      // 10 jogging steps spaced 375ms apart (160 SPM), ending at t = 3.75s
+      final detections = <DetectionEvent>[
+        for (var i = 0; i < 10; i++)
+          DetectionEvent(
+            detectionId: i,
+            sampleIndex: i * 37,
+            peakTimestampNs: (i + 1) * 375000000,
+            outputTimestampNs: (i + 1) * 375000000 + 10000000,
+            thresholdMps2: 11.0,
+          ),
+      ];
+      final lastTs = detections.last.peakTimestampNs;
+
+      // Active jogging right at last step -> ~160 SPM
+      expect(
+        RunMetricsCalculator.rollingCadenceSpm(
+          detections: detections,
+          currentTimestampNs: lastTs,
+        ),
+        closeTo(160.0, 1.0),
+      );
+
+      // 1.0s after last step (slowing down) -> decays below 160 SPM
+      final slowingSpm = RunMetricsCalculator.rollingCadenceSpm(
+        detections: detections,
+        currentTimestampNs: lastTs + 1000000000,
+      );
+      expect(slowingSpm, lessThan(150.0));
+      expect(slowingSpm, greaterThan(0.0));
+
+      // 2.5s after last step (stopped) -> drops to 0.0 (not stuck at 160 SPM!)
+      expect(
+        RunMetricsCalculator.rollingCadenceSpm(
+          detections: detections,
+          currentTimestampNs: lastTs + 2500000000,
+        ),
+        0.0,
+      );
+    });
   });
 }
 

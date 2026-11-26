@@ -313,6 +313,9 @@ void main() {
         );
         expect(find.text('Squid Stride'), findsOneWidget);
         expect(foreground.isServiceActive, isFalse);
+        // FR-6.1: run is auto-saved & run_completed captured immediately on finish,
+        // even before tapping "Start new run".
+        expect(store.saved.length, 1);
 
         // Open Mockup 12 Share Run Rhythm bottom sheet, test Copy Text, then open ShareStudioScreen (9:16)
         await tester.tap(find.byKey(const Key('export_ig_story_button')));

@@ -241,7 +241,7 @@ class FlutterForegroundNotificationService
       } else {
         await FlutterForegroundTask.startService(
           serviceId: 501,
-          serviceTypes: [ForegroundServiceTypes.health],
+          serviceTypes: [ForegroundServiceTypes.mediaPlayback],
           notificationTitle: title,
           notificationText: text,
           notificationButtons: _buildButtons(isRunning),

@@ -39,9 +39,9 @@ dependencies:
   share_plus: ^13.3.1
   shared_preferences: ^2.5.3
   flutter_foreground_task: ^11.0.3
-  audioplayers: ^6.8.1
   image_picker: ^1.2.4
   gal: ^3.0.1
+  flutter_soloud: ^5.3.2
 dependency_overrides:
   path_provider_foundation: 2.3.2
 
@@ -87,9 +87,9 @@ flutter:
     - assets/audio/gba_sand_hop/gba_sand_01.mp3
     - assets/audio/gba_sand_hop/gba_sand_02.mp3
     - assets/audio/gba_sand_hop/gba_sand_03.mp3
-    - assets/audio/gba_sand_hop/hoenn_island_loop.mp4
-    - assets/audio/lari_ngacir/lari_ngacir_layer1_walk.mp3
-    - assets/audio/lari_ngacir/lari_ngacir_layer2_jog.mp3
+    - assets/audio/gba_sand_hop/hoenn_island_loop.ogg
+    - assets/audio/lari_ngacir/lari_ngacir_layer1_walk.ogg
+    - assets/audio/lari_ngacir/lari_ngacir_layer2_jog.ogg
     - assets/audio/rubber_bouncy/rubber_01.mp3
     - assets/audio/sponge/sponge_1.mp3
     - assets/audio/sponge/sponge_2.mp3

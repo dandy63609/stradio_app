@@ -156,10 +156,12 @@ class RunMetricsCalculator {
 
   /// Rolling cadence (SPM) over the most recent [windowSeconds] up to
   /// [currentTimestampNs], scanning backward in O(1) window time.
+  /// Decays smoothly when the runner slows down and returns `0.0` once no step
+  /// has arrived for more than ~2s (preventing stale jogging SPM after stopping).
   static double rollingCadenceSpm({
     required List<DetectionEvent> detections,
     required int currentTimestampNs,
-    int windowSeconds = 10,
+    int windowSeconds = 5,
   }) {
     if (detections.isEmpty) return 0.0;
     final windowNs = windowSeconds * 1000000000;
@@ -177,19 +179,32 @@ class RunMetricsCalculator {
       firstTs = ts;
     }
 
-    if (count == 0) return 0.0;
+    if (count == 0 || lastTs == null) return 0.0;
+
+    final silenceSinceLastSec = (currentTimestampNs - lastTs) / 1e9;
     if (count == 1) {
+      if (silenceSinceLastSec > 2.0) return 0.0;
       return (1.0 / windowSeconds) * 60.0;
     }
 
-    final spanNs = (lastTs ?? 0) - (firstTs ?? 0);
+    final spanNs = lastTs - (firstTs ?? 0);
     if (spanNs <= 0) {
-      return (count / windowSeconds) * 60.0;
+      return silenceSinceLastSec > 2.0 ? 0.0 : (count / windowSeconds) * 60.0;
     }
     final intervals = count - 1;
     final avgIntervalSeconds = (spanNs / 1e9) / intervals;
     if (avgIntervalSeconds <= 0) return 0.0;
-    final spm = 60.0 / avgIntervalSeconds;
+
+    // Runner stopped: no new step for > max(2.0s, 2.2x recent step interval).
+    final stopCutoffSec = math.max(2.0, avgIntervalSeconds * 2.2);
+    if (silenceSinceLastSec > stopCutoffSec) return 0.0;
+
+    // Runner slowing down: include elapsed silence since last step so SPM decays promptly.
+    final effectiveIntervalSec = silenceSinceLastSec > avgIntervalSeconds * 1.5
+        ? ((currentTimestampNs - (firstTs ?? 0)) / 1e9) / count
+        : avgIntervalSeconds;
+    if (effectiveIntervalSec <= 0) return 0.0;
+    final spm = 60.0 / effectiveIntervalSec;
     return spm.isFinite ? math.min(spm, 260.0) : 0.0;
   }
 

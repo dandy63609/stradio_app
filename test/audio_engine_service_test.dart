@@ -5,6 +5,7 @@ import 'package:stradio_app/services/audio_engine_service.dart';
 class _FakeLoopBackend implements AudioLoopBackend {
   final List<String> startedAssets = [];
   final List<double> volumes = [];
+  final List<(double, Duration)> fades = [];
   final List<double> rates = [];
   int pauseCount = 0;
   int resumeCount = 0;
@@ -25,6 +26,12 @@ class _FakeLoopBackend implements AudioLoopBackend {
   @override
   Future<void> setVolume(double volume) async {
     volumes.add(volume);
+  }
+
+  @override
+  Future<void> fadeVolume(double volume, Duration duration) async {
+    volumes.add(volume);
+    fades.add((volume, duration));
   }
 
   @override
@@ -253,11 +260,11 @@ void main() {
         await engine.startSession();
         expect(
           primary.startedAssets,
-          equals(['assets/audio/lari_ngacir/lari_ngacir_layer1_walk.mp3']),
+          equals(['assets/audio/lari_ngacir/lari_ngacir_layer1_walk.ogg']),
         );
         expect(
           secondary.startedAssets,
-          equals(['assets/audio/lari_ngacir/lari_ngacir_layer2_jog.mp3']),
+          equals(['assets/audio/lari_ngacir/lari_ngacir_layer2_jog.ogg']),
         );
         expect(engine.primaryVolume, 1.0);
         expect(engine.secondaryVolume, 0.0);
@@ -290,7 +297,7 @@ void main() {
         await engine.startSession();
         expect(
           primary.startedAssets,
-          equals(['assets/audio/gba_sand_hop/hoenn_island_loop.mp4']),
+          equals(['assets/audio/gba_sand_hop/hoenn_island_loop.ogg']),
         );
 
         await engine.onStepDetected(cadenceSpm: 145.75); // 1.10x
@@ -375,6 +382,54 @@ void main() {
 
         await engine.stopSession();
         expect(engine.isSessionActive, isFalse);
+
+        await engine.dispose();
+      },
+    );
+
+    test(
+      'OQ-3: pauseSession and stopSession fade out smoothly before pausing/stopping, and resume cancels pending pause',
+      () async {
+        final primary = _FakeLoopBackend();
+        final secondary = _FakeLoopBackend();
+        final engine = StradioAudioEngine(
+          primaryLoopBackend: primary,
+          secondaryLoopBackend: secondary,
+          sfxBackend: _FakeSfxBackend(),
+          initialPack: SoundPackId.lariNgacir,
+          fadeDuration: const Duration(milliseconds: 60),
+        );
+
+        await engine.startSession(initialCadenceSpm: 150.0);
+        expect(engine.primaryVolume, 1.0);
+        expect(engine.secondaryVolume, 1.0);
+
+        // Pause starts fadeout; backend pause must not fire immediately.
+        await engine.pauseSession();
+        expect(primary.fades.last, (0.0, const Duration(milliseconds: 60)));
+        expect(secondary.fades.last, (0.0, const Duration(milliseconds: 60)));
+        expect(primary.pauseCount, 0);
+
+        // Resuming mid-fade cancels pending pause and fades back up.
+        await engine.resumeSession();
+        await Future<void>.delayed(const Duration(milliseconds: 80));
+        expect(primary.pauseCount, 0);
+        expect(engine.primaryVolume, 1.0);
+        expect(engine.secondaryVolume, 1.0);
+
+        // Pause again and wait for fadeout to complete -> pauses both loops.
+        await engine.pauseSession();
+        await Future<void>.delayed(const Duration(milliseconds: 80));
+        expect(primary.pauseCount, 1);
+        expect(secondary.pauseCount, 1);
+
+        // Resume, then stopSession -> fades out before stopping.
+        await engine.resumeSession();
+        await engine.stopSession();
+        expect(primary.stopCount, 0);
+        await Future<void>.delayed(const Duration(milliseconds: 80));
+        expect(primary.stopCount, 1);
+        expect(secondary.stopCount, 1);
 
         await engine.dispose();
       },

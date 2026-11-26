@@ -87,8 +87,22 @@ Dokumen ini merangkum rencana tindak lanjut (**follow-up refactor**) setelah mig
 
 **Target Branch:** `chore/release-readiness`
 
-- [ ] Uji di HP Android fisik (tangan & saku celana, layar mati, TWS Bluetooth) untuk memverifikasi latensi deteksi <30 ms, latensi audio <50 ms, dan 0 *false steps* saat diam.
-- [ ] Verifikasi *gapless loop* `.mp3` `LARI_NGACIR` di HP Android fisik (jika ada klik/padding, convert master `.wav` di `assets/audio/_raw_sources/` ke `.ogg`, lalu pindahkan `_raw_sources/` ke cloud storage tim).
+### Phase 4A — Runtime Reliability & `flutter_soloud` Audio Engine
+- [x] **Android 14+ Pocket Mode (`FR-2.1`):** Ganti `FOREGROUND_SERVICE_HEALTH` / `foregroundServiceType="health"` ke `FOREGROUND_SERVICE_MEDIA_PLAYBACK` / `mediaPlayback` di `AndroidManifest.xml` & `ForegroundNotificationService` agar bebas `SecurityException` tanpa dialog izin baru.
+- [x] **Auto-Save & PostHog `run_completed` saat Selesai (`FR-6.1`):** Simpan ringkasan lari ke lokal (`store.save`), bersihkan cache sesi aktif, dan kirim `captureWorkoutAndBenchmarks` langsung saat `_finishRun()` mendarat di `PostRunSummaryScreen` (idempoten, tidak hilang jika user langsung export story / tekan Back).
+- [x] **Cadence Decay & Fast Cadence (`run_metrics_calculator.dart` & `experiment_models.dart`):** Perbaiki `rollingCadenceSpm` (window 5 detik + deteksi diam >2 detik agar tidak tertahan ~12 detik saat berhenti/transisi run↔walk) dan turunkan `minimumStepIntervalMs` default dari `310 ms` ke `260 ms` (~230 SPM cap) sambil mempertahankan **Adaptive Midpoint + Gravity (`A1`)**.
+- [x] **Migrasi Audio Engine ke `flutter_soloud` (`FR-3.1`, `FR-3.4`, `OQ-3`):** Ganti backend `audioplayers` ke `SoLoudLoopBackend` + `SoLoudSfxBackend` (C++ FFI single mixer), Voice Group sample-accurate sync untuk `LARI_NGACIR`, konversi `hoenn_island_loop.mp4` & master `.wav` `LARI_NGACIR` ke `.ogg` (Vorbis gapless), serta 800 ms smooth `fadeVolume` pada `pauseSession()` dan `stopSession()`.
+
+### Phase 4B — UX Revision Handoff (`docs/UX-REVISION-HANDOFF.md`) & Docs Sync *(Belum Dikerjakan)*
+- [ ] **Pre-Run Ignition (Card 07):** Top-bleed runner legs hero (`assets/design/Generate_cinematic_storyboard_grid_fbd8354d_2K.jpg_322851f9.jpg` dengan `BlendMode.multiply`) + Orbital Cadence Dial + Suspended Liquid Glass Deck (`Audition` EQ, `SPM TARGET`, `PACE SYNC`).
+- [ ] **Active Run (Card 10):** `72px` Cadence Monolith, step-triggered acoustic wave (`SonicRibbonPainter` idle datar -> lonjak saat melangkah), frosted 3-metric bar (`Distance`, `Pace`, `Steps`), single `1.5s` `Hold to finish` Obsidian pill di bawah + tombol ikon ringkas Sound Pack & Pause di header.
+- [ ] **Share Run Rhythm Modal (Card 12):** Hapus baris `Quick Share`, pertahankan 2 pil (`Share Rhythm Card` & `Instagram story export 9:16`), dan rapikan proporsi kartu pada layar `360px`–`390px`.
+- [ ] **Photo Glass & Topo Shard (Cards 01–03):** Upgrade `_FrostedSurface` ke multi-layer optical glassmorphism dan set sudut **Topo Shard** tegas 90° (`BorderRadius.zero`).
+- [ ] **Sinkronisasi `docs/PRD-MVP.md`:** Perbarui tabel *Implementation Deltas* (`flutter_soloud`, `mediaPlayback`, `minimumStepIntervalMs = 260 ms`, `FR-5.1` swipe-only, `FR-5.4` Mockup #11).
+
+### Validasi Perangkat Fisik & Rilis
+- [ ] Uji di HP Android fisik Android 14+ (tangan & saku celana, layar mati, TWS Bluetooth) untuk memverifikasi Pocket Mode `mediaPlayback`, latensi deteksi <30 ms, latensi audio `flutter_soloud` <50 ms, 0 drift `LARI_NGACIR` `.ogg` 72-bar, dan 0 *false steps* saat diam.
+- [ ] Pindahkan `assets/audio/_raw_sources/` (~65 MB master `.wav`, tidak ter-bundle di APK) ke cloud storage tim setelah uji HP fisik `.ogg` terverifikasi.
 - [ ] Uji `gal` (`Save to Gallery`) di HP Android fisik *(catatan: `image_picker` Galeri/Kamera sudah terverifikasi berjalan; shader GPU `shaders/liquid_glass.frag` saat ini N/A karena seluruh permukaan kaca memakai `BackdropFilter` native Flutter)*.
 - [x] Uji alur CI/CD rilis otomatis dengan tag `v*` di `.github/workflows/auto-release.yml` dan verifikasi ukuran APK split-ABI (`stradio-v*-arm64-v8a.apk` & `armeabi-v7a.apk`).
 - [ ] Siapkan dokumen **Privacy Policy** dan pengisian **Google Play Data Safety** (jika dipublikasikan ke Play Store).
