@@ -14,6 +14,7 @@ class SonicRibbonPainter extends CustomPainter {
     this.strokeWidth = 2.6,
     this.fillGradientArea = false,
     this.verticalCenterFactor = 0.5,
+    this.opacity = 1.0,
   });
 
   final double phase;
@@ -22,13 +23,15 @@ class SonicRibbonPainter extends CustomPainter {
   final double strokeWidth;
   final bool fillGradientArea;
   final double verticalCenterFactor;
+  final double opacity;
 
   @override
   void paint(Canvas canvas, Size size) {
     if (size.isEmpty) return;
     final midY = size.height * verticalCenterFactor.clamp(0.25, 0.75);
-    final amp = (size.height * 0.28 * amplitude.clamp(0.15, 1.0)) *
+    final amp = (size.height * 0.28 * amplitude.clamp(0.02, 1.0)) *
         (1.0 + pulseBoost * 0.42);
+    final alphaScale = opacity.clamp(0.0, 1.0);
 
     if (fillGradientArea) {
       _drawAreaGlow(
@@ -49,7 +52,7 @@ class SonicRibbonPainter extends CustomPainter {
       freq: 1.65,
       harmonicFreq: 3.1,
       phaseShift: phase,
-      color: StradioColors.twilightPlum.withValues(alpha: 0.82),
+      color: StradioColors.twilightPlum.withValues(alpha: 0.82 * alphaScale),
       width: strokeWidth * 0.92,
     );
     _drawWave(
@@ -60,7 +63,7 @@ class SonicRibbonPainter extends CustomPainter {
       freq: 2.05,
       harmonicFreq: 3.6,
       phaseShift: -phase + 1.4,
-      color: StradioColors.rhythmViolet.withValues(alpha: 0.90),
+      color: StradioColors.rhythmViolet.withValues(alpha: 0.90 * alphaScale),
       width: strokeWidth * 0.96,
     );
     _drawWave(
@@ -71,7 +74,7 @@ class SonicRibbonPainter extends CustomPainter {
       freq: 1.80,
       harmonicFreq: 2.9,
       phaseShift: phase + 2.4,
-      color: StradioColors.sonicCoral,
+      color: StradioColors.sonicCoral.withValues(alpha: alphaScale),
       width: strokeWidth * (1.05 + pulseBoost * 0.30),
     );
   }
@@ -165,5 +168,6 @@ class SonicRibbonPainter extends CustomPainter {
       oldDelegate.pulseBoost != pulseBoost ||
       oldDelegate.strokeWidth != strokeWidth ||
       oldDelegate.fillGradientArea != fillGradientArea ||
-      oldDelegate.verticalCenterFactor != verticalCenterFactor;
+      oldDelegate.verticalCenterFactor != verticalCenterFactor ||
+      oldDelegate.opacity != opacity;
 }

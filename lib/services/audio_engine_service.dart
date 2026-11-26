@@ -414,6 +414,7 @@ class StradioAudioEngine {
   int _stepCounter = 0;
   double _latestCadenceSpm = 0.0;
   double _currentPlaybackRate = 1.0;
+  bool _adaptiveTempoScalingEnabled = true;
   double _primaryVolume = 0.0;
   double _secondaryVolume = 0.0;
   int? _dualStemStartedAtMs;
@@ -440,8 +441,27 @@ class StradioAudioEngine {
   bool get isPreviewing => _isPreviewing;
   double get previewProgress => _previewProgress;
   double get currentPlaybackRate => _currentPlaybackRate;
+  bool get adaptiveTempoScalingEnabled => _adaptiveTempoScalingEnabled;
   double get primaryVolume => _primaryVolume;
   double get secondaryVolume => _secondaryVolume;
+
+  /// Toggles dynamic BPM playback-rate scaling (`GBA_SAND_HOP`).
+  void setAdaptiveTempoScaling(bool enabled) {
+    if (_adaptiveTempoScalingEnabled == enabled) return;
+    _adaptiveTempoScalingEnabled = enabled;
+    if (_isSessionActive &&
+        !_isPaused &&
+        _activePack.backgroundMode ==
+            BackgroundLayerMode.continuousTempoScaled) {
+      final nextRate = enabled
+          ? _activePack.computePlaybackRate(_latestCadenceSpm)
+          : 1.0;
+      if ((nextRate - _currentPlaybackRate).abs() >= 0.005) {
+        _currentPlaybackRate = nextRate;
+        unawaited(_primaryLoop.setPlaybackRate(nextRate));
+      }
+    }
+  }
 
   /// Preloads step SFX for the active pack (non-blocking, failure-tolerant).
   Future<void> preloadActivePack() async {
@@ -747,7 +767,9 @@ class StradioAudioEngine {
     if (!_isSessionActive || _isPaused) return;
 
     if (_activePack.backgroundMode == BackgroundLayerMode.continuousTempoScaled) {
-      final nextRate = _activePack.computePlaybackRate(cadenceSpm);
+      final nextRate = _adaptiveTempoScalingEnabled
+          ? _activePack.computePlaybackRate(cadenceSpm)
+          : 1.0;
       if ((nextRate - _currentPlaybackRate).abs() >= 0.005) {
         _currentPlaybackRate = nextRate;
         unawaited(_primaryLoop.setPlaybackRate(nextRate));
@@ -842,9 +864,9 @@ class StradioAudioEngine {
         if (asset == null) return;
         _primaryVolume = 1.0;
         _secondaryVolume = 0.0;
-        _currentPlaybackRate = _activePack.computePlaybackRate(
-          _latestCadenceSpm,
-        );
+        _currentPlaybackRate = _adaptiveTempoScalingEnabled
+            ? _activePack.computePlaybackRate(_latestCadenceSpm)
+            : 1.0;
         await _primaryLoop.startLoop(
           asset,
           volume: 1.0,

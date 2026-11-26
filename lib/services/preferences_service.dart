@@ -25,9 +25,11 @@ class StradioPreferencesService {
   static const _keyStrideSensitivity = 'stradio_stride_sensitivity';
   static const _keyTargetPaceSecondsPerKm = 'stradio_target_pace_sec_per_km';
   static const _keyTargetDistanceKm = 'stradio_target_distance_km';
+  static const _keyAdaptiveTempoScaling = 'stradio_adaptive_tempo_scaling';
   static const double defaultStrideSensitivity = 1.68;
   static const int defaultTargetPaceSecondsPerKm = 360; // 6:00 /km
   static const double defaultTargetDistanceKm = 5.0;
+  static const bool defaultAdaptiveTempoScaling = true;
 
   static SharedPreferences? _prefs;
 
@@ -201,6 +203,19 @@ class StradioPreferencesService {
     final p = _prefs ?? await SharedPreferences.getInstance();
     _prefs = p;
     await p.setDouble(_keyTargetDistanceKm, km.clamp(1.0, 21.1));
+  }
+
+  /// Whether dynamic tempo/pitch scaling (`GBA_SAND_HOP`) follows live cadence.
+  static bool loadAdaptiveTempoScaling() {
+    return _prefs?.getBool(_keyAdaptiveTempoScaling) ??
+        defaultAdaptiveTempoScaling;
+  }
+
+  /// Persists the `Adaptive Tempo Scaling` toggle from Run & Rhythm Target.
+  static Future<void> saveAdaptiveTempoScaling(bool enabled) async {
+    final p = _prefs ?? await SharedPreferences.getInstance();
+    _prefs = p;
+    await p.setBool(_keyAdaptiveTempoScaling, enabled);
   }
 }
 

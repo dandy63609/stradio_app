@@ -5,7 +5,6 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
-import 'package:gal/gal.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 
@@ -17,30 +16,26 @@ import '../../theme/stradio_theme.dart';
 import 'share_template_models.dart';
 import 'transparent_sticker_cards.dart';
 
-/// Mockup 12 Quick Share Bottom Sheet (`Share Run Rhythm`).
+/// Streamlined Share Run Rhythm Bottom Sheet (`Card 12` / `UX-REVISION-HANDOFF.md`).
 ///
-/// Bridges [PostRunSummaryScreen] (Mockup 11) and [ShareStudioScreen] (9:16 Photo Glass):
-/// - Horizontal carousel of the 3 revamped `TransparentStickerCard` templates (`Aura Wave`, `Sonic Dial`, `Minimal Stride`)
-/// - 3 Quick Share pods (`Save` PNG, `Copy Text` caption, `Messages` text-only share; no IG direct intent / web link)
-/// - `Share Rhythm Card` (Midnight capsule: direct PNG + caption share)
-/// - `Story export 9:16` (Alabaster capsule: opens [ShareStudioScreen] directly in Photo Glass 9:16 mode)
+/// Renders:
+/// - Header (`Share Run Rhythm` + `CARD` badge + Close button)
+/// - 3 template chips (`Aura Wave`, `Sonic Dial`, `Minimal Stride`)
+/// - Centered horizontal carousel with dot indicators
+/// - 2 full-width action pills: `Share Rhythm Card` (PNG + caption) & `Instagram story export 9:16`
 class ShareRunRhythmSheet extends StatefulWidget {
   const ShareRunRhythmSheet({
     super.key,
     required this.metrics,
     required this.soundPack,
     this.language = AppLanguage.en,
-    this.onSaveToGallery,
     this.onShareFile,
-    this.onShareText,
   });
 
   final RunSummaryMetrics metrics;
   final StradioSoundPack soundPack;
   final AppLanguage language;
-  final Future<void> Function(String filePath)? onSaveToGallery;
   final Future<void> Function(String filePath, String caption)? onShareFile;
-  final Future<void> Function(String caption)? onShareText;
 
   static Future<void> show(
     BuildContext context, {
@@ -69,7 +64,7 @@ class _ShareRunRhythmSheetState extends State<ShareRunRhythmSheet> {
   static const _templates = StickerTemplateId.values;
 
   final PageController _pageController = PageController(
-    viewportFraction: 0.86,
+    viewportFraction: 0.78,
   );
   final Map<StickerTemplateId, GlobalKey> _cardKeys = {
     for (final t in StickerTemplateId.values) t: GlobalKey(),
@@ -135,90 +130,6 @@ class _ShareRunRhythmSheetState extends State<ShareRunRhythmSheet> {
     return file;
   }
 
-  Future<void> _handleSaveToGallery() async {
-    if (_busy) return;
-    setState(() {
-      _busy = true;
-      _statusMessage = null;
-      _statusIsError = false;
-    });
-    try {
-      final file = await _renderActiveStickerPng();
-      if (widget.onSaveToGallery != null) {
-        await widget.onSaveToGallery!(file.path);
-      } else {
-        final hasAccess = await Gal.hasPermission(toAlbum: true);
-        if (!hasAccess) {
-          final granted = await Gal.requestPermission(toAlbum: true);
-          if (!granted) {
-            throw StateError('Gallery permission was denied.');
-          }
-        }
-        await Gal.putImage(file.path, album: 'Stradio');
-      }
-      if (!mounted) return;
-      final s = StradioStrings.of(widget.language);
-      setState(() {
-        _statusMessage = s.savedToGalleryMessage;
-        _statusIsError = false;
-      });
-    } on Object catch (error) {
-      if (!mounted) return;
-      setState(() {
-        _statusMessage = 'Save failed: $error';
-        _statusIsError = true;
-      });
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
-  }
-
-  void _handleCopyText() {
-    HapticFeedback.selectionClick();
-    final caption = _buildCaption();
-    unawaited(
-      Clipboard.setData(ClipboardData(text: caption)).catchError((_) {}),
-    );
-    if (!mounted) return;
-    final s = StradioStrings.of(widget.language);
-    setState(() {
-      _statusMessage = s.captionCopiedMessage;
-      _statusIsError = false;
-    });
-  }
-
-  Future<void> _handleShareMessagesText() async {
-    if (_busy) return;
-    HapticFeedback.selectionClick();
-    setState(() {
-      _busy = true;
-      _statusMessage = null;
-      _statusIsError = false;
-    });
-    try {
-      final caption = _buildCaption();
-      if (widget.onShareText != null) {
-        await widget.onShareText!(caption);
-      } else {
-        await SharePlus.instance.share(ShareParams(text: caption));
-      }
-      if (!mounted) return;
-      final s = StradioStrings.of(widget.language);
-      setState(() {
-        _statusMessage = s.messageReadyMessage;
-        _statusIsError = false;
-      });
-    } on Object catch (error) {
-      if (!mounted) return;
-      setState(() {
-        _statusMessage = 'Share failed: $error';
-        _statusIsError = true;
-      });
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
-  }
-
   Future<void> _handleShareRhythmCard() async {
     if (_busy) return;
     HapticFeedback.mediumImpact();
@@ -278,7 +189,7 @@ class _ShareRunRhythmSheetState extends State<ShareRunRhythmSheet> {
     final s = StradioStrings.of(widget.language);
     final screenH = MediaQuery.sizeOf(context).height;
     final bottomPadding = MediaQuery.paddingOf(context).bottom;
-    final carouselHeight = (screenH * 0.38).clamp(220.0, 325.0);
+    final carouselHeight = (screenH * 0.42).clamp(240.0, 350.0);
 
     return ClipRRect(
       borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
@@ -288,7 +199,7 @@ class _ShareRunRhythmSheetState extends State<ShareRunRhythmSheet> {
           key: const Key('share_run_rhythm_sheet'),
           width: double.infinity,
           decoration: BoxDecoration(
-            color: StradioColors.surfaceCard.withValues(alpha: 0.88),
+            color: StradioColors.surfaceCard.withValues(alpha: 0.90),
             borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
             border: Border.all(
               color: Colors.white.withValues(alpha: 0.90),
@@ -303,279 +214,250 @@ class _ShareRunRhythmSheetState extends State<ShareRunRhythmSheet> {
             ],
           ),
           clipBehavior: Clip.antiAlias,
-          child: SingleChildScrollView(
-            padding: EdgeInsets.fromLTRB(18, 10, 18, 18 + bottomPadding),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Center(
-                  child: Container(
-                    width: 40,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: StradioColors.borderSubtle,
-                      borderRadius: BorderRadius.circular(StradioRadii.full),
+          child: ScrollConfiguration(
+            behavior: ScrollConfiguration.of(context).copyWith(
+              scrollbars: false,
+            ),
+            child: SingleChildScrollView(
+              padding: EdgeInsets.fromLTRB(20, 10, 20, 20 + bottomPadding),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Center(
+                    child: Container(
+                      width: 40,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: StradioColors.borderSubtle,
+                        borderRadius: BorderRadius.circular(StradioRadii.full),
+                      ),
                     ),
                   ),
-                ),
-                const SizedBox(height: 10),
+                  const SizedBox(height: 12),
 
-                // Mockup 12 Header: "Share Run Rhythm" + "CARD" pill + Close button
-                Row(
-                  children: [
-                    Expanded(
-                      child: Wrap(
-                        crossAxisAlignment: WrapCrossAlignment.center,
-                        spacing: 8,
-                        runSpacing: 4,
-                        children: [
-                          Text(
-                            s.shareRunRhythmTitle,
-                            style: StradioTypography.headingSmall(fontSize: 19),
-                          ),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 3,
-                            ),
-                            decoration: BoxDecoration(
-                              color: StradioColors.surfaceRecessed.withValues(
-                                alpha: 0.85,
-                              ),
-                              borderRadius: BorderRadius.circular(
-                                StradioRadii.full,
+                  // Header: "Share Run Rhythm" + "CARD" pill + Close button
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Wrap(
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          spacing: 8,
+                          runSpacing: 4,
+                          children: [
+                            Text(
+                              s.shareRunRhythmTitle,
+                              style: StradioTypography.headingSmall(
+                                fontSize: 19,
                               ),
                             ),
-                            child: Text(
-                              'CARD',
-                              style: StradioTypography.microCap(
-                                color: StradioColors.textSecondary,
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 3,
+                              ),
+                              decoration: BoxDecoration(
+                                color: StradioColors.surfaceRecessed.withValues(
+                                  alpha: 0.85,
+                                ),
+                                borderRadius: BorderRadius.circular(
+                                  StradioRadii.full,
+                                ),
+                              ),
+                              child: Text(
+                                'CARD',
+                                style: StradioTypography.microCap(
+                                  color: StradioColors.textSecondary,
+                                ),
                               ),
                             ),
+                          ],
+                        ),
+                      ),
+                      IconButton(
+                        key: const Key('share_rhythm_close_button'),
+                        onPressed: () => Navigator.of(context).pop(),
+                        tooltip: s.closeLabel,
+                        style: IconButton.styleFrom(
+                          backgroundColor: StradioColors.surfaceRecessed
+                              .withValues(alpha: 0.85),
+                          minimumSize: const Size(38, 38),
+                        ),
+                        icon: const Icon(
+                          Icons.close_rounded,
+                          size: 18,
+                          color: StradioColors.textPrimary,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+
+                  // 3 Template Pills: Aura Wave · Sonic Dial · Minimal Stride
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: [
+                        for (var i = 0; i < _templates.length; i++) ...[
+                          if (i > 0) const SizedBox(width: 8),
+                          _TemplatePillChip(
+                            label: _templates[i].label,
+                            selected: i == _activeIndex,
+                            onTap: () => _selectTemplate(i),
                           ),
                         ],
-                      ),
+                      ],
                     ),
-                    IconButton(
-                      key: const Key('share_rhythm_close_button'),
-                      onPressed: () => Navigator.of(context).pop(),
-                      tooltip: s.closeLabel,
-                      style: IconButton.styleFrom(
-                        backgroundColor: StradioColors.surfaceRecessed
-                            .withValues(alpha: 0.85),
-                        minimumSize: const Size(38, 38),
-                      ),
-                      icon: const Icon(
-                        Icons.close_rounded,
-                        size: 18,
-                        color: StradioColors.textPrimary,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 10),
+                  ),
+                  const SizedBox(height: 10),
 
-                // 3 Template Pills: Aura Wave · Sonic Dial · Minimal Stride
-                SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: Row(
+                  // Centered Horizontal Carousel (scales cleanly on 360px-390px)
+                  SizedBox(
+                    height: carouselHeight,
+                    child: PageView.builder(
+                      controller: _pageController,
+                      padEnds: true,
+                      itemCount: _templates.length,
+                      onPageChanged: (index) =>
+                          setState(() => _activeIndex = index),
+                      itemBuilder: (_, index) {
+                        final template = _templates[index];
+                        return Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 10,
+                          ),
+                          child: Center(
+                            child: FittedBox(
+                              fit: BoxFit.scaleDown,
+                              child: RepaintBoundary(
+                                key: _cardKeys[template],
+                                child: TransparentStickerCard(
+                                  template: template,
+                                  metrics: widget.metrics,
+                                  soundPack: widget.soundPack,
+                                ),
+                              ),
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+
+                  // 3 Carousel Indicator Dots
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       for (var i = 0; i < _templates.length; i++) ...[
-                        if (i > 0) const SizedBox(width: 8),
-                        _TemplatePillChip(
-                          label: _templates[i].label,
-                          selected: i == _activeIndex,
-                          onTap: () => _selectTemplate(i),
+                        if (i > 0) const SizedBox(width: 6),
+                        AnimatedContainer(
+                          duration: const Duration(milliseconds: 180),
+                          width: i == _activeIndex ? 16 : 6,
+                          height: 6,
+                          decoration: BoxDecoration(
+                            color: i == _activeIndex
+                                ? StradioColors.midnight
+                                : StradioColors.borderSubtle,
+                            borderRadius: BorderRadius.circular(
+                              StradioRadii.full,
+                            ),
+                          ),
                         ),
                       ],
                     ],
                   ),
-                ),
-                const SizedBox(height: 10),
+                  const SizedBox(height: 16),
 
-                // Centered Horizontal Carousel of the 3 Sticker Cards with generous top/bottom room
-                SizedBox(
-                  height: carouselHeight,
-                  child: PageView.builder(
-                    controller: _pageController,
-                    padEnds: true,
-                    itemCount: _templates.length,
-                    onPageChanged: (index) =>
-                        setState(() => _activeIndex = index),
-                    itemBuilder: (_, index) {
-                      final template = _templates[index];
-                      return Padding(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 14,
-                        ),
-                        child: Center(
-                          child: FittedBox(
-                            fit: BoxFit.scaleDown,
-                            child: RepaintBoundary(
-                              key: _cardKeys[template],
-                              child: TransparentStickerCard(
-                                template: template,
-                                metrics: widget.metrics,
-                                soundPack: widget.soundPack,
-                              ),
-                            ),
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-                ),
-                const SizedBox(height: 8),
-
-                // 3 Carousel Indicator Dots
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    for (var i = 0; i < _templates.length; i++) ...[
-                      if (i > 0) const SizedBox(width: 6),
-                      AnimatedContainer(
-                        duration: const Duration(milliseconds: 180),
-                        width: i == _activeIndex ? 16 : 6,
-                        height: 6,
-                        decoration: BoxDecoration(
-                          color: i == _activeIndex
-                              ? StradioColors.midnight
+                  if (_statusMessage != null) ...[
+                    Container(
+                      margin: const EdgeInsets.only(bottom: 10),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
+                      decoration: BoxDecoration(
+                        color: _statusIsError
+                            ? StradioColors.glowCoralSoft
+                            : StradioColors.surfaceCard,
+                        borderRadius: BorderRadius.circular(StradioRadii.lg),
+                        border: Border.all(
+                          color: _statusIsError
+                              ? StradioColors.sonicCoral
                               : StradioColors.borderSubtle,
+                        ),
+                      ),
+                      child: Text(
+                        _statusMessage!,
+                        textAlign: TextAlign.center,
+                        style: StradioTypography.metricLabel(
+                          color: _statusIsError
+                              ? StradioColors.textAccentDeep
+                              : StradioColors.textPrimary,
+                        ),
+                      ),
+                    ),
+                  ],
+
+                  // Primary Midnight Capsule Button ("Share Rhythm Card")
+                  SizedBox(
+                    height: 52,
+                    child: FilledButton.icon(
+                      key: const Key('share_rhythm_primary_button'),
+                      onPressed: _busy ? null : _handleShareRhythmCard,
+                      icon: _busy
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: StradioColors.textOnDark,
+                              ),
+                            )
+                          : const Icon(Icons.ios_share_rounded, size: 18),
+                      label: Text(s.shareRhythmCardAction),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+
+                  // Secondary Alabaster Capsule Button ("Instagram story export 9:16")
+                  SizedBox(
+                    height: 48,
+                    child: OutlinedButton.icon(
+                      key: const Key('share_rhythm_open_studio_button'),
+                      onPressed: _openStoryStudio916,
+                      style: OutlinedButton.styleFrom(
+                        backgroundColor: StradioColors.surfaceCard.withValues(
+                          alpha: 0.82,
+                        ),
+                        foregroundColor: StradioColors.textPrimary,
+                        side: const BorderSide(
+                          color: StradioColors.borderSubtle,
+                        ),
+                        shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(
                             StradioRadii.full,
                           ),
                         ),
                       ),
-                    ],
-                  ],
-                ),
-                const SizedBox(height: 14),
-
-                if (_statusMessage != null) ...[
-                  Container(
-                    margin: const EdgeInsets.only(bottom: 10),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 8,
-                    ),
-                    decoration: BoxDecoration(
-                      color: _statusIsError
-                          ? StradioColors.glowCoralSoft
-                          : StradioColors.surfaceCard,
-                      borderRadius: BorderRadius.circular(StradioRadii.lg),
-                      border: Border.all(
-                        color: _statusIsError
-                            ? StradioColors.sonicCoral
-                            : StradioColors.borderSubtle,
+                      icon: const Icon(
+                        Icons.grid_view_rounded,
+                        size: 18,
+                        color: StradioColors.textSecondary,
                       ),
-                    ),
-                    child: Text(
-                      _statusMessage!,
-                      textAlign: TextAlign.center,
-                      style: StradioTypography.metricLabel(
-                        color: _statusIsError
-                            ? StradioColors.textAccentDeep
-                            : StradioColors.textPrimary,
+                      label: Text(
+                        widget.language == AppLanguage.id
+                            ? 'Ekspor story Instagram 9:16'
+                            : 'Instagram story export 9:16',
+                        style: StradioTypography.pillBadge(
+                          color: StradioColors.textSecondary,
+                        ),
                       ),
                     ),
                   ),
                 ],
-
-                // QUICK SHARE Section (3 Rounded-Square Pods matching Mockup 12, without IG Stories)
-                Text(
-                  s.quickShareHeading,
-                  style: StradioTypography.microCap(
-                    color: StradioColors.textSecondary,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    Expanded(
-                      child: _QuickSharePod(
-                        podKey: const Key('share_rhythm_quick_save'),
-                        icon: Icons.download_rounded,
-                        label: s.saveLabel,
-                        onTap: _handleSaveToGallery,
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: _QuickSharePod(
-                        podKey: const Key('share_rhythm_quick_copy'),
-                        icon: Icons.link_rounded,
-                        label: s.copyTextAction,
-                        onTap: _handleCopyText,
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: _QuickSharePod(
-                        podKey: const Key('share_rhythm_quick_messages'),
-                        icon: Icons.chat_outlined,
-                        label: s.messagesAction,
-                        onTap: _handleShareMessagesText,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 14),
-
-                // Primary Midnight Capsule Button ("Share Rhythm Card")
-                SizedBox(
-                  height: 52,
-                  child: FilledButton.icon(
-                    key: const Key('share_rhythm_primary_button'),
-                    onPressed: _busy ? null : _handleShareRhythmCard,
-                    icon: _busy
-                        ? const SizedBox(
-                            width: 16,
-                            height: 16,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: StradioColors.textOnDark,
-                            ),
-                          )
-                        : const Icon(Icons.ios_share_rounded, size: 18),
-                    label: Text(s.shareRhythmCardAction),
-                  ),
-                ),
-                const SizedBox(height: 10),
-
-                // Secondary Alabaster Capsule Button ("Story export 9:16" -> opens ShareStudioScreen)
-                SizedBox(
-                  height: 48,
-                  child: OutlinedButton.icon(
-                    key: const Key('share_rhythm_open_studio_button'),
-                    onPressed: _openStoryStudio916,
-                    style: OutlinedButton.styleFrom(
-                      backgroundColor: StradioColors.surfaceCard.withValues(
-                        alpha: 0.78,
-                      ),
-                      foregroundColor: StradioColors.textPrimary,
-                      side: BorderSide(
-                        color: Colors.white.withValues(alpha: 0.85),
-                      ),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(StradioRadii.full),
-                      ),
-                    ),
-                    icon: const Icon(
-                      Icons.grid_view_rounded,
-                      size: 18,
-                      color: StradioColors.textSecondary,
-                    ),
-                    label: Text(
-                      s.storyExport916Action,
-                      style: StradioTypography.pillBadge(
-                        color: StradioColors.textSecondary,
-                      ),
-                    ),
-                  ),
-                ),
-              ],
+              ),
             ),
           ),
         ),
@@ -633,65 +515,6 @@ class _TemplatePillChip extends StatelessWidget {
                   color: selected
                       ? StradioColors.textOnDark
                       : StradioColors.textPrimary,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _QuickSharePod extends StatelessWidget {
-  const _QuickSharePod({
-    required this.podKey,
-    required this.icon,
-    required this.label,
-    required this.onTap,
-  });
-
-  final Key podKey;
-  final IconData icon;
-  final String label;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: StradioColors.surfaceCard,
-      borderRadius: BorderRadius.circular(18),
-      child: InkWell(
-        key: podKey,
-        borderRadius: BorderRadius.circular(18),
-        onTap: onTap,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 10),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(18),
-            border: Border.all(color: StradioColors.borderSubtle),
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 40,
-                height: 40,
-                decoration: const BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: StradioColors.surfaceRecessed,
-                ),
-                child: Icon(icon, size: 19, color: StradioColors.textPrimary),
-              ),
-              const SizedBox(height: 6),
-              FittedBox(
-                fit: BoxFit.scaleDown,
-                child: Text(
-                  label,
-                  maxLines: 1,
-                  style: StradioTypography.metricLabel(
-                    color: StradioColors.textSecondary,
-                  ),
                 ),
               ),
             ],

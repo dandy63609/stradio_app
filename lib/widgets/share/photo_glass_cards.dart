@@ -82,36 +82,93 @@ class _FrostedSurface extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final inner = Container(
+    if (highContrast) {
+      return Container(
+        width: width,
+        height: height,
+        padding: padding,
+        decoration: BoxDecoration(
+          color: StradioColors.surfaceCard,
+          borderRadius: borderRadius,
+          border: Border.all(color: StradioColors.borderSubtle, width: 1.0),
+        ),
+        child: child,
+      );
+    }
+
+    // Multi-layer transparent optical glassmorphism: lets the underlying photo glow
+    // vividly through the pane with a directional sheen + diagonal specular highlight.
+    final tint = Color.lerp(Colors.white, fill, 0.32) ?? Colors.white;
+    return Container(
       width: width,
       height: height,
-      padding: padding,
       decoration: BoxDecoration(
-        color: fill,
         borderRadius: borderRadius,
-        border: Border.all(
-          color: highContrast
-              ? StradioColors.borderSubtle
-              : Colors.white.withValues(alpha: 0.85),
-          width: 1.3,
-        ),
         boxShadow: [
           BoxShadow(
-            color: StradioColors.midnight.withValues(alpha: 0.18),
-            blurRadius: 28,
-            offset: const Offset(0, 12),
+            color: const Color(0xFF080C16).withValues(alpha: 0.40),
+            blurRadius: 34,
+            offset: const Offset(0, 16),
           ),
         ],
       ),
-      child: child,
-    );
-
-    if (highContrast) return inner;
-    return ClipRRect(
-      borderRadius: borderRadius,
-      child: BackdropFilter(
-        filter: ui.ImageFilter.blur(sigmaX: 16, sigmaY: 16),
-        child: inner,
+      child: ClipRRect(
+        borderRadius: borderRadius,
+        child: BackdropFilter(
+          filter: ui.ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+          child: Stack(
+            children: [
+              Positioned.fill(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    borderRadius: borderRadius,
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      stops: const [0.0, 0.42, 0.72, 1.0],
+                      colors: [
+                        tint.withValues(alpha: 0.42),
+                        tint.withValues(alpha: 0.16),
+                        tint.withValues(alpha: 0.06),
+                        tint.withValues(alpha: 0.24),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              Positioned.fill(
+                child: IgnorePointer(
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      borderRadius: borderRadius,
+                      gradient: LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: const Alignment(0.4, 0.5),
+                        stops: const [0.0, 0.45, 1.0],
+                        colors: [
+                          Colors.white.withValues(alpha: 0.40),
+                          Colors.white.withValues(alpha: 0.10),
+                          Colors.white.withValues(alpha: 0.0),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              Container(
+                padding: padding,
+                decoration: BoxDecoration(
+                  borderRadius: borderRadius,
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.62),
+                    width: 1.25,
+                  ),
+                ),
+                child: child,
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -511,7 +568,7 @@ class _TopoShardGlassCard extends StatelessWidget {
     return _FrostedSurface(
       key: const Key('photo_glass_topo_shard'),
       width: 284,
-      borderRadius: BorderRadius.circular(14),
+      borderRadius: BorderRadius.zero,
       fill: fill,
       highContrast: highContrast,
       padding: const EdgeInsets.all(14),
@@ -584,10 +641,10 @@ class _TopoShardGlassCard extends StatelessWidget {
             height: 88,
             padding: const EdgeInsets.all(6),
             decoration: BoxDecoration(
-              color: StradioColors.midnight.withValues(alpha: 0.03),
-              borderRadius: BorderRadius.circular(8),
+              color: Colors.white.withValues(alpha: 0.14),
+              borderRadius: BorderRadius.zero,
               border: Border.all(
-                color: StradioColors.midnight.withValues(alpha: 0.06),
+                color: Colors.white.withValues(alpha: 0.35),
               ),
             ),
             child: CustomPaint(
@@ -741,9 +798,16 @@ class _WhiteTelemetryPod extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.76),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Colors.white.withValues(alpha: 0.46),
+            Colors.white.withValues(alpha: 0.22),
+          ],
+        ),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.92)),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.62)),
       ),
       child: Column(
         children: [
@@ -790,9 +854,16 @@ class _TopoBentoPod extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(8),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.80),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.92)),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Colors.white.withValues(alpha: 0.46),
+            Colors.white.withValues(alpha: 0.22),
+          ],
+        ),
+        borderRadius: BorderRadius.zero,
+        border: Border.all(color: Colors.white.withValues(alpha: 0.62)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

@@ -316,6 +316,12 @@ void main() {
         );
         expect(engine.currentPlaybackRate, closeTo(0.90, 1e-6));
 
+        // Disabling Adaptive Tempo Scaling locks GBA_SAND_HOP playback rate at 1.00x
+        engine.setAdaptiveTempoScaling(false);
+        expect(engine.currentPlaybackRate, closeTo(1.00, 1e-6));
+        await engine.onStepDetected(cadenceSpm: 170.0);
+        expect(engine.currentPlaybackRate, closeTo(1.00, 1e-6));
+
         await engine.dispose();
       },
     );

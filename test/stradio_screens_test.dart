@@ -105,37 +105,39 @@ void main() {
           isTrue,
         );
         expect(find.byKey(const Key('swipe_to_start_pill')), findsOneWidget);
-        expect(find.text('Pace Target'), findsOneWidget);
-        expect(find.text('Distance Target'), findsOneWidget);
-        expect(find.text('Sync Integrity'), findsOneWidget);
+        expect(find.text('SPM TARGET'), findsOneWidget);
+        expect(find.text('PACE SYNC'), findsOneWidget);
       },
     );
 
     testWidgets(
-      'Pre-Run Target Calibration adjusts Pace Target & Distance Target and updates Sync Integrity',
+      'Pre-Run Target Calibration (Run & Rhythm Target) adjusts Pace, Distance chips, and Adaptive Tempo Scaling',
       (tester) async {
+        final audioEngine = StradioAudioEngine.noop();
         await tester.pumpWidget(
           StradioApp(
             store: InMemoryRecordingStore(),
             recordingService: _fakeSensorService(),
             foregroundNotificationService: NoopForegroundNotificationService(),
-            audioEngine: StradioAudioEngine.noop(),
+            audioEngine: audioEngine,
             showFirstLaunchModal: false,
           ),
         );
         await tester.pumpAndSettle();
 
-        // Default targets: 6:00 /km & 5.0 km
+        // Default targets: 6:00 /km & 5.0 km Target
         expect(find.text('6:00'), findsOneWidget);
-        expect(find.text('5.0'), findsOneWidget);
+        expect(find.text('5.0 km Target'), findsOneWidget);
 
-        // Open Target Calibration glassmorphism sheet via top-left button
+        // Open Run & Rhythm Target glassmorphism sheet via top-right tune button
         await tester.tap(find.byKey(const Key('pre_run_sensor_button')));
         await tester.pumpAndSettle();
         expect(
           find.byKey(const Key('target_calibration_sheet')),
           findsOneWidget,
         );
+        expect(find.text('Run & Rhythm Target'), findsOneWidget);
+        expect(find.text('TEMPO MATCH'), findsOneWidget);
 
         // Verify Sync Integrity pod & Lock Optimal Pace button before adjusting sliders
         expect(
@@ -149,15 +151,19 @@ void main() {
         await tester.tap(lockOptimalBtn);
         await tester.pump();
 
-        // Drag pace slider to the right (slower pace) and distance slider
+        // Drag pace slider to the right (slower pace), select 10.0 km chip, and toggle Adaptive Tempo Scaling OFF
         await tester.drag(
           find.byKey(const Key('target_pace_slider')),
           const Offset(80, 0),
         );
-        await tester.drag(
-          find.byKey(const Key('target_distance_slider')),
-          const Offset(60, 0),
+        await tester.tap(find.byKey(const Key('target_distance_chip_10')));
+        await tester.pump();
+
+        final tempoSwitch = find.byKey(
+          const Key('target_adaptive_tempo_switch'),
         );
+        await tester.ensureVisible(tempoSwitch);
+        await tester.tap(tempoSwitch);
         await tester.pump();
 
         final applyBtn = find.byKey(const Key('target_calibration_apply_button'));
@@ -170,10 +176,9 @@ void main() {
           StradioPreferencesService.loadTargetPaceSecondsPerKm(),
           greaterThan(StradioPreferencesService.defaultTargetPaceSecondsPerKm),
         );
-        expect(
-          StradioPreferencesService.loadTargetDistanceKm(),
-          greaterThan(StradioPreferencesService.defaultTargetDistanceKm),
-        );
+        expect(StradioPreferencesService.loadTargetDistanceKm(), 10.0);
+        expect(StradioPreferencesService.loadAdaptiveTempoScaling(), isFalse);
+        expect(audioEngine.adaptiveTempoScalingEnabled, isFalse);
       },
     );
 
@@ -250,32 +255,19 @@ void main() {
         );
         await tester.pumpAndSettle();
 
-        // Surface 2: Active Run Instrument running with Stradio top brand bar + Stride / Rhythm sub-header
+        // Surface 2: Active Run Cadence Monolith (Card 10 / Foto 4)
         expect(find.text('Stradio'), findsOneWidget);
-        expect(find.text('Stride'), findsOneWidget);
-        expect(find.text('Rhythm'), findsOneWidget);
+        expect(find.text('CADENCE MONOLITH'), findsOneWidget);
         expect(find.byKey(const Key('active_run_glass_lens')), findsOneWidget);
         expect(find.byKey(const Key('active_run_bottom_dock')), findsOneWidget);
         expect(find.byKey(const Key('active_run_pace_value')), findsOneWidget);
-        expect(
-          find.byKey(const Key('active_run_target_progress_pill')),
-          findsOneWidget,
-        );
-        expect(
-          find.text('HOLD STOP BUTTON TO CONCLUDE SESSION'),
-          findsOneWidget,
-        );
-        final holdIndicator = tester.widget<CircularProgressIndicator>(
-          find.byKey(const Key('hold_to_end_progress_indicator')),
-        );
-        expect(holdIndicator.value, 0.0);
-        expect(find.text('Cadence'), findsNothing);
-        expect(find.text('Take a step to trigger audio'), findsOneWidget);
+        expect(find.byKey(const Key('active_run_step_count')), findsOneWidget);
+        expect(find.text('Hold to finish'), findsOneWidget);
         expect(audioEngine.activePackId, SoundPackId.lariNgacir);
         expect(audioEngine.isSessionActive, isTrue);
         expect(foreground.isServiceActive, isTrue);
 
-        // Zero-interruption mid-run sound pack swap -> SQUID (full-edge glassmorphism sheet)
+        // Zero-interruption mid-run sound pack swap -> SQUID (compact header icon)
         await tester.tap(find.byKey(const Key('sound_pack_selector_button')));
         await tester.pumpAndSettle();
         final sheetBox = tester.getRect(
@@ -289,11 +281,11 @@ void main() {
         expect(audioEngine.activePackId, SoundPackId.squid);
         expect(audioEngine.isSessionActive, isTrue);
 
-        // Short tap on stop button must NOT end run; shows Hold 1.5s hint
+        // Short tap on Hold to finish pill must NOT end run; shows Hold 1.5s hint
         await tester.tap(find.byKey(const Key('hold_to_end_run_button')));
         await tester.pump();
         expect(find.text('Hold 1.5s to end'), findsOneWidget);
-        expect(find.text('Stride'), findsOneWidget);
+        expect(find.text('CADENCE MONOLITH'), findsOneWidget);
 
         // Hold for 1.5s -> completes session and opens Surface 3 (Cadence Summary)
         final holdCenter = tester.getCenter(
@@ -317,27 +309,21 @@ void main() {
         // even before tapping "Start new run".
         expect(store.saved.length, 1);
 
-        // Open Mockup 12 Share Run Rhythm bottom sheet, test Copy Text, then open ShareStudioScreen (9:16)
+        // Open streamlined Card 12 Share Run Rhythm sheet (no Quick Share row), then open ShareStudioScreen (9:16)
         await tester.tap(find.byKey(const Key('export_ig_story_button')));
         await tester.pumpAndSettle();
         expect(find.byKey(const Key('share_run_rhythm_sheet')), findsOneWidget);
         expect(find.text('Share Run Rhythm'), findsOneWidget);
-        expect(find.byKey(const Key('share_rhythm_quick_save')), findsOneWidget);
-        expect(find.byKey(const Key('share_rhythm_quick_copy')), findsOneWidget);
+        expect(find.byKey(const Key('share_rhythm_quick_save')), findsNothing);
+        expect(find.byKey(const Key('share_rhythm_quick_copy')), findsNothing);
         expect(
           find.byKey(const Key('share_rhythm_quick_messages')),
-          findsOneWidget,
+          findsNothing,
         );
         expect(
           find.byKey(const Key('share_rhythm_primary_button')),
           findsOneWidget,
         );
-
-        final copyBtn = find.byKey(const Key('share_rhythm_quick_copy'));
-        await tester.ensureVisible(copyBtn);
-        await tester.tap(copyBtn);
-        await tester.pumpAndSettle();
-        expect(find.text('Caption copied'), findsOneWidget);
 
         final openStudioBtn = find.byKey(
           const Key('share_rhythm_open_studio_button'),
@@ -564,7 +550,7 @@ void main() {
 
         foreground.simulateNotificationAction('pause_resume');
         await tester.pump();
-        expect(find.text('Paused'), findsOneWidget);
+        expect(find.text('PAUSED'), findsOneWidget);
         expect(audioEngine.isPaused, isTrue);
 
         foreground.simulateNotificationAction('pause_resume');
@@ -623,10 +609,7 @@ void main() {
         );
         await tester.pumpAndSettle();
         expect(tester.takeException(), isNull);
-        expect(
-          find.text('HOLD STOP BUTTON TO CONCLUDE SESSION'),
-          findsOneWidget,
-        );
+        expect(find.text('Hold to finish'), findsOneWidget);
         addTearDown(() => tester.binding.setSurfaceSize(null));
       },
     );

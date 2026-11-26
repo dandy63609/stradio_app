@@ -407,10 +407,17 @@ class _SonicDialStickerCard extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(height: 2),
-                      Text(
-                        'LOCKED CADENCE',
-                        style: StradioTypography.microCap(
-                          color: StradioColors.sonicCoral,
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 22),
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Text(
+                            'LOCKED CADENCE',
+                            maxLines: 1,
+                            style: StradioTypography.microCap(
+                              color: StradioColors.sonicCoral,
+                            ).copyWith(fontSize: 8.0, letterSpacing: 0.45),
+                          ),
                         ),
                       ),
                     ],

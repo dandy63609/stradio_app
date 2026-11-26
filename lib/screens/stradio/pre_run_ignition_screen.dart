@@ -17,18 +17,17 @@ import '../../services/recording_service.dart';
 import '../../theme/stradio_theme.dart';
 import '../../widgets/daylight_settings_sheet.dart';
 import '../../widgets/earphones_recommendation_modal.dart';
-import '../../widgets/sonic_ribbon_painter.dart';
 import '../../widgets/target_calibration_sheet.dart';
 import 'active_run_screen.dart';
 
-/// Surface 1: Pre-Run Ignition (`docs/EXPERIENCE.md`, `docs/DESIGN.md`, Mockup #07).
+/// Surface 1: Pre-Run Ignition (`Card 07` / `UX-REVISION-HANDOFF.md` / Foto 2).
 ///
-/// Zero-friction daylight launch on Warm Ivory (`#F5F0E8`) with:
-/// - First-launch Audio Device Recommendation modal (`has_seen_audio_recommendation`).
-/// - Open full-width multi-layered Sonic Ribbons over delicate concentric telemetry radar rings.
-/// - Unified Glass Timbre Capsule with 10-second Audio Preview + live Progress Line Bar
-///   and expandable 6-pack selector deck.
-/// - Smoked Obsidian Glassmorphism `56dp` bottom ignition pill (`Swipe to start`, swipe-only lock).
+/// - Top-bleed runner legs hero (~52-55% height, `SafeArea(top: false)`) composited
+///   with `BlendMode.multiply` over Warm Ivory + Ambient Orbital Cadence Dial.
+/// - Floating frosted header (`Stradio` halo pill + Settings & Target Calibration icons).
+/// - Suspended Curved Liquid Glass Deck (`Audition` EQ + upward 6-pack popover,
+///   `SPM TARGET` & `PACE SYNC`, micro telemetry strip) anchored cleanly above
+///   the `56dp` Deep Midnight Obsidian `Swipe to start` pill (swipe-only lock).
 class PreRunIgnitionScreen extends StatefulWidget {
   const PreRunIgnitionScreen({
     super.key,
@@ -59,16 +58,19 @@ class PreRunIgnitionScreen extends StatefulWidget {
 
 class _PreRunIgnitionScreenState extends State<PreRunIgnitionScreen>
     with TickerProviderStateMixin {
+  static const String _runnerHeroAsset =
+      'assets/design/Generate_cinematic_storyboard_grid_fbd8354d_2K.jpg_322851f9.jpg';
+
   late final RecordingStore _store;
   late final PostHogTelemetryService _postHogService;
   late final StradioAudioEngine _audioEngine;
   late final bool _ownsAudioEngine;
   late StradioUserProfile _profile;
   late SoundPackId _selectedPackId;
-  late final AnimationController _ribbonController;
-  late final AnimationController _continuousWaveController;
+  late final AnimationController _orbitController;
   late int _targetPaceSec;
   late double _targetDistanceKm;
+  late bool _adaptiveTempoScaling;
   double _swipeProgress = 0.0;
   bool _isPackDeckExpanded = false;
   bool _launching = false;
@@ -91,23 +93,21 @@ class _PreRunIgnitionScreenState extends State<PreRunIgnitionScreen>
         StradioPreferencesService.loadActiveSoundPackId();
     _targetPaceSec = StradioPreferencesService.loadTargetPaceSecondsPerKm();
     _targetDistanceKm = StradioPreferencesService.loadTargetDistanceKm();
+    _adaptiveTempoScaling =
+        StradioPreferencesService.loadAdaptiveTempoScaling();
 
     _ownsAudioEngine = widget.audioEngine == null;
     _audioEngine =
         widget.audioEngine ??
         StradioAudioEngine(initialPack: _selectedPackId);
+    _audioEngine.setAdaptiveTempoScaling(_adaptiveTempoScaling);
 
-    _ribbonController = AnimationController(
+    _orbitController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 520),
+      duration: const Duration(seconds: 18),
     );
-    _continuousWaveController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 3400),
-    );
-
     if (!_isTestBinding) {
-      _continuousWaveController.repeat();
+      _orbitController.repeat();
     }
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -118,8 +118,7 @@ class _PreRunIgnitionScreenState extends State<PreRunIgnitionScreen>
 
   @override
   void dispose() {
-    _ribbonController.dispose();
-    _continuousWaveController.dispose();
+    _orbitController.dispose();
     if (_ownsAudioEngine) {
       unawaited(_audioEngine.dispose());
     } else {
@@ -129,7 +128,6 @@ class _PreRunIgnitionScreenState extends State<PreRunIgnitionScreen>
   }
 
   Future<void> _maybeShowEarphonesModal() async {
-    // Shows on every app launch unless explicitly suppressed by widget tests.
     final shouldShow = widget.showFirstLaunchModal ?? true;
     if (!shouldShow || !mounted) return;
 
@@ -159,9 +157,6 @@ class _PreRunIgnitionScreenState extends State<PreRunIgnitionScreen>
       _selectedPackId = id;
       _isPackDeckExpanded = false;
     });
-    if (!MediaQuery.disableAnimationsOf(context)) {
-      _ribbonController.forward(from: 0.0);
-    }
     unawaited(StradioPreferencesService.saveActiveSoundPackId(id));
     unawaited(_audioEngine.switchPack(id));
     if (wasPreviewing) {
@@ -204,8 +199,13 @@ class _PreRunIgnitionScreenState extends State<PreRunIgnitionScreen>
       context,
       initialPaceSecondsPerKm: _targetPaceSec,
       initialDistanceKm: _targetDistanceKm,
+      initialAdaptiveTempoScaling: _adaptiveTempoScaling,
       activePack: activePack,
       language: _profile.language,
+      onAdaptiveTempoScalingChanged: (enabled) {
+        _adaptiveTempoScaling = enabled;
+        _audioEngine.setAdaptiveTempoScaling(enabled);
+      },
       onApply: (paceSec, distanceKm) {
         if (!mounted) return;
         setState(() {
@@ -264,1144 +264,778 @@ class _PreRunIgnitionScreenState extends State<PreRunIgnitionScreen>
     }
   }
 
-  String _modeSummary(StradioSoundPack pack, StradioStrings s) {
-    final base = switch (pack.backgroundMode) {
-      BackgroundLayerMode.joggingZoneOnly => s.modeKickJogLoop,
-      BackgroundLayerMode.dualStemBarAligned => s.modeDualStem,
-      BackgroundLayerMode.continuousTempoScaled => s.modeTempoScaled,
-      BackgroundLayerMode.silent => s.modeStepSfxOnly,
-    };
-    if (pack.producerCredit != null) {
-      return '$base · ${pack.producerCredit}';
-    }
-    return base;
-  }
-
   @override
   Widget build(BuildContext context) {
     final s = StradioStrings.of(_profile.language);
     final isId = _profile.language == AppLanguage.id;
     final activePack = StradioSoundPack.byId(_selectedPackId);
+    final targetSpm = StradioSoundPack.estimateCadenceFromPace(
+      _targetPaceSec,
+    ).round();
     final syncIntegrity = activePack.computeSyncIntegrity(
       targetPaceSecondsPerKm: _targetPaceSec,
     );
+    final media = MediaQuery.of(context);
+    final screenH = media.size.height;
+    final topInset = media.padding.top;
+    final bottomInset = media.padding.bottom;
     final reducedMotion = MediaQuery.disableAnimationsOf(context);
-    final screenHeight = MediaQuery.sizeOf(context).height;
-    final isCompactHeight = screenHeight < 700;
+    // ~52-54% hero height on standard phones; scales down cleanly on compact 640px screens.
+    final heroHeight = (screenH * (screenH < 700 ? 0.44 : 0.53)).clamp(
+      240.0,
+      480.0,
+    );
 
     return Scaffold(
       backgroundColor: StradioColors.warmIvory,
-      body: SafeArea(
-        child: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 480),
-            child: Stack(
-              children: [
-                // Base Static Layout: Top Bar + Centered Compass/Waveform + Fixed Bottom Dock
-                Column(
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 480),
+          child: Stack(
+            children: [
+              // 1. Top-bleed Runner Hero Zone (flush to top: 0 behind status bar)
+              Positioned(
+                top: 0,
+                left: 0,
+                right: 0,
+                height: heroHeight,
+                child: RepaintBoundary(
+                  key: const Key('pre_run_open_waveform_hero'),
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      // Ambient Orbital Cadence Dial behind runner legs
+                      Center(
+                        child: AnimatedBuilder(
+                          animation: _orbitController,
+                          builder: (_, _) => CustomPaint(
+                            size: Size(heroHeight * 0.78, heroHeight * 0.78),
+                            painter: _PreRunOrbitalDialPainter(
+                              angle: reducedMotion
+                                  ? 0.0
+                                  : _orbitController.value * math.pi * 2,
+                            ),
+                          ),
+                        ),
+                      ),
+
+                      // Runner's legs cutout composited seamlessly into Warm Ivory
+                      Positioned.fill(
+                        child: Image.asset(
+                          _runnerHeroAsset,
+                          fit: BoxFit.cover,
+                          alignment: Alignment.topCenter,
+                          color: StradioColors.warmIvory,
+                          colorBlendMode: BlendMode.multiply,
+                          errorBuilder: (_, _, _) => const SizedBox.shrink(),
+                        ),
+                      ),
+
+                      // Soft bottom vignette fading runner legs into Warm Ivory canvas
+                      Positioned(
+                        left: 0,
+                        right: 0,
+                        bottom: 0,
+                        height: 88,
+                        child: IgnorePointer(
+                          child: DecoratedBox(
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                begin: Alignment.topCenter,
+                                end: Alignment.bottomCenter,
+                                colors: [
+                                  StradioColors.warmIvory.withValues(
+                                    alpha: 0.0,
+                                  ),
+                                  StradioColors.warmIvory.withValues(
+                                    alpha: 0.78,
+                                  ),
+                                  StradioColors.warmIvory,
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+
+                      // Floating bottom-right Live Phase Coordinate Pill
+                      Positioned(
+                        right: 20,
+                        bottom: 12,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 6,
+                          ),
+                          decoration: BoxDecoration(
+                            color: StradioColors.surfaceCard.withValues(
+                              alpha: 0.88,
+                            ),
+                            borderRadius: BorderRadius.circular(
+                              StradioRadii.full,
+                            ),
+                            border: Border.all(
+                              color: Colors.white.withValues(alpha: 0.92),
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Container(
+                                width: 6,
+                                height: 6,
+                                decoration: const BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color: StradioColors.sonicCoral,
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+                              Text(
+                                '100 HZ IMU • $targetSpm STRIDE',
+                                style: StradioTypography.microCap(
+                                  color: StradioColors.textSecondary,
+                                ).copyWith(fontSize: 9.5),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+
+              // 2. Floating Overlay Header (within top SafeArea)
+              Positioned(
+                top: topInset + 10,
+                left: 20,
+                right: 20,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    // Frosted Warm Ivory Stradio Brand Halo Pill
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(StradioRadii.full),
+                      child: BackdropFilter(
+                        filter: ui.ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+                        child: Container(
+                          padding: const EdgeInsets.fromLTRB(10, 7, 14, 7),
+                          decoration: BoxDecoration(
+                            color: StradioColors.surfaceCard.withValues(
+                              alpha: 0.82,
+                            ),
+                            borderRadius: BorderRadius.circular(
+                              StradioRadii.full,
+                            ),
+                            border: Border.all(
+                              color: Colors.white.withValues(alpha: 0.90),
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Image.asset(
+                                'assets/images/stradio-logo.png',
+                                width: 20,
+                                height: 20,
+                                errorBuilder: (_, _, _) => const Icon(
+                                  Icons.graphic_eq_rounded,
+                                  size: 18,
+                                  color: StradioColors.sonicCoral,
+                                ),
+                              ),
+                              const SizedBox(width: 7),
+                              Text(
+                                'Stradio',
+                                style: StradioTypography.headingSmall(
+                                  fontSize: 16,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+
+                    // Right 2 Frosted Circular Action Buttons (Settings & Target Calibration)
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        _FrostedCircleIconButton(
+                          buttonKey: const Key('pre_run_settings_button'),
+                          icon: Icons.graphic_eq_rounded,
+                          tooltip: s.settingsTitle,
+                          onTap: _openSettings,
+                        ),
+                        const SizedBox(width: 8),
+                        _FrostedCircleIconButton(
+                          buttonKey: const Key('pre_run_sensor_button'),
+                          icon: Icons.tune_rounded,
+                          tooltip: s.targetCalibrationTitle,
+                          onTap: _openTargetCalibration,
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+
+              // 3. Lower Anchored Column: Suspended Curved Liquid Glass Deck + Swipe to start
+              // Anchored at bottom with ~18px gap so there is zero awkward empty void on tall phones.
+              Positioned(
+                left: 16,
+                right: 16,
+                bottom: 16 + bottomInset,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    // Top Bar + IMU Sensor Ready Pill (padded cleanly on Warm Ivory)
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(20, 10, 20, 0),
-                      child: Column(
-                        children: [
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Semantics(
-                                button: true,
-                                label: 'Target pace and distance calibration',
-                                child: IconButton(
-                                  key: const Key('pre_run_sensor_button'),
-                                  onPressed: _openTargetCalibration,
-                                  tooltip: isId
-                                      ? 'Kalibrasi target'
-                                      : 'Target calibration',
-                                  style: IconButton.styleFrom(
-                                    backgroundColor: StradioColors.surfaceCard,
-                                    minimumSize: const Size(48, 48),
-                                    side: const BorderSide(
-                                      color: StradioColors.borderSubtle,
-                                    ),
-                                    shape: const CircleBorder(),
+                    // Suspended Curved Liquid Glass Deck (grows upward when pack list expands)
+                    _buildSuspendedGlassDeck(
+                      activePack: activePack,
+                      targetSpm: targetSpm,
+                      syncIntegrity: syncIntegrity,
+                      isId: isId,
+                    ),
+                    const SizedBox(height: 18),
+
+                    // Bottom 56dp Deep Midnight Obsidian "Swipe to start" Pill (swipe-only lock)
+                    _SwipeToStartPill(
+                      progress: _swipeProgress,
+                      label: isId ? 'Geser untuk mulai' : 'Swipe to start',
+                      onDragDelta: (deltaFraction) {
+                        setState(() {
+                          _swipeProgress = (_swipeProgress + deltaFraction)
+                              .clamp(0.0, 1.0);
+                        });
+                      },
+                      onDragEnd: () {
+                        if (_swipeProgress >= 0.58) {
+                          setState(() => _swipeProgress = 1.0);
+                          unawaited(_startRun());
+                        } else {
+                          setState(() => _swipeProgress = 0.0);
+                        }
+                      },
+                      onDragCancel: () => setState(() => _swipeProgress = 0.0),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSuspendedGlassDeck({
+    required StradioSoundPack activePack,
+    required int targetSpm,
+    required double syncIntegrity,
+    required bool isId,
+  }) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(30),
+      child: BackdropFilter(
+        filter: ui.ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+        child: Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: StradioColors.surfaceCard.withValues(alpha: 0.86),
+            borderRadius: BorderRadius.circular(30),
+            border: Border.all(
+              color: Colors.white.withValues(alpha: 0.92),
+              width: 1.2,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: StradioColors.midnight.withValues(alpha: 0.08),
+                blurRadius: 24,
+                offset: const Offset(0, 10),
+              ),
+            ],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // Upward-expanding 6 Sound Pack Popover List
+              AnimatedSize(
+                duration: const Duration(milliseconds: 220),
+                curve: Curves.easeOutCubic,
+                alignment: Alignment.bottomCenter,
+                child: _isPackDeckExpanded
+                    ? Container(
+                        key: const Key('pre_run_expanded_pack_list'),
+                        margin: const EdgeInsets.only(bottom: 10),
+                        constraints: const BoxConstraints(maxHeight: 220),
+                        decoration: BoxDecoration(
+                          color: StradioColors.warmIvory.withValues(
+                            alpha: 0.85,
+                          ),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(color: StradioColors.borderSubtle),
+                        ),
+                        child: ListView.separated(
+                          shrinkWrap: true,
+                          padding: const EdgeInsets.all(6),
+                          itemCount: StradioSoundPack.catalog.length,
+                          separatorBuilder: (_, _) => const SizedBox(height: 4),
+                          itemBuilder: (_, index) {
+                            final pack = StradioSoundPack.catalog[index];
+                            final selected = pack.id == _selectedPackId;
+                            return Material(
+                              color: selected
+                                  ? StradioColors.glowCoralSoft
+                                  : Colors.transparent,
+                              borderRadius: BorderRadius.circular(14),
+                              child: InkWell(
+                                key: Key('pre_run_pack_${pack.code}'),
+                                borderRadius: BorderRadius.circular(14),
+                                onTap: () => _selectPack(pack.id),
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 10,
+                                    vertical: 8,
                                   ),
-                                  icon: const Icon(
-                                    Icons.graphic_eq_rounded,
-                                    size: 20,
-                                    color: StradioColors.textPrimary,
+                                  child: Row(
+                                    children: [
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              pack.title,
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                              style:
+                                                  StradioTypography.pillBadge(),
+                                            ),
+                                            Text(
+                                              pack.producerCredit != null
+                                                  ? '${pack.categoryLabel} · ${pack.producerCredit}'
+                                                  : pack.categoryLabel,
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                              style:
+                                                  StradioTypography.metricLabel(),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      if (selected)
+                                        const Icon(
+                                          Icons.check_circle_rounded,
+                                          size: 18,
+                                          color: StradioColors.textAccentDeep,
+                                        ),
+                                    ],
                                   ),
                                 ),
                               ),
+                            );
+                          },
+                        ),
+                      )
+                    : const SizedBox.shrink(),
+              ),
+
+              // Sound Engine Selection Capsule
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 9,
+                ),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.78),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.95),
+                  ),
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          width: 34,
+                          height: 34,
+                          decoration: const BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: StradioColors.glowCoralSoft,
+                          ),
+                          child: const Icon(
+                            Icons.graphic_eq_rounded,
+                            size: 17,
+                            color: StradioColors.textAccentDeep,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                activePack.title,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: StradioTypography.pillBadge(),
+                              ),
+                              const SizedBox(height: 2),
                               Row(
-                                mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  Image.asset(
-                                    'assets/images/stradio-logo.png',
-                                    height: 24,
-                                    fit: BoxFit.contain,
-                                    errorBuilder: (_, _, _) =>
-                                        const SizedBox.shrink(),
+                                  Flexible(
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 5,
+                                        vertical: 1.5,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: StradioColors.glowCoralSoft,
+                                        borderRadius: BorderRadius.circular(
+                                          StradioRadii.full,
+                                        ),
+                                      ),
+                                      child: Text(
+                                        '${syncIntegrity.round()}% Match',
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: StradioTypography.microCap(
+                                          color: StradioColors.textAccentDeep,
+                                        ).copyWith(fontSize: 8.5),
+                                      ),
+                                    ),
                                   ),
-                                  const SizedBox(width: 8),
-                                  Text(
-                                    'Stradio',
-                                    style: StradioTypography.headingSmall(
-                                      fontSize: 18,
+                                  const SizedBox(width: 4),
+                                  Expanded(
+                                    child: Text(
+                                      activePack.categoryLabel,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: StradioTypography.metricLabel(),
                                     ),
                                   ),
                                 ],
                               ),
-                              Semantics(
-                                button: true,
-                                label: 'Open settings',
-                                child: IconButton(
-                                  key: const Key('pre_run_settings_button'),
-                                  onPressed: _openSettings,
-                                  tooltip: 'Settings',
-                                  style: IconButton.styleFrom(
-                                    backgroundColor: StradioColors.surfaceCard,
-                                    minimumSize: const Size(48, 48),
-                                    side: const BorderSide(
-                                      color: StradioColors.borderSubtle,
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+
+                        // Interactive Audition Pill Button (10s preview)
+                        ValueListenableBuilder<bool>(
+                          valueListenable: _audioEngine.isPreviewingNotifier,
+                          builder: (_, previewing, _) => Material(
+                            color: previewing
+                                ? StradioColors.sonicCoral
+                                : StradioColors.midnight,
+                            borderRadius: BorderRadius.circular(
+                              StradioRadii.full,
+                            ),
+                            child: InkWell(
+                              key: const Key('pre_run_preview_audio_button'),
+                              borderRadius: BorderRadius.circular(
+                                StradioRadii.full,
+                              ),
+                              onTap: _togglePreview,
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 9,
+                                  vertical: 7,
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      previewing
+                                          ? Icons.stop_rounded
+                                          : Icons.equalizer_rounded,
+                                      size: 13,
+                                      color: StradioColors.textOnDark,
                                     ),
-                                    shape: const CircleBorder(),
-                                  ),
-                                  icon: const Icon(
-                                    Icons.tune_rounded,
-                                    size: 20,
-                                    color: StradioColors.textPrimary,
-                                  ),
+                                    const SizedBox(width: 3),
+                                    Text(
+                                      previewing
+                                          ? (isId ? 'Stop' : 'Stop')
+                                          : (isId ? 'Dengar' : 'Audition'),
+                                      style: StradioTypography.microCap(
+                                        color: StradioColors.textOnDark,
+                                      ).copyWith(fontSize: 9.5),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 2),
+
+                        // Expand Chevron for 6-pack selector
+                        InkWell(
+                          key: const Key('pre_run_timbre_dropdown_button'),
+                          borderRadius: BorderRadius.circular(
+                            StradioRadii.full,
+                          ),
+                          onTap: () {
+                            HapticFeedback.selectionClick();
+                            setState(
+                              () => _isPackDeckExpanded = !_isPackDeckExpanded,
+                            );
+                          },
+                          child: Padding(
+                            padding: const EdgeInsets.all(4),
+                            child: Icon(
+                              _isPackDeckExpanded
+                                  ? Icons.keyboard_arrow_up_rounded
+                                  : Icons.keyboard_arrow_down_rounded,
+                              size: 20,
+                              color: StradioColors.textSecondary,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+
+                    // 10s Audio Preview Progress Line Bar
+                    ValueListenableBuilder<bool>(
+                      valueListenable: _audioEngine.isPreviewingNotifier,
+                      builder: (_, previewing, _) {
+                        if (!previewing) return const SizedBox.shrink();
+                        return ValueListenableBuilder<double>(
+                          valueListenable: _audioEngine.previewProgressNotifier,
+                          builder: (_, progress, _) => Padding(
+                            padding: const EdgeInsets.only(top: 8),
+                            child: ClipRRect(
+                              key: const Key('pre_run_preview_progress_bar'),
+                              borderRadius: BorderRadius.circular(
+                                StradioRadii.full,
+                              ),
+                              child: LinearProgressIndicator(
+                                value: progress.clamp(0.0, 1.0),
+                                minHeight: 3,
+                                backgroundColor: StradioColors.borderSubtle,
+                                valueColor: const AlwaysStoppedAnimation<Color>(
+                                  StradioColors.sonicCoral,
+                                ),
+                              ),
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 14),
+
+              // Split Hero Metric Row: SPM TARGET | PACE SYNC (tappable to calibrate)
+              InkWell(
+                borderRadius: BorderRadius.circular(16),
+                onTap: _openTargetCalibration,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 6,
+                    vertical: 2,
+                  ),
+                  child: IntrinsicHeight(
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'SPM TARGET',
+                                style: StradioTypography.microCap(
+                                  color: StradioColors.textSecondary,
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              FittedBox(
+                                fit: BoxFit.scaleDown,
+                                alignment: Alignment.centerLeft,
+                                child: Row(
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.baseline,
+                                  textBaseline: TextBaseline.alphabetic,
+                                  children: [
+                                    Text(
+                                      '$targetSpm',
+                                      style: StradioTypography.metricHero(
+                                        fontSize: 38,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      'spm',
+                                      style: StradioTypography.metricLabel(),
+                                    ),
+                                  ],
                                 ),
                               ),
                             ],
                           ),
-                          const SizedBox(height: 8),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 12,
-                              vertical: 5,
-                            ),
-                            decoration: BoxDecoration(
-                              color: StradioColors.surfaceRecessed.withValues(
-                                alpha: 0.72,
-                              ),
-                              borderRadius: BorderRadius.circular(
-                                StradioRadii.full,
-                              ),
-                              border: Border.all(
-                                color: Colors.white.withValues(alpha: 0.75),
-                              ),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Container(
-                                  width: 6,
-                                  height: 6,
-                                  decoration: const BoxDecoration(
-                                    shape: BoxShape.circle,
-                                    color: StradioColors.sonicCoral,
-                                  ),
-                                ),
-                                const SizedBox(width: 6),
-                                Flexible(
-                                  child: Text(
-                                    'IMU SENSOR READY · 100 HZ',
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: StradioTypography.microCap(
-                                      color: StradioColors.textSecondary,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-
-                    // Fixed Compass Radar & Sonic Wave Stage (never resizes when deck expands)
-                    Expanded(
-                      child: LayoutBuilder(
-                        builder: (context, constraints) {
-                          final h = constraints.maxHeight;
-                          final w = constraints.maxWidth;
-                          final outerR = math
-                              .min(w * 0.34, h * 0.37)
-                              .clamp(54.0, 128.0);
-                          final innerR = outerR * 0.50;
-                          final ovalH = (outerR * 1.05).clamp(64.0, 134.0);
-                          final ovalW = ovalH * 0.74;
-
-                          return SizedBox(
-                            key: const Key('pre_run_open_waveform_hero'),
-                            width: w,
-                            height: h,
-                            child: Stack(
-                              alignment: Alignment.center,
-                              children: [
-                                // Unified Compass Rings & Cardinal Labels
-                                Positioned.fill(
-                                  child: CustomPaint(
-                                    painter: _OpenTelemetryRadarPainter(
-                                      outerR: outerR,
-                                    ),
-                                  ),
-                                ),
-
-                                // Edge-to-Edge Seamless Infinite Sonic Wave
-                                Positioned.fill(
-                                  child: RepaintBoundary(
-                                    child: AnimatedBuilder(
-                                      animation: Listenable.merge([
-                                        _ribbonController,
-                                        _continuousWaveController,
-                                        _audioEngine.previewProgressNotifier,
-                                        _audioEngine.isPreviewingNotifier,
-                                      ]),
-                                      builder: (_, _) {
-                                        final packIndex = StradioSoundPack
-                                            .catalog
-                                            .indexWhere(
-                                              (p) => p.id == _selectedPackId,
-                                            );
-                                        final previewing = _audioEngine
-                                            .isPreviewingNotifier
-                                            .value;
-                                        final previewProg = _audioEngine
-                                            .previewProgressNotifier
-                                            .value;
-                                        final phase = reducedMotion
-                                            ? 0.6
-                                            : 0.6 +
-                                                  packIndex * 0.55 +
-                                                  _continuousWaveController
-                                                          .value *
-                                                      math.pi *
-                                                      2 +
-                                                  _ribbonController.value *
-                                                      1.4 +
-                                                  previewProg * 16.0 +
-                                                  _swipeProgress * 2.0;
-                                        return CustomPaint(
-                                          painter: SonicRibbonPainter(
-                                            phase: phase,
-                                            amplitude: previewing ? 0.88 : 0.72,
-                                            pulseBoost: previewing ? 0.40 : 0.0,
-                                            strokeWidth: 2.5,
-                                            fillGradientArea: true,
-                                          ),
-                                        );
-                                      },
-                                    ),
-                                  ),
-                                ),
-
-                                // Coral Resonance Node aligned to left inner-ring crosshair (-innerR)
-                                Transform.translate(
-                                  offset: Offset(-innerR, 0),
-                                  child: Container(
-                                    width: 10,
-                                    height: 10,
-                                    decoration: BoxDecoration(
-                                      shape: BoxShape.circle,
-                                      color: StradioColors.textAccentDeep,
-                                      boxShadow: [
-                                        BoxShadow(
-                                          color: StradioColors.sonicCoral
-                                              .withValues(alpha: 0.55),
-                                          blurRadius: 10,
-                                          spreadRadius: 2,
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-
-                                // Right-Side Frosted Glass Focal Lens aligned to inner/outer ring
-                                Transform.translate(
-                                  offset: Offset(innerR * 0.95, 0),
-                                  child: IgnorePointer(
-                                    child: ClipRRect(
-                                      borderRadius: BorderRadius.circular(
-                                        ovalW,
-                                      ),
-                                      child: BackdropFilter(
-                                        filter: ui.ImageFilter.blur(
-                                          sigmaX: 2.5,
-                                          sigmaY: 2.5,
-                                        ),
-                                        child: Container(
-                                          width: ovalW,
-                                          height: ovalH,
-                                          decoration: BoxDecoration(
-                                            borderRadius: BorderRadius.circular(
-                                              ovalW,
-                                            ),
-                                            color: Colors.white.withValues(
-                                              alpha: 0.14,
-                                            ),
-                                            border: Border.all(
-                                              color: Colors.white.withValues(
-                                                alpha: 0.75,
-                                              ),
-                                              width: 1.2,
-                                            ),
-                                          ),
-                                          child: Center(
-                                            child: Container(
-                                              width: ovalW * 0.68,
-                                              height: ovalW * 0.68,
-                                              decoration: BoxDecoration(
-                                                shape: BoxShape.circle,
-                                                border: Border.all(
-                                                  color: StradioColors
-                                                      .sonicCoral
-                                                      .withValues(alpha: 0.34),
-                                                  width: 1.0,
-                                                ),
-                                              ),
-                                              child: Center(
-                                                child: Container(
-                                                  width: 7,
-                                                  height: 7,
-                                                  decoration: BoxDecoration(
-                                                    shape: BoxShape.circle,
-                                                    color: StradioColors
-                                                        .sonicCoral
-                                                        .withValues(
-                                                          alpha: 0.72,
-                                                        ),
-                                                  ),
-                                                ),
-                                              ),
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          );
-                        },
-                      ),
-                    ),
-
-                    // Reserved fixed slot for collapsed Sound Pack capsule so waveform stays clear
-                    const SizedBox(height: 72),
-
-                    // Fixed-Height Bottom Dock over 2 Stationary Coral & Blue Ribbon Curves
-                    Stack(
-                      children: [
-                        const Positioned.fill(
-                          child: IgnorePointer(
-                            child: CustomPaint(
-                              painter: _BottomAmbientRibbonsPainter(),
-                            ),
-                          ),
                         ),
-                        Padding(
-                          padding: const EdgeInsets.fromLTRB(20, 6, 20, 16),
+                        Container(
+                          width: 1,
+                          margin: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 6,
+                          ),
+                          color: StradioColors.borderSubtle,
+                        ),
+                        Expanded(
                           child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              InkWell(
-                                key: const Key('pre_run_target_metrics_row'),
-                                borderRadius: BorderRadius.circular(
-                                  StradioRadii.md,
-                                ),
-                                onTap: _openTargetCalibration,
-                                child: SizedBox(
-                                  height: 54,
-                                  child: Padding(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 4,
-                                      vertical: 2,
-                                    ),
-                                    child: IntrinsicHeight(
-                                      child: Row(
-                                        children: [
-                                          Expanded(
-                                            child: _BottomTargetMetricColumn(
-                                              label: s.paceTargetLabel,
-                                              value:
-                                                  StradioSoundPack.formatPace(
-                                                    _targetPaceSec,
-                                                  ),
-                                              unit: '/km',
-                                              valueKey: const Key(
-                                                'pre_run_pace_target_value',
-                                              ),
-                                            ),
-                                          ),
-                                          VerticalDivider(
-                                            width: 14,
-                                            thickness: 1,
-                                            color: StradioColors.borderSubtle
-                                                .withValues(alpha: 0.8),
-                                          ),
-                                          Expanded(
-                                            child: _BottomTargetMetricColumn(
-                                              label: s.distanceTargetLabel,
-                                              value: _targetDistanceKm
-                                                  .toStringAsFixed(1),
-                                              unit: 'km',
-                                              valueKey: const Key(
-                                                'pre_run_distance_target_value',
-                                              ),
-                                            ),
-                                          ),
-                                          VerticalDivider(
-                                            width: 14,
-                                            thickness: 1,
-                                            color: StradioColors.borderSubtle
-                                                .withValues(alpha: 0.8),
-                                          ),
-                                          Expanded(
-                                            child: _BottomTargetMetricColumn(
-                                              label: s.syncIntegrityLabel,
-                                              value: syncIntegrity
-                                                  .toStringAsFixed(1),
-                                              unit: '%',
-                                              valueKey: const Key(
-                                                'pre_run_sync_integrity_value',
-                                              ),
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ),
+                              Text(
+                                'PACE SYNC',
+                                style: StradioTypography.microCap(
+                                  color: StradioColors.textSecondary,
                                 ),
                               ),
-                              const SizedBox(height: 12),
-
-                              // Primary Ignition Pill (56dp Smoked Obsidian Glassmorphism pill: Swipe-Only Lock)
-                              _SwipeToStartPill(
-                                label: s.swipeToStart,
-                                progress: _swipeProgress,
-                                onProgressChanged: (v) =>
-                                    setState(() => _swipeProgress = v),
-                                onTriggerStart: _startRun,
+                              const SizedBox(height: 2),
+                              FittedBox(
+                                fit: BoxFit.scaleDown,
+                                alignment: Alignment.centerLeft,
+                                child: Row(
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.baseline,
+                                  textBaseline: TextBaseline.alphabetic,
+                                  children: [
+                                    Text(
+                                      StradioSoundPack.formatPace(
+                                        _targetPaceSec,
+                                      ),
+                                      style: StradioTypography.metricHero(
+                                        fontSize: 38,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      '/km',
+                                      style: StradioTypography.metricLabel(),
+                                    ),
+                                  ],
+                                ),
                               ),
                             ],
                           ),
                         ),
                       ],
                     ),
-                  ],
-                ),
-
-                // Tap-outside barrier when Sound Pack Deck is expanded
-                if (_isPackDeckExpanded)
-                  Positioned.fill(
-                    child: GestureDetector(
-                      key: const Key('pre_run_pack_dismiss_barrier'),
-                      behavior: HitTestBehavior.translucent,
-                      onTap: () => setState(() => _isPackDeckExpanded = false),
-                    ),
-                  ),
-
-                // Floating Sound Pack Capsule Overlay: expands BOTTOM-TO-TOP over the stage
-                Positioned(
-                  left: 20,
-                  right: 20,
-                  bottom: 148,
-                  child: ClipRRect(
-                    key: const Key('pre_run_sound_pack_tray'),
-                    borderRadius: BorderRadius.circular(28),
-                    child: BackdropFilter(
-                      filter: ui.ImageFilter.blur(
-                        sigmaX: _isPackDeckExpanded ? 18 : 14,
-                        sigmaY: _isPackDeckExpanded ? 18 : 14,
-                      ),
-                      child: AnimatedContainer(
-                        duration: const Duration(milliseconds: 220),
-                        curve: Curves.easeOutCubic,
-                        padding: const EdgeInsets.fromLTRB(12, 10, 10, 10),
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                            colors: [
-                              StradioColors.surfaceCard.withValues(
-                                alpha: _isPackDeckExpanded ? 0.92 : 0.84,
-                              ),
-                              StradioColors.warmIvory.withValues(
-                                alpha: _isPackDeckExpanded ? 0.86 : 0.72,
-                              ),
-                            ],
-                          ),
-                          borderRadius: BorderRadius.circular(28),
-                          border: Border.all(
-                            color: Colors.white.withValues(alpha: 0.90),
-                            width: 1.2,
-                          ),
-                          boxShadow: [
-                            BoxShadow(
-                              color: StradioColors.midnight.withValues(
-                                alpha: _isPackDeckExpanded ? 0.14 : 0.08,
-                              ),
-                              blurRadius: _isPackDeckExpanded ? 28 : 20,
-                              offset: const Offset(0, 8),
-                            ),
-                          ],
-                        ),
-                        child: ValueListenableBuilder<bool>(
-                          valueListenable: _audioEngine.isPreviewingNotifier,
-                          builder: (context, isPreviewing, _) {
-                            return Column(
-                              mainAxisSize: MainAxisSize.min,
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: [
-                                // Animated upward expansion (bottom-to-top) above the capsule header
-                                AnimatedSize(
-                                  duration: const Duration(milliseconds: 260),
-                                  curve: Curves.easeOutCubic,
-                                  alignment: Alignment.bottomCenter,
-                                  child: _isPackDeckExpanded
-                                      ? Column(
-                                          key: const Key(
-                                            'pre_run_expanded_pack_list',
-                                          ),
-                                          mainAxisSize: MainAxisSize.min,
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.stretch,
-                                          children: [
-                                            Row(
-                                              mainAxisAlignment:
-                                                  MainAxisAlignment
-                                                      .spaceBetween,
-                                              children: [
-                                                Flexible(
-                                                  child: Text(
-                                                    s.soundPacksHeading,
-                                                    maxLines: 1,
-                                                    overflow:
-                                                        TextOverflow.ellipsis,
-                                                    style:
-                                                        StradioTypography.microCap(),
-                                                  ),
-                                                ),
-                                                const SizedBox(width: 8),
-                                                Flexible(
-                                                  child: Text(
-                                                    activePack.categoryLabel,
-                                                    maxLines: 1,
-                                                    overflow:
-                                                        TextOverflow.ellipsis,
-                                                    style:
-                                                        StradioTypography.metricLabel(),
-                                                  ),
-                                                ),
-                                              ],
-                                            ),
-                                            const SizedBox(height: 8),
-                                            ConstrainedBox(
-                                              constraints: BoxConstraints(
-                                                maxHeight: isCompactHeight
-                                                    ? 156
-                                                    : 230,
-                                              ),
-                                              child: SingleChildScrollView(
-                                                child: Column(
-                                                  mainAxisSize:
-                                                      MainAxisSize.min,
-                                                  children: [
-                                                    for (final pack
-                                                        in StradioSoundPack
-                                                            .catalog) ...[
-                                                      _MinimalSoundPackRow(
-                                                        pack: pack,
-                                                        subtitle: _modeSummary(
-                                                          pack,
-                                                          s,
-                                                        ),
-                                                        selected:
-                                                            pack.id ==
-                                                            _selectedPackId,
-                                                        onTap: () =>
-                                                            _selectPack(
-                                                              pack.id,
-                                                            ),
-                                                      ),
-                                                      const SizedBox(height: 6),
-                                                    ],
-                                                  ],
-                                                ),
-                                              ),
-                                            ),
-                                            const SizedBox(height: 8),
-                                            const Divider(
-                                              height: 1,
-                                              color: StradioColors.borderSubtle,
-                                            ),
-                                            const SizedBox(height: 8),
-                                          ],
-                                        )
-                                      : const SizedBox.shrink(),
-                                ),
-
-                                // Always-Anchored Bottom Capsule Header Row
-                                Row(
-                                  children: [
-                                    Expanded(
-                                      child: InkWell(
-                                        key: const Key(
-                                          'pre_run_timbre_dropdown_button',
-                                        ),
-                                        borderRadius: BorderRadius.circular(
-                                          StradioRadii.full,
-                                        ),
-                                        onTap: () {
-                                          HapticFeedback.selectionClick();
-                                          setState(
-                                            () => _isPackDeckExpanded =
-                                                !_isPackDeckExpanded,
-                                          );
-                                        },
-                                        child: Padding(
-                                          padding: const EdgeInsets.symmetric(
-                                            vertical: 4,
-                                            horizontal: 4,
-                                          ),
-                                          child: Row(
-                                            children: [
-                                              Container(
-                                                width: 32,
-                                                height: 32,
-                                                decoration: const BoxDecoration(
-                                                  shape: BoxShape.circle,
-                                                  color: StradioColors
-                                                      .glowCoralSoft,
-                                                ),
-                                                child: const Icon(
-                                                  Icons.graphic_eq_rounded,
-                                                  size: 16,
-                                                  color: StradioColors
-                                                      .textAccentDeep,
-                                                ),
-                                              ),
-                                              const SizedBox(width: 8),
-                                              Expanded(
-                                                child: Column(
-                                                  crossAxisAlignment:
-                                                      CrossAxisAlignment.start,
-                                                  children: [
-                                                    Text(
-                                                      activePack.title,
-                                                      maxLines: 1,
-                                                      overflow:
-                                                          TextOverflow.ellipsis,
-                                                      style: StradioTypography.pillBadge(
-                                                        color: StradioColors
-                                                            .textPrimary,
-                                                      ),
-                                                    ),
-                                                    const SizedBox(height: 2),
-                                                    Row(
-                                                      children: [
-                                                        Flexible(
-                                                          child: Container(
-                                                            padding:
-                                                                const EdgeInsets.symmetric(
-                                                                  horizontal: 6,
-                                                                  vertical: 1.5,
-                                                                ),
-                                                            decoration: BoxDecoration(
-                                                              color: StradioColors
-                                                                  .glowCoralSoft,
-                                                              borderRadius:
-                                                                  BorderRadius.circular(
-                                                                    StradioRadii
-                                                                        .full,
-                                                                  ),
-                                                            ),
-                                                            child: Text(
-                                                              '${syncIntegrity.round()}% Match',
-                                                              maxLines: 1,
-                                                              overflow:
-                                                                  TextOverflow
-                                                                      .ellipsis,
-                                                              style: StradioTypography.microCap(
-                                                                color: StradioColors
-                                                                    .textAccentDeep,
-                                                              ),
-                                                            ),
-                                                          ),
-                                                        ),
-                                                        const SizedBox(
-                                                          width: 6,
-                                                        ),
-                                                        Flexible(
-                                                          child: Text(
-                                                            activePack
-                                                                .categoryLabel,
-                                                            maxLines: 1,
-                                                            overflow:
-                                                                TextOverflow
-                                                                    .ellipsis,
-                                                            style:
-                                                                StradioTypography.metricLabel(),
-                                                          ),
-                                                        ),
-                                                      ],
-                                                    ),
-                                                  ],
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                    const SizedBox(width: 4),
-                                    Semantics(
-                                      button: true,
-                                      label: isPreviewing
-                                          ? s.stopPreviewAction
-                                          : s.previewAudioAction,
-                                      child: Material(
-                                        color: isPreviewing
-                                            ? StradioColors.sonicCoral
-                                            : StradioColors.midnight,
-                                        borderRadius: BorderRadius.circular(
-                                          StradioRadii.full,
-                                        ),
-                                        child: InkWell(
-                                          key: const Key(
-                                            'pre_run_preview_audio_button',
-                                          ),
-                                          borderRadius: BorderRadius.circular(
-                                            StradioRadii.full,
-                                          ),
-                                          onTap: _togglePreview,
-                                          child: Container(
-                                            constraints: const BoxConstraints(
-                                              minHeight: 36,
-                                            ),
-                                            padding: const EdgeInsets.symmetric(
-                                              horizontal: 10,
-                                              vertical: 6,
-                                            ),
-                                            child: Row(
-                                              mainAxisSize: MainAxisSize.min,
-                                              children: [
-                                                Icon(
-                                                  isPreviewing
-                                                      ? Icons.stop_rounded
-                                                      : Icons
-                                                            .play_arrow_rounded,
-                                                  size: 15,
-                                                  color:
-                                                      StradioColors.textOnDark,
-                                                ),
-                                                const SizedBox(width: 3),
-                                                Text(
-                                                  isPreviewing
-                                                      ? s.stopPreviewAction
-                                                      : s.previewAudioAction,
-                                                  style:
-                                                      StradioTypography.microCap(
-                                                        color: StradioColors
-                                                            .textOnDark,
-                                                      ),
-                                                ),
-                                              ],
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                    const SizedBox(width: 2),
-                                    Semantics(
-                                      button: true,
-                                      label: 'Toggle sound pack list',
-                                      child: InkWell(
-                                        key: const Key(
-                                          'pre_run_expand_packs_chevron',
-                                        ),
-                                        borderRadius: BorderRadius.circular(
-                                          StradioRadii.full,
-                                        ),
-                                        onTap: () {
-                                          HapticFeedback.selectionClick();
-                                          setState(
-                                            () => _isPackDeckExpanded =
-                                                !_isPackDeckExpanded,
-                                          );
-                                        },
-                                        child: SizedBox(
-                                          width: 28,
-                                          height: 36,
-                                          child: Icon(
-                                            _isPackDeckExpanded
-                                                ? Icons.expand_more_rounded
-                                                : Icons.expand_less_rounded,
-                                            size: 20,
-                                            color: StradioColors.textSecondary,
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-
-                                // Animated Line Bar when Music Preview is Running
-                                ValueListenableBuilder<double>(
-                                  valueListenable:
-                                      _audioEngine.previewProgressNotifier,
-                                  builder: (context, progress, _) {
-                                    if (!isPreviewing && progress <= 0.0) {
-                                      return const SizedBox.shrink();
-                                    }
-                                    return Padding(
-                                      padding: const EdgeInsets.only(
-                                        top: 8,
-                                        left: 4,
-                                        right: 4,
-                                      ),
-                                      child: ClipRRect(
-                                        key: const Key(
-                                          'pre_run_preview_progress_bar',
-                                        ),
-                                        borderRadius: BorderRadius.circular(
-                                          StradioRadii.full,
-                                        ),
-                                        child: SizedBox(
-                                          height: 4,
-                                          child: LinearProgressIndicator(
-                                            value: progress.clamp(0.02, 1.0),
-                                            backgroundColor:
-                                                StradioColors.borderSubtle,
-                                            valueColor:
-                                                const AlwaysStoppedAnimation<
-                                                  Color
-                                                >(StradioColors.sonicCoral),
-                                          ),
-                                        ),
-                                      ),
-                                    );
-                                  },
-                                ),
-                              ],
-                            );
-                          },
-                        ),
-                      ),
-                    ),
                   ),
                 ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _BottomTargetMetricColumn extends StatelessWidget {
-  const _BottomTargetMetricColumn({
-    required this.label,
-    required this.value,
-    required this.unit,
-    required this.valueKey,
-  });
-
-  final String label;
-  final String value;
-  final String unit;
-  final Key valueKey;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: StradioTypography.metricLabel(
-            color: StradioColors.textSecondary,
-          ),
-        ),
-        const SizedBox(height: 2),
-        FittedBox(
-          fit: BoxFit.scaleDown,
-          alignment: Alignment.centerLeft,
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.baseline,
-            textBaseline: TextBaseline.alphabetic,
-            children: [
-              Text(
-                value,
-                key: valueKey,
-                style: StradioTypography.metricValue(fontSize: 22),
               ),
-              const SizedBox(width: 2),
-              Text(
-                unit,
-                style: StradioTypography.metricLabel(
-                  color: StradioColors.textSecondary,
-                ),
+              const SizedBox(height: 10),
+              const Divider(height: 1, color: StradioColors.borderSubtle),
+              const SizedBox(height: 9),
+
+              // Micro Telemetry Strip
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Flexible(
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          width: 6,
+                          height: 6,
+                          decoration: const BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: StradioColors.twilightPlum,
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Flexible(
+                          child: Text(
+                            '${_targetDistanceKm.toStringAsFixed(1)} km Target',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: StradioTypography.metricLabel(
+                              color: StradioColors.textPrimary,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Flexible(
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          width: 6,
+                          height: 6,
+                          decoration: const BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: StradioColors.sonicCoral,
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Flexible(
+                          child: Text(
+                            '${syncIntegrity.toStringAsFixed(1)}% Harmonic Lock',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: StradioTypography.metricLabel(
+                              color: StradioColors.textPrimary,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
         ),
-      ],
-    );
-  }
-}
-
-/// Delicate concentric compass rings, tilted orbit ellipse & cardinal degrees (Mockup #07).
-class _OpenTelemetryRadarPainter extends CustomPainter {
-  const _OpenTelemetryRadarPainter({required this.outerR});
-
-  final double outerR;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final center = Offset(size.width * 0.5, size.height * 0.50);
-    final innerR = outerR * 0.50;
-
-    final glowPaint = Paint()
-      ..shader = RadialGradient(
-        colors: [
-          StradioColors.sonicCoral.withValues(alpha: 0.11),
-          StradioColors.rhythmViolet.withValues(alpha: 0.08),
-          StradioColors.warmIvory.withValues(alpha: 0.0),
-        ],
-      ).createShader(Rect.fromCircle(center: center, radius: outerR * 1.25));
-    canvas.drawCircle(center, outerR * 1.25, glowPaint);
-
-    // Outer hairline circle & inner ring
-    final ringPaint = Paint()
-      ..color = StradioColors.borderSubtle.withValues(alpha: 0.72)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.0
-      ..isAntiAlias = true;
-    canvas.drawCircle(center, outerR, ringPaint);
-    canvas.drawCircle(
-      center,
-      innerR,
-      ringPaint..color = StradioColors.borderSubtle.withValues(alpha: 0.36),
-    );
-
-    // Crosshairs
-    final crossPaint = Paint()
-      ..color = StradioColors.borderSubtle.withValues(alpha: 0.44)
-      ..strokeWidth = 0.8;
-    canvas.drawLine(
-      Offset(center.dx - outerR, center.dy),
-      Offset(center.dx + outerR, center.dy),
-      crossPaint,
-    );
-    canvas.drawLine(
-      Offset(center.dx, center.dy - outerR),
-      Offset(center.dx, center.dy + outerR),
-      crossPaint,
-    );
-
-    // Tilted dashed ellipse orbit matching Mockup #07
-    canvas.save();
-    canvas.translate(center.dx, center.dy);
-    canvas.rotate(-0.26);
-    final ovalRect = Rect.fromCenter(
-      center: Offset.zero,
-      width: outerR * 1.92,
-      height: outerR * 1.18,
-    );
-    final ovalPath = Path()..addOval(ovalRect);
-    final dashedPaint = Paint()
-      ..color = StradioColors.borderSubtle.withValues(alpha: 0.88)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.0;
-    for (final metric in ovalPath.computeMetrics()) {
-      for (var d = 0.0; d < metric.length; d += 9.0) {
-        final end = math.min(d + 4.5, metric.length);
-        canvas.drawPath(metric.extractPath(d, end), dashedPaint);
-      }
-    }
-    canvas.restore();
-
-    // Cardinal degree labels aligned with outer compass perimeter (Mockup #07)
-    _drawLabel(canvas, '0° / N', Offset(center.dx, center.dy - outerR - 11));
-    _drawLabel(canvas, '180° / S', Offset(center.dx, center.dy + outerR + 11));
-    _drawLabel(canvas, '270°', Offset(center.dx - outerR + 18, center.dy - 7));
-    _drawLabel(canvas, '90°', Offset(center.dx + outerR - 14, center.dy - 7));
-  }
-
-  void _drawLabel(Canvas canvas, String text, Offset center) {
-    final painter = TextPainter(
-      text: TextSpan(
-        text: text,
-        style: TextStyle(
-          fontFamily: 'Inter',
-          fontSize: 9.5,
-          fontWeight: FontWeight.w500,
-          color: StradioColors.textSecondary.withValues(alpha: 0.65),
-          letterSpacing: 0.4,
-        ),
       ),
-      textDirection: TextDirection.ltr,
-    )..layout();
-    painter.paint(
-      canvas,
-      Offset(center.dx - painter.width / 2, center.dy - painter.height / 2),
     );
   }
-
-  @override
-  bool shouldRepaint(covariant _OpenTelemetryRadarPainter oldDelegate) =>
-      oldDelegate.outerR != outerR;
 }
 
-/// Two subtle edge-to-edge flowing coral & twilight-blue curves behind the bottom dock (Mockup #07).
-class _BottomAmbientRibbonsPainter extends CustomPainter {
-  const _BottomAmbientRibbonsPainter();
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final coralPaint = Paint()
-      ..color = StradioColors.sonicCoral.withValues(alpha: 0.28)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 2.0
-      ..strokeCap = StrokeCap.round
-      ..isAntiAlias = true;
-
-    final coralPath = Path()
-      ..moveTo(0, size.height * 0.58)
-      ..cubicTo(
-        size.width * 0.25,
-        size.height * 0.44,
-        size.width * 0.56,
-        size.height * 0.88,
-        size.width,
-        size.height * 0.52,
-      );
-    canvas.drawPath(coralPath, coralPaint);
-
-    final bluePaint = Paint()
-      ..color = StradioColors.twilightPlum.withValues(alpha: 0.24)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.8
-      ..strokeCap = StrokeCap.round
-      ..isAntiAlias = true;
-
-    final bluePath = Path()
-      ..moveTo(0, size.height * 0.74)
-      ..cubicTo(
-        size.width * 0.30,
-        size.height * 0.86,
-        size.width * 0.66,
-        size.height * 0.48,
-        size.width,
-        size.height * 0.66,
-      );
-    canvas.drawPath(bluePath, bluePaint);
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
-}
-
-class _MinimalSoundPackRow extends StatelessWidget {
-  const _MinimalSoundPackRow({
-    required this.pack,
-    required this.subtitle,
-    required this.selected,
+class _FrostedCircleIconButton extends StatelessWidget {
+  const _FrostedCircleIconButton({
+    required this.buttonKey,
+    required this.icon,
+    required this.tooltip,
     required this.onTap,
   });
 
-  final StradioSoundPack pack;
-  final String subtitle;
-  final bool selected;
+  final Key buttonKey;
+  final IconData icon;
+  final String tooltip;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: selected
-          ? StradioColors.surfaceCard
-          : StradioColors.warmIvory.withValues(alpha: 0.65),
-      borderRadius: BorderRadius.circular(StradioRadii.lg),
-      child: InkWell(
-        key: Key('pre_run_pack_${pack.code}'),
-        borderRadius: BorderRadius.circular(StradioRadii.lg),
-        onTap: onTap,
-        child: Container(
-          constraints: const BoxConstraints(minHeight: 54),
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(StradioRadii.lg),
-            border: Border.all(
-              color: selected
-                  ? StradioColors.midnight
-                  : StradioColors.borderSubtle,
-              width: selected ? 1.4 : 1.0,
+    return Tooltip(
+      message: tooltip,
+      child: ClipOval(
+        child: BackdropFilter(
+          filter: ui.ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+          child: Material(
+            color: StradioColors.surfaceCard.withValues(alpha: 0.84),
+            shape: CircleBorder(
+              side: BorderSide(color: Colors.white.withValues(alpha: 0.92)),
             ),
-          ),
-          child: Row(
-            children: [
-              Container(
-                width: 8,
-                height: 8,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: selected
-                      ? StradioColors.sonicCoral
-                      : StradioColors.borderSubtle,
-                ),
+            child: InkWell(
+              key: buttonKey,
+              customBorder: const CircleBorder(),
+              onTap: onTap,
+              child: SizedBox(
+                width: 42,
+                height: 42,
+                child: Icon(icon, size: 19, color: StradioColors.textPrimary),
               ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      pack.title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: StradioTypography.pillBadge(
-                        color: StradioColors.textPrimary,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      subtitle,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: StradioTypography.metricLabel(),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 8),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(
-                  color: selected
-                      ? StradioColors.glowCoralSoft
-                      : StradioColors.surfaceRecessed,
-                  borderRadius: BorderRadius.circular(StradioRadii.full),
-                ),
-                child: Text(
-                  pack.categoryLabel,
-                  style: StradioTypography.microCap(
-                    color: selected
-                        ? StradioColors.textAccentDeep
-                        : StradioColors.textSecondary,
-                  ),
-                ),
-              ),
-            ],
+            ),
           ),
         ),
       ),
@@ -1409,150 +1043,65 @@ class _MinimalSoundPackRow extends StatelessWidget {
   }
 }
 
-/// Smoked Obsidian Frosted Glassmorphism Ignition Pill (`.lg-obsidian-surface` in Mockup #07).
-/// Strictly locked to swipe gesture (`progress >= 0.65`) to prevent accidental pocket/thumb taps.
-class _SwipeToStartPill extends StatefulWidget {
+/// 56dp Deep Midnight Obsidian swipe-only ignition capsule (Foto 2).
+class _SwipeToStartPill extends StatelessWidget {
   const _SwipeToStartPill({
-    required this.label,
     required this.progress,
-    required this.onProgressChanged,
-    required this.onTriggerStart,
+    required this.label,
+    required this.onDragDelta,
+    required this.onDragEnd,
+    required this.onDragCancel,
   });
 
-  final String label;
   final double progress;
-  final ValueChanged<double> onProgressChanged;
-  final VoidCallback onTriggerStart;
-
-  @override
-  State<_SwipeToStartPill> createState() => _SwipeToStartPillState();
-}
-
-class _SwipeToStartPillState extends State<_SwipeToStartPill> {
-  double _localProgress = 0.0;
-
-  @override
-  void didUpdateWidget(covariant _SwipeToStartPill oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (widget.progress != oldWidget.progress) {
-      _localProgress = widget.progress;
-    }
-  }
+  final String label;
+  final ValueChanged<double> onDragDelta;
+  final VoidCallback onDragEnd;
+  final VoidCallback onDragCancel;
 
   @override
   Widget build(BuildContext context) {
-    final highContrast = MediaQuery.highContrastOf(context);
-    final effectiveProgress = _localProgress;
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        const height = 56.0;
+        const knobSize = 44.0;
+        const inset = 6.0;
+        final travel = math.max(1.0, constraints.maxWidth - knobSize - inset * 2);
 
-    return Semantics(
-      button: true,
-      label: 'Swipe right to start run',
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final trackWidth = constraints.maxWidth;
-          final maxDrag = (trackWidth - 60).clamp(40.0, 420.0);
-
-          final pillBody = Container(
-            height: 56,
-            padding: const EdgeInsets.symmetric(horizontal: 6),
+        return GestureDetector(
+          key: const Key('swipe_to_start_pill'),
+          behavior: HitTestBehavior.opaque,
+          onHorizontalDragUpdate: (details) =>
+              onDragDelta(details.delta.dx / travel),
+          onHorizontalDragEnd: (_) => onDragEnd(),
+          onHorizontalDragCancel: onDragCancel,
+          child: Container(
+            height: height,
             decoration: BoxDecoration(
-              gradient: highContrast
-                  ? null
-                  : LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      colors: [
-                        const Color(0xFF242434).withValues(alpha: 0.80),
-                        StradioColors.midnight.withValues(alpha: 0.86),
-                      ],
-                    ),
-              color: highContrast ? StradioColors.midnight : null,
+              color: StradioColors.midnight,
               borderRadius: BorderRadius.circular(StradioRadii.full),
-              border: Border.all(
-                color: Colors.white.withValues(alpha: 0.36),
-                width: 1.25,
-              ),
               boxShadow: [
                 BoxShadow(
-                  color: StradioColors.midnight.withValues(alpha: 0.26),
-                  blurRadius: 24,
-                  offset: const Offset(0, 10),
+                  color: StradioColors.midnight.withValues(alpha: 0.24),
+                  blurRadius: 18,
+                  offset: const Offset(0, 8),
                 ),
               ],
             ),
             child: Stack(
               alignment: Alignment.center,
               children: [
-                // Top Specular Glass Rim Highlight
-                Positioned(
-                  top: 0,
-                  left: 24,
-                  right: 24,
-                  child: Container(
-                    height: 1,
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [
-                          Colors.white.withValues(alpha: 0.0),
-                          Colors.white.withValues(alpha: 0.52),
-                          Colors.white.withValues(alpha: 0.0),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-                // Subtle internal coral-violet glass refraction sheen
+                // Subtle coral sweep as runner drags slider
                 Positioned.fill(
-                  child: IgnorePointer(
-                    child: DecoratedBox(
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(StradioRadii.full),
-                        gradient: LinearGradient(
-                          begin: Alignment.centerLeft,
-                          end: Alignment.centerRight,
-                          colors: [
-                            StradioColors.sonicCoral.withValues(
-                              alpha: 0.10 + effectiveProgress * 0.16,
-                            ),
-                            Colors.transparent,
-                            StradioColors.rhythmViolet.withValues(alpha: 0.12),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-
-                Text(
-                  widget.label,
-                  style: StradioTypography.buttonLabel(
-                    color: StradioColors.textOnDark.withValues(
-                      alpha: (1.0 - effectiveProgress * 0.55).clamp(0.35, 0.96),
-                    ),
-                  ),
-                ),
-
-                // Right Target Halo Ring Indicator
-                Positioned(
-                  right: 8,
-                  child: Container(
-                    width: 28,
-                    height: 28,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: Colors.white.withValues(alpha: 0.06),
-                      border: Border.all(
-                        color: Colors.white.withValues(alpha: 0.28),
-                      ),
-                    ),
-                    child: Center(
-                      child: Container(
-                        width: 7,
-                        height: 7,
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(StradioRadii.full),
+                    child: FractionallySizedBox(
+                      alignment: Alignment.centerLeft,
+                      widthFactor: progress.clamp(0.0, 1.0),
+                      child: DecoratedBox(
                         decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: StradioColors.warmIvory.withValues(
-                            alpha: 0.92,
+                          color: StradioColors.sonicCoral.withValues(
+                            alpha: 0.25,
                           ),
                         ),
                       ),
@@ -1560,76 +1109,116 @@ class _SwipeToStartPillState extends State<_SwipeToStartPill> {
                   ),
                 ),
 
-                // Left Tactile Alabaster Frosted Glass Handle
+                // Centered Label
+                Text(
+                  label,
+                  style: StradioTypography.buttonLabel(
+                    color: StradioColors.textOnDark.withValues(
+                      alpha: (1.0 - progress * 0.5).clamp(0.4, 1.0),
+                    ),
+                  ),
+                ),
+
+                // Right Pulsing Sonic Coral Live Sensor Ring
                 Positioned(
-                  left: effectiveProgress * maxDrag,
+                  right: 12,
                   child: Container(
-                    width: 44,
-                    height: 44,
+                    width: 28,
+                    height: 28,
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
-                      color: StradioColors.surfaceCard.withValues(alpha: 0.96),
                       border: Border.all(
-                        color: Colors.white.withValues(alpha: 0.88),
+                        color: StradioColors.sonicCoral.withValues(alpha: 0.45),
+                        width: 1.5,
                       ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.22),
-                          blurRadius: 10,
-                          offset: const Offset(0, 3),
-                        ),
-                      ],
+                    ),
+                    alignment: Alignment.center,
+                    child: Container(
+                      width: 8,
+                      height: 8,
+                      decoration: const BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: StradioColors.sonicCoral,
+                      ),
+                    ),
+                  ),
+                ),
+
+                // Left Draggable Alabaster Slider Knob
+                Positioned(
+                  left: inset + travel * progress,
+                  child: Container(
+                    width: knobSize,
+                    height: knobSize,
+                    decoration: const BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: StradioColors.surfaceCard,
                     ),
                     child: const Icon(
-                      Icons.arrow_forward_rounded,
-                      size: 20,
-                      color: StradioColors.textPrimary,
+                      Icons.chevron_right_rounded,
+                      size: 22,
+                      color: StradioColors.midnight,
                     ),
                   ),
                 ),
               ],
             ),
-          );
-
-          return GestureDetector(
-            key: const Key('swipe_to_start_pill'),
-            behavior: HitTestBehavior.opaque,
-            onHorizontalDragStart: (_) {
-              _localProgress = widget.progress;
-            },
-            onHorizontalDragUpdate: (details) {
-              final next = (_localProgress + details.delta.dx / maxDrag).clamp(
-                0.0,
-                1.0,
-              );
-              _localProgress = next;
-              widget.onProgressChanged(next);
-            },
-            onHorizontalDragEnd: (_) {
-              if (_localProgress >= 0.65) {
-                _localProgress = 0.0;
-                widget.onTriggerStart();
-              } else {
-                _localProgress = 0.0;
-                widget.onProgressChanged(0.0);
-              }
-            },
-            onHorizontalDragCancel: () {
-              _localProgress = 0.0;
-              widget.onProgressChanged(0.0);
-            },
-            child: highContrast
-                ? pillBody
-                : ClipRRect(
-                    borderRadius: BorderRadius.circular(StradioRadii.full),
-                    child: BackdropFilter(
-                      filter: ui.ImageFilter.blur(sigmaX: 18, sigmaY: 18),
-                      child: pillBody,
-                    ),
-                  ),
-          );
-        },
-      ),
+          ),
+        );
+      },
     );
   }
+}
+
+/// Ambient concentric orbital cadence dial painted behind the runner legs cutout.
+class _PreRunOrbitalDialPainter extends CustomPainter {
+  const _PreRunOrbitalDialPainter({required this.angle});
+
+  final double angle;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = Offset(size.width / 2, size.height / 2);
+    final outerR = size.shortestSide * 0.46;
+    final innerR = size.shortestSide * 0.35;
+
+    final outerPaint = Paint()
+      ..color = StradioColors.midnight.withValues(alpha: 0.06)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.0;
+    canvas.drawCircle(center, outerR, outerPaint);
+
+    // Slowly rotating dashed inner ring
+    final dashPaint = Paint()
+      ..color = StradioColors.midnight.withValues(alpha: 0.08)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.0;
+    const dashCount = 48;
+    const sweep = (math.pi * 2) / dashCount;
+    for (var i = 0; i < dashCount; i++) {
+      canvas.drawArc(
+        Rect.fromCircle(center: center, radius: innerR),
+        angle + i * sweep,
+        sweep * 0.45,
+        false,
+        dashPaint,
+      );
+    }
+
+    // Central soft coral resonance dot
+    canvas.drawCircle(
+      center,
+      8,
+      Paint()..color = StradioColors.sonicCoral.withValues(alpha: 0.22),
+    );
+    canvas.drawCircle(
+      center,
+      3.5,
+      Paint()..color = StradioColors.sonicCoral.withValues(alpha: 0.78),
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _PreRunOrbitalDialPainter oldDelegate) =>
+      oldDelegate.angle != angle;
 }
