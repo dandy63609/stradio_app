@@ -58,8 +58,7 @@ class PreRunIgnitionScreen extends StatefulWidget {
 
 class _PreRunIgnitionScreenState extends State<PreRunIgnitionScreen>
     with TickerProviderStateMixin {
-  static const String _runnerHeroAsset =
-      'assets/design/Generate_cinematic_storyboard_grid_fbd8354d_2K.jpg_322851f9.jpg';
+  static const String _runnerHeroAsset = 'assets/images/pre_run_runner.png';
 
   late final RecordingStore _store;
   late final PostHogTelemetryService _postHogService;
@@ -329,41 +328,13 @@ class _PreRunIgnitionScreenState extends State<PreRunIgnitionScreen>
                         ),
                       ),
 
-                      // Runner's legs cutout composited seamlessly into Warm Ivory (full legs & shoes visible)
+                      // Transparent RGBA runner cutout (both legs & shoes intact, zero background seam)
                       Positioned.fill(
                         child: Image.asset(
                           _runnerHeroAsset,
                           fit: BoxFit.contain,
                           alignment: Alignment.topCenter,
-                          color: StradioColors.warmIvory,
-                          colorBlendMode: BlendMode.multiply,
                           errorBuilder: (_, _, _) => const SizedBox.shrink(),
-                        ),
-                      ),
-
-                      // Subtle bottom vignette fading base into Warm Ivory without hiding shoes
-                      Positioned(
-                        left: 0,
-                        right: 0,
-                        bottom: 0,
-                        height: 36,
-                        child: IgnorePointer(
-                          child: DecoratedBox(
-                            decoration: BoxDecoration(
-                              gradient: LinearGradient(
-                                begin: Alignment.topCenter,
-                                end: Alignment.bottomCenter,
-                                colors: [
-                                  StradioColors.warmIvory.withValues(
-                                    alpha: 0.0,
-                                  ),
-                                  StradioColors.warmIvory.withValues(
-                                    alpha: 0.85,
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
                         ),
                       ),
 
